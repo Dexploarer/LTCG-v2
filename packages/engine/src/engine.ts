@@ -508,7 +508,6 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       break;
     }
 
-    // TODO: Handle other commands
     default:
       break;
   }
@@ -737,7 +736,6 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
         newState.gameStarted = true;
         break;
 
-      // TODO: Handle other events
       default:
         break;
     }
