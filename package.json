@@ -20,7 +20,7 @@
     "@lunchtable-tcg/engine": "workspace:*",
     "@lunchtable-tcg/match": "workspace:*",
     "@lunchtable-tcg/story": "workspace:*",
-    "@sentry/node": "^10.38.0",
+    "@sentry/node": "^10.39.0",
     "convex": "^1.31.6",
     "posthog-node": "^5.24.15"
   },

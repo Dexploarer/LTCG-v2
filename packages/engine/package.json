@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "typescript": "^5.7.3",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.18"
   },
   "files": ["dist", "src"],
   "types": "./dist/index.d.ts",
