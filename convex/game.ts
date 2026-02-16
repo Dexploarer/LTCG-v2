@@ -705,9 +705,8 @@ function pickAICommand(
       }
     }
 
-    // No attacks possible, advance phase
-    return { type: "ADVANCE_PHASE" };
-  }
+  // No attacks possible, advance phase
+  return { type: "ADVANCE_PHASE" };
 
   // Default: END_TURN
   return { type: "END_TURN" };
