@@ -26,6 +26,21 @@ const normalizeDeckId = (deckId: string | undefined): string | null => {
 const normalizeDeckRecordId = (deckRecord: { deckId?: string }) =>
   normalizeDeckId(deckRecord?.deckId);
 
+const autoAssignCliqueFromArchetype = async (
+  ctx: any,
+  userId: string,
+  archetype: string,
+) => {
+  if (!archetype || typeof ctx.runMutation !== "function") return;
+  await ctx.runMutation(
+    (internal as any).cliques.autoAssignUserToCliqueFromArchetype,
+    {
+      userId,
+      archetype,
+    },
+  );
+};
+
 const resolveDefaultStarterDeckCode = () => {
   const configured = STARTER_DECKS.find((deck) => DECK_RECIPES[deck.deckCode]);
   if (configured?.deckCode) return configured.deckCode;
@@ -54,7 +69,7 @@ const createStarterDeckFromRecipe = async (ctx: any, userId: string) => {
   }
 
   for (const rc of resolvedCards) {
-    await cards.cards.addCardsToInventory({
+    await cards.cards.addCardsToInventory(ctx, {
       userId,
       cardDefinitionId: rc.cardDefinitionId,
       quantity: rc.quantity,
@@ -70,6 +85,11 @@ const createStarterDeckFromRecipe = async (ctx: any, userId: string) => {
   await cards.decks.saveDeck(ctx, deckId, resolvedCards);
   await cards.decks.setActiveDeck(ctx, userId, deckId);
   await ctx.db.patch(userId, { activeDeckId: deckId });
+  await autoAssignCliqueFromArchetype(
+    ctx,
+    userId,
+    deckCode.replace("_starter", ""),
+  );
   return deckId;
 };
 
@@ -79,12 +99,11 @@ async function resolveActiveDeckIdForUser(
 ) {
   const activeDecks = await cards.decks.getUserDecks(ctx, user._id);
   const requestedDeckId = normalizeDeckId(user.activeDeckId);
+  const matchingRequestedDeck = requestedDeckId
+    ? activeDecks?.find((deck: { deckId: string }) => deck.deckId === requestedDeckId) ?? null
+    : null;
   const preferredDeckId = requestedDeckId
-    ? normalizeDeckRecordId(
-        activeDecks
-          ? activeDecks.find((deck: { deckId: string }) => deck.deckId === requestedDeckId)
-          : null,
-      )
+    ? normalizeDeckRecordId(matchingRequestedDeck ?? {})
     : null;
 
   const firstDeckId = activeDecks?.map(normalizeDeckRecordId).find((id) => Boolean(id)) ?? null;
@@ -213,11 +232,11 @@ export const selectStarterDeck = mutation({
   args: { deckCode: v.string() },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    const requestedArchetype = args.deckCode.replace("_starter", "");
 
     // Check if user already picked a starter deck
     const existingDecks = await cards.decks.getUserDecks(ctx, user._id);
     if (existingDecks && existingDecks.length > 0) {
-      const requestedArchetype = args.deckCode.replace("_starter", "");
       const existingDeck =
         existingDecks.find((deck: any) => deck.name === args.deckCode) ??
         existingDecks.find((deck: any) => {
@@ -234,6 +253,11 @@ export const selectStarterDeck = mutation({
         if (user.activeDeckId !== existingDeck.deckId) {
           await ctx.db.patch(user._id, { activeDeckId: existingDeck.deckId });
         }
+        await autoAssignCliqueFromArchetype(
+          ctx,
+          user._id,
+          existingDeck.deckArchetype ?? requestedArchetype,
+        );
 
         return {
           deckId: existingDeck.deckId,
@@ -279,7 +303,7 @@ export const selectStarterDeck = mutation({
     }
 
     // Create the deck
-    const archetype = args.deckCode.replace("_starter", "");
+    const archetype = requestedArchetype;
     const deckId = await cards.decks.createDeck(ctx, user._id, args.deckCode, {
       deckArchetype: archetype,
     });
@@ -290,6 +314,7 @@ export const selectStarterDeck = mutation({
     // Set as active
     await cards.decks.setActiveDeck(ctx, user._id, deckId);
     await ctx.db.patch(user._id, { activeDeckId: deckId });
+    await autoAssignCliqueFromArchetype(ctx, user._id, archetype);
 
     const totalCards = resolvedCards.reduce((sum, c) => sum + c.quantity, 0);
     return { deckId, cardCount: totalCards };
@@ -782,6 +807,14 @@ export const getPlayerView = query({
     seat: v.union(v.literal("host"), v.literal("away")),
   },
   handler: async (ctx, args) => match.getPlayerView(ctx, args),
+});
+
+export const getOpenPrompt = query({
+  args: {
+    matchId: v.string(),
+    seat: v.union(v.literal("host"), v.literal("away")),
+  },
+  handler: async (ctx, args) => match.getOpenPrompt(ctx, args),
 });
 
 export const getMatchMeta = query({
