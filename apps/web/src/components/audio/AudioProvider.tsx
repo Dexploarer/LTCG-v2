@@ -19,6 +19,7 @@ const AUDIO_SETTINGS_STORAGE_KEY = "ltcg.audio.settings.v1";
 const SOUNDTRACK_MANIFEST_SOURCE = "/api/soundtrack";
 const VOLUME_PRESET_VALUES = [0, 25, 50, 75, 100];
 const MAX_CONSECUTIVE_TRACK_ERRORS = 4;
+const MUSIC_BUTTON_FALLBACK = MUSIC_BUTTON;
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -195,8 +196,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setAutoplayBlocked(false);
       clearTrackErrorState();
     } catch (error) {
-      setAutoplayBlocked(isAutoplayBlockedError(error));
-      if (!isAutoplayBlockedError(error)) {
+      const isBlocked = isAutoplayBlockedError(error);
+      setAutoplayBlocked(isBlocked);
+      if (!isBlocked) {
         markTrackError(currentTrackRef.current);
       }
     }
@@ -472,6 +474,43 @@ function formatTrackLabel(track: string | null): string {
   }
 }
 
+type PresetType = "music" | "sfx";
+
+function PresetButtons({
+  type,
+  musicVolumePercent,
+  sfxVolumePercent,
+  onPresetChange,
+}: {
+  type: PresetType;
+  musicVolumePercent: number;
+  sfxVolumePercent: number;
+  onPresetChange: (type: PresetType, value: number) => void;
+}) {
+  const currentPercent =
+    type === "music" ? musicVolumePercent : sfxVolumePercent;
+
+  return (
+    <div className="mt-1.5 flex gap-1.5">
+      {VOLUME_PRESET_VALUES.map((preset) => (
+        <button
+          type="button"
+          key={`${type}-${preset}`}
+          onClick={() => onPresetChange(type, preset / 100)}
+          className={`text-[10px] px-2 py-1 border transition-all ${
+            currentPercent === preset
+              ? "border-[#ffcc00] bg-[#121212] text-[#ffcc00]"
+              : "border-[#121212] hover:border-[#ffcc00]/70"
+          }`}
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {preset}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AudioControlsDock() {
   const {
     settings,
@@ -487,32 +526,10 @@ export function AudioControlsDock() {
     loading,
   } = useAudio();
   const [open, setOpen] = useState(false);
-  const [buttonImageSrc, setButtonImageSrc] = useState(MUSIC_BUTTON);
+  const [buttonImageSrc, setButtonImageSrc] = useState(MUSIC_BUTTON_FALLBACK);
 
   const musicVolumePercent = Math.round(settings.musicVolume * 100);
   const sfxVolumePercent = Math.round(settings.sfxVolume * 100);
-
-  const presetButtons = (type: "music" | "sfx") => (
-    <div className="mt-1.5 flex gap-1.5">
-      {VOLUME_PRESET_VALUES.map((preset) => (
-        <button
-          type="button"
-          key={`${type}-${preset}`}
-          onClick={() =>
-            type === "music" ? setMusicVolume(preset / 100) : setSfxVolume(preset / 100)
-          }
-          className={`text-[10px] px-2 py-1 border transition-all ${
-            (type === "music" ? musicVolumePercent : sfxVolumePercent) === preset
-              ? "border-[#ffcc00] bg-[#121212] text-[#ffcc00]"
-              : "border-[#121212] hover:border-[#ffcc00]/70"
-          }`}
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          {preset}
-        </button>
-      ))}
-    </div>
-  );
 
   const panelTransitionClass = open
     ? "max-h-80 opacity-100 translate-y-0 scale-100 pointer-events-auto"
@@ -544,7 +561,7 @@ export function AudioControlsDock() {
           width={110}
           height={35}
           onError={() => {
-            setButtonImageSrc(MUSIC_BUTTON);
+            setButtonImageSrc(MUSIC_BUTTON_FALLBACK);
           }}
         />
       </button>
@@ -609,7 +626,14 @@ export function AudioControlsDock() {
                 aria-label="Music volume"
                 className={sharedRangeClasses}
               />
-              {presetButtons("music")}
+              <PresetButtons
+                type="music"
+                musicVolumePercent={musicVolumePercent}
+                sfxVolumePercent={sfxVolumePercent}
+                onPresetChange={(type, value) =>
+                  type === "music" ? setMusicVolume(value) : setSfxVolume(value)
+                }
+              />
             </div>
 
             <div className="border border-[#121212]/20 p-2">
@@ -648,7 +672,14 @@ export function AudioControlsDock() {
                 aria-label="Sound effects volume"
                 className={sharedRangeClasses}
               />
-              {presetButtons("sfx")}
+              <PresetButtons
+                type="sfx"
+                musicVolumePercent={musicVolumePercent}
+                sfxVolumePercent={sfxVolumePercent}
+                onPresetChange={(type, value) =>
+                  type === "music" ? setMusicVolume(value) : setSfxVolume(value)
+                }
+              />
             </div>
           </div>
 
