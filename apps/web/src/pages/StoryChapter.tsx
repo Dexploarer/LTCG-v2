@@ -14,19 +14,11 @@ import {
 import { TrayNav } from "@/components/layout/TrayNav";
 import { STAGES_BG, QUESTIONS_LABEL } from "@/lib/blobUrls";
 import { normalizeMatchId } from "@/lib/matchIds";
+import { normalizeDeckId } from "../../../../shared/ids";
 
 type StarterDeck = {
   deckCode: string;
   name?: string;
-};
-
-const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
-const normalizeDeckId = (deckId: string | undefined): string | null => {
-  if (!deckId) return null;
-  const trimmed = deckId.trim();
-  if (!trimmed) return null;
-  if (RESERVED_DECK_IDS.has(trimmed.toLowerCase())) return null;
-  return trimmed;
 };
 
 export function StoryChapter() {

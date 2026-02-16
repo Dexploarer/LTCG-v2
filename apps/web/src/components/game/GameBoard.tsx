@@ -16,6 +16,116 @@ import { GameOverOverlay } from "./GameOverOverlay";
 import { AnimatePresence } from "framer-motion";
 import type { Phase } from "@lunchtable-tcg/engine";
 
+type ChainData = Record<string, unknown>;
+type CardLookup = Record<string, { name?: string; attack?: number }>;
+
+const resolveChainOpponentCardName = (
+  chainData: ChainData,
+  view: Record<string, any> | null,
+  cardLookup: CardLookup,
+) => {
+  const directName = chainData.opponentCardName;
+  if (typeof directName === "string" && directName.trim()) return directName;
+
+  const directDefId =
+    typeof chainData.opponentCardDefinitionId === "string"
+      ? chainData.opponentCardDefinitionId
+      : typeof chainData.opponentDefinitionId === "string"
+        ? chainData.opponentDefinitionId
+        : undefined;
+  if (directDefId && cardLookup[directDefId]) {
+    return cardLookup[directDefId]?.name ?? "Opponent Card";
+  }
+
+  const directCardId =
+    typeof chainData.opponentCardId === "string"
+      ? chainData.opponentCardId
+      : typeof chainData.cardId === "string"
+        ? chainData.cardId
+        : undefined;
+  if (directCardId) {
+    const opponentCard =
+      view?.opponentBoard?.find((c: any) => c.cardId === directCardId) ??
+      view?.opponentSpellTrapZone?.find((c: any) => c.cardId === directCardId);
+    if (opponentCard?.definitionId && cardLookup[opponentCard.definitionId]) {
+      return cardLookup[opponentCard.definitionId]?.name ?? "Opponent Card";
+    }
+  }
+
+  return "Opponent Card";
+};
+
+const resolveChainActivatableTraps = (
+  chainData: ChainData,
+  view: Record<string, any> | null,
+  cardLookup: CardLookup,
+): { cardId: string; name: string }[] => {
+  let rawTraps = chainData.activatableTraps;
+  if (!Array.isArray(rawTraps)) {
+    rawTraps = chainData.activatableTrapIds;
+  }
+  if (!Array.isArray(rawTraps)) return [];
+
+  return rawTraps
+    .map((entry: unknown) => {
+      if (typeof entry === "string") {
+        const stCard = view?.spellTrapZone?.find((st: any) => st.cardId === entry);
+        const definitionId = stCard?.definitionId ?? entry;
+        return {
+          cardId: entry,
+          name: stCard?.faceDown
+            ? "Set Trap"
+            : (cardLookup[definitionId]?.name ?? "Set Trap"),
+        };
+      }
+
+      if (!entry || typeof entry !== "object") return null;
+      const entryObj = entry as Record<string, unknown>;
+      const cardId = typeof entryObj.cardId === "string" ? entryObj.cardId : undefined;
+      const definitionId =
+        typeof entryObj.cardDefinitionId === "string"
+          ? entryObj.cardDefinitionId
+          : typeof entryObj.definitionId === "string"
+            ? entryObj.definitionId
+            : cardId;
+      if (!cardId) return null;
+
+      return {
+        cardId,
+        name:
+          (typeof entryObj.name === "string" && entryObj.name.trim()) ||
+          (definitionId ? cardLookup[definitionId]?.name : undefined) ||
+          "Set Trap",
+      };
+    })
+    .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
+};
+
+const resolveAttackTargetData = (
+  selectedBoardCard: string | null,
+  playerBoard: any[],
+  opponentBoard: any[],
+  canAttack: Map<string, string[]>,
+  cardLookup: CardLookup,
+) => {
+  const targets = selectedBoardCard ? (canAttack.get(selectedBoardCard) ?? []) : [];
+  const attackerCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
+  const attackerDef = attackerCard ? cardLookup[attackerCard.definitionId] : null;
+  const attackerAtk = (attackerDef?.attack ?? 0) + (attackerCard?.temporaryBoosts?.attack ?? 0);
+
+  const opponentTargets = opponentBoard
+    .filter((c: any) => targets.includes(c.cardId))
+    .map((c: any) => ({
+      cardId: c.cardId,
+      definitionId: c.definitionId,
+      faceDown: c.faceDown,
+      position: c.position ?? "attack",
+    }));
+  const canDirectAttack = targets.includes("");
+
+  return { opponentTargets, attackerAtk, canDirectAttack };
+};
+
 interface GameBoardProps {
   matchId: string;
   seat: Seat;
@@ -67,79 +177,8 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
 
   pendingMatchEndRef.current = onMatchEnd;
 
-  const chainOpponentCardName = (() => {
-    const directName = chainData.opponentCardName;
-    if (typeof directName === "string" && directName.trim()) return directName;
-
-    const directDefId =
-      typeof chainData.opponentCardDefinitionId === "string"
-        ? chainData.opponentCardDefinitionId
-        : typeof chainData.opponentDefinitionId === "string"
-          ? chainData.opponentDefinitionId
-          : undefined;
-    if (directDefId && cardLookup[directDefId]) {
-      return cardLookup[directDefId].name ?? "Opponent Card";
-    }
-
-    const directCardId =
-      typeof chainData.opponentCardId === "string"
-        ? chainData.opponentCardId
-        : typeof chainData.cardId === "string"
-          ? chainData.cardId
-          : undefined;
-    if (directCardId) {
-      const opponentCard =
-        view?.opponentBoard?.find((c: any) => c.cardId === directCardId) ??
-        view?.opponentSpellTrapZone?.find((c: any) => c.cardId === directCardId);
-      if (opponentCard?.definitionId && cardLookup[opponentCard.definitionId]) {
-        return cardLookup[opponentCard.definitionId].name ?? "Opponent Card";
-      }
-    }
-
-    return "Opponent Card";
-  })();
-
-  const chainActivatableTraps = (() => {
-    let rawTraps = chainData.activatableTraps;
-    if (!Array.isArray(rawTraps)) {
-      rawTraps = chainData.activatableTrapIds;
-    }
-    if (!Array.isArray(rawTraps)) return [];
-
-    return rawTraps
-      .map((entry: unknown) => {
-        if (typeof entry === "string") {
-          const stCard = view?.spellTrapZone?.find((st: any) => st.cardId === entry);
-          const definitionId = stCard?.definitionId ?? entry;
-          return {
-            cardId: entry,
-            name: stCard?.faceDown
-              ? "Set Trap"
-              : (cardLookup[definitionId]?.name ?? "Set Trap"),
-          };
-        }
-
-        if (!entry || typeof entry !== "object") return null;
-        const entryObj = entry as Record<string, unknown>;
-        const cardId = typeof entryObj.cardId === "string" ? entryObj.cardId : undefined;
-        const definitionId =
-          typeof entryObj.cardDefinitionId === "string"
-            ? entryObj.cardDefinitionId
-            : typeof entryObj.definitionId === "string"
-              ? entryObj.definitionId
-              : cardId;
-        if (!cardId) return null;
-
-        return {
-          cardId,
-          name:
-            (typeof entryObj.name === "string" && entryObj.name.trim()) ||
-            (definitionId ? cardLookup[definitionId]?.name : undefined) ||
-            "Set Trap",
-        };
-      })
-      .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
-  })();
+  const chainOpponentCardName = resolveChainOpponentCardName(chainData, view, cardLookup);
+  const chainActivatableTraps = resolveChainActivatableTraps(chainData, view, cardLookup);
 
   // Selection state
   const [selectedHandCard, setSelectedHandCard] = useState<string | null>(null);
@@ -639,14 +678,13 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
 
       {/* Attack Target Selector */}
       {showAttackTargets && selectedBoardCard && (() => {
-        const targets = validActions.canAttack.get(selectedBoardCard) ?? [];
-        const attackerCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
-        const attackerDef = attackerCard ? cardLookup[attackerCard.definitionId] : null;
-        const attackerAtk = (attackerDef?.attack ?? 0) + (attackerCard?.temporaryBoosts?.attack ?? 0);
-        const opponentTargets = opponentBoard
-          .filter((c: any) => targets.includes(c.cardId))
-          .map((c: any) => ({ cardId: c.cardId, definitionId: c.definitionId, faceDown: c.faceDown, position: c.position ?? "attack" }));
-        const canDirectAttack = targets.includes("");
+        const { opponentTargets, attackerAtk, canDirectAttack } = resolveAttackTargetData(
+          selectedBoardCard,
+          playerBoard,
+          opponentBoard,
+          validActions.canAttack,
+          cardLookup,
+        );
         return (
           <AttackTargetSelector
             targets={opponentTargets}

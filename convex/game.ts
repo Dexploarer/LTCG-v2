@@ -9,19 +9,20 @@ import { LTCGStory } from "@lunchtable-tcg/story";
 import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable-tcg/engine";
 import type { Command } from "@lunchtable-tcg/engine";
 import { DECK_RECIPES, STARTER_DECKS } from "./cardData";
+import { normalizeDeckId } from "../shared/ids";
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
 const story = new LTCGStory(components.lunchtable_tcg_story as any);
 
-const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
-const normalizeDeckId = (deckId: string | undefined): string | null => {
-  if (!deckId) return null;
-  const trimmed = deckId.trim();
-  if (!trimmed) return null;
-  if (RESERVED_DECK_IDS.has(trimmed.toLowerCase())) return null;
-  return trimmed;
-};
+const STORY_MIN_DECK_SIZE = 30;
+const AI_DECK_SIZE = 40;
+const AI_STEREOTYPE_TYPES = 7;
+const AI_STEREOTYPE_COPIES = 3;
+const AI_SPELL_TYPES = 6;
+const AI_SPELL_COPIES = 2;
+const AI_TRAP_TYPES = 4;
+const AI_TRAP_COPIES = 2;
 
 const normalizeDeckRecordId = (deckRecord: { deckId?: string }) =>
   normalizeDeckId(deckRecord?.deckId);
@@ -396,7 +397,9 @@ export const startStoryBattle = mutation({
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
-    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+    if (playerDeck.length < STORY_MIN_DECK_SIZE) {
+      throw new Error("Deck must have at least 30 cards");
+    }
 
     const allCards = await cards.cards.getAllCards(ctx);
     const aiDeck = buildAIDeck(allCards);
@@ -448,21 +451,21 @@ export function buildAIDeck(allCards: any[]): string[] {
 
   const deck: string[] = [];
 
-  for (const card of stereotypes.slice(0, 7)) {
-    for (let i = 0; i < 3; i++) deck.push(card._id);
+  for (const card of stereotypes.slice(0, AI_STEREOTYPE_TYPES)) {
+    for (let i = 0; i < AI_STEREOTYPE_COPIES; i++) deck.push(card._id);
   }
-  for (const card of spells.slice(0, 6)) {
-    for (let i = 0; i < 2; i++) deck.push(card._id);
+  for (const card of spells.slice(0, AI_SPELL_TYPES)) {
+    for (let i = 0; i < AI_SPELL_COPIES; i++) deck.push(card._id);
   }
-  for (const card of traps.slice(0, 4)) {
-    for (let i = 0; i < 2; i++) deck.push(card._id);
+  for (const card of traps.slice(0, AI_TRAP_TYPES)) {
+    for (let i = 0; i < AI_TRAP_COPIES; i++) deck.push(card._id);
   }
 
-  while (deck.length < 40 && active.length > 0) {
+  while (deck.length < AI_DECK_SIZE && active.length > 0) {
     deck.push(active[deck.length % active.length]._id);
   }
 
-  return deck.slice(0, 40);
+  return deck.slice(0, AI_DECK_SIZE);
 }
 
 function resolveAICupSeat(meta: any): "host" | "away" | null {
