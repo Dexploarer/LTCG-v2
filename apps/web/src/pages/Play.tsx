@@ -25,6 +25,22 @@ type StoryCompletion = {
   rewards: { gold: number; xp: number; firstClearBonus: number };
 };
 
+type StoryContext = {
+  matchId: string;
+  userId: string;
+  chapterId: string;
+  stageNumber: number;
+  stageId: string;
+  outcome: string | null;
+  starsEarned: number | null;
+  rewardsGold: number;
+  rewardsXp: number;
+  firstClearBonus: number;
+  opponentName: string;
+  postMatchWinDialogue: string[];
+  postMatchLoseDialogue: string[];
+};
+
 export function Play() {
   const { matchId } = useParams<{ matchId: string }>();
   const reservedMatchIds = new Set(["undefined", "null", "skip"]);
@@ -44,7 +60,7 @@ export function Play() {
   const storyCtx = useConvexQuery(
     apiAny.game.getStoryMatchContext,
     isStory && activeMatchId ? { matchId: activeMatchId } : "skip",
-  ) as any | null | undefined;
+  ) as StoryContext | null | undefined;
 
   const currentUser = useConvexQuery(
     apiAny.auth.currentUser,
@@ -57,11 +73,17 @@ export function Play() {
   const completingRef = useRef(false);
 
   const playerSeat =
-    currentUser && meta && (currentUser._id === meta.hostId
-      ? "host"
-      : currentUser._id === meta.awayId
-        ? "away"
-        : null);
+    currentUser && meta
+      ? currentUser._id === meta.hostId
+        ? "host"
+        : currentUser._id === meta.awayId
+            ? "away"
+            : isStory && meta.isAIOpponent && meta.awayId === "cpu"
+              ? "host"
+              : isStory && meta.isAIOpponent && meta.hostId === "cpu"
+                ? "away"
+                : null
+      : null;
 
   const storyWon = resolveStoryWon(meta?.winner, playerSeat);
 

@@ -21,6 +21,35 @@ const normalizeDeckId = (deckId: string | undefined): string | null => {
   return trimmed;
 };
 
+async function resolveActiveDeckForStory(ctx: any, user: { _id: string; activeDeckId?: string }) {
+  const requestedDeckId = normalizeDeckId(user.activeDeckId);
+
+  const activeDecks = await cards.decks.getUserDecks(ctx, user._id);
+  if (!activeDecks || activeDecks.length === 0) {
+    throw new Error("No active deck set. Select a starter deck first.");
+  }
+
+  const preferredDeck =
+    requestedDeckId
+      ? activeDecks.find((deck: { deckId: string }) => deck.deckId === requestedDeckId)
+      : null;
+
+  const deckId = preferredDeck?.deckId ?? activeDecks[0]?.deckId;
+  if (typeof deckId !== "string" || !deckId) {
+    throw new Error("No valid active deck found.");
+  }
+  const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
+  if (!deckData) {
+    throw new Error("Deck not found");
+  }
+
+  if (deckId !== user.activeDeckId) {
+    await ctx.db.patch(user._id, { activeDeckId: deckId });
+  }
+
+  return { deckId, deckData };
+}
+
 // ── Agent Queries ─────────────────────────────────────────────────
 
 export const getAgentByKeyHash = query({
@@ -82,10 +111,7 @@ export const agentStartBattle = mutation({
     );
     if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
 
-    const deckId = normalizeDeckId(user.activeDeckId);
-    if (!deckId) throw new Error("No active deck set. Select a starter deck first.");
-    const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
-    if (!deckData) throw new Error("Deck not found");
+    const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck: string[] = [];
     for (const card of (deckData as any).cards ?? []) {
@@ -166,11 +192,7 @@ export const agentStartDuel = mutation({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
     if (!user) throw new Error("Agent user not found");
-    const deckId = normalizeDeckId(user.activeDeckId);
-    if (!deckId) throw new Error("No active deck set. Select a starter deck first.");
-
-    const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
-    if (!deckData) throw new Error("Deck not found");
+    const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck: string[] = [];
     for (const card of (deckData as any).cards ?? []) {

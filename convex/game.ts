@@ -23,6 +23,35 @@ const normalizeDeckId = (deckId: string | undefined): string | null => {
   return trimmed;
 };
 
+async function resolveActiveDeckForStory(ctx: any, user: { _id: string; activeDeckId?: string }) {
+  const requestedDeckId = normalizeDeckId(user.activeDeckId);
+
+  const activeDecks = await cards.decks.getUserDecks(ctx, user._id);
+  if (!activeDecks || activeDecks.length === 0) {
+    throw new Error("No active deck set");
+  }
+
+  const preferredDeck =
+    requestedDeckId
+      ? activeDecks.find((deck: { deckId: string }) => deck.deckId === requestedDeckId)
+      : null;
+
+  const deckId = preferredDeck?.deckId ?? activeDecks[0]?.deckId;
+  if (typeof deckId !== "string" || !deckId) {
+    throw new Error("No valid active deck found.");
+  }
+  const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
+  if (!deckData) {
+    throw new Error("Deck not found");
+  }
+
+  if (deckId !== user.activeDeckId) {
+    await ctx.db.patch(user._id, { activeDeckId: deckId });
+  }
+
+  return { deckId, deckData };
+}
+
 // ── Card Queries ───────────────────────────────────────────────────
 
 export const getAllCards = query({
@@ -247,10 +276,7 @@ export const startStoryBattle = mutation({
     );
     if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
 
-    const deckId = normalizeDeckId(user.activeDeckId);
-    if (!deckId) throw new Error("No active deck set");
-    const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
-    if (!deckData) throw new Error("Deck not found");
+    const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck: string[] = [];
     for (const card of (deckData as any).cards ?? []) {
@@ -661,6 +687,7 @@ export const getStoryMatchContext = query({
     return {
       matchId: doc.matchId,
       chapterId: doc.chapterId,
+      userId: doc.userId,
       stageNumber: doc.stageNumber,
       stageId: doc.stageId,
       outcome: doc.outcome ?? null,
