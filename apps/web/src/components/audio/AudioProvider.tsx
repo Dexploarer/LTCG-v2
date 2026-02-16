@@ -27,8 +27,9 @@ function clamp01(value: number): number {
 }
 
 function normalizeStoredVolume(value: number | undefined, fallback: number): number {
-  if (!Number.isFinite(value ?? NaN)) return fallback;
-  const normalized = value > 1 ? value / 100 : value;
+  const numericValue = typeof value === "number" ? value : NaN;
+  if (!Number.isFinite(numericValue)) return fallback;
+  const normalized = numericValue > 1 ? numericValue / 100 : numericValue;
   return clamp01(normalized);
 }
 
@@ -541,15 +542,15 @@ export function AudioControlsDock() {
         aria-controls="audio-controls-panel"
       >
         <img
-          src={buttonImageSrc}
-          alt="Open music options"
+              src={buttonImageSrc}
+              alt="Open music options"
           className="w-[110px] h-auto select-none drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)] transition-transform duration-150 group-hover:drop-shadow-[0_8px_14px_rgba(0,0,0,0.55)]"
           draggable={false}
           loading="eager"
           width={110}
           height={35}
           onError={() => {
-            setButtonImageSrc((current) =>
+            setButtonImageSrc((current: string) =>
               current === MUSIC_BUTTON_FALLBACK ? current : MUSIC_BUTTON_FALLBACK,
             );
           }}
