@@ -22,7 +22,7 @@ interface CachedManifestEntry {
 }
 
 const COMMENT_PREFIXES = ["#", ";", "//"];
-const SOUNDTRACK_CACHE_KEY = "ltcg.soundtrack.manifest.cache.v1";
+const SOUNDTRACK_CACHE_KEY = "ltcg.soundtrack.manifest.cache.v2";
 const SOUNDTRACK_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function normalizeSectionName(value: string): string {
@@ -54,6 +54,7 @@ function normalizeTrackPath(reference: string): string {
   const trimmed = reference.trim();
   if (!trimmed) return "";
 
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (trimmed.startsWith(".") || trimmed.startsWith("/")) return trimmed;
   return `/${trimmed}`;
 }
