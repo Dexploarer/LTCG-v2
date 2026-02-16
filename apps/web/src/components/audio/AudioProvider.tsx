@@ -18,7 +18,6 @@ import { MUSIC_BUTTON } from "@/lib/blobUrls";
 const AUDIO_SETTINGS_STORAGE_KEY = "ltcg.audio.settings.v1";
 const SOUNDTRACK_MANIFEST_SOURCE = "/api/soundtrack";
 const VOLUME_PRESET_VALUES = [0, 25, 50, 75, 100];
-const MUSIC_BUTTON_FALLBACK = MUSIC_BUTTON;
 const MAX_CONSECUTIVE_TRACK_ERRORS = 4;
 
 function clamp01(value: number): number {
@@ -29,7 +28,7 @@ function clamp01(value: number): number {
 function normalizeStoredVolume(value: number | undefined, fallback: number): number {
   const numericValue = typeof value === "number" ? value : NaN;
   if (!Number.isFinite(numericValue)) return fallback;
-  const normalized = numericValue > 1 ? numericValue / 100 : numericValue;
+  const normalized = numericValue >= 1 ? numericValue / 100 : numericValue;
   return clamp01(normalized);
 }
 
@@ -196,11 +195,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setAutoplayBlocked(false);
       clearTrackErrorState();
     } catch (error) {
+      setAutoplayBlocked(isAutoplayBlockedError(error));
       if (!isAutoplayBlockedError(error)) {
         markTrackError(currentTrackRef.current);
-        setAutoplayBlocked(false);
-      } else {
-        setAutoplayBlocked(true);
       }
     }
   }, [clearTrackErrorState, markTrackError]);
@@ -539,17 +536,15 @@ export function AudioControlsDock() {
         aria-controls="audio-controls-panel"
       >
         <img
-              src={buttonImageSrc}
-              alt="Open music options"
+          src={buttonImageSrc}
+          alt="Open music options"
           className="w-[110px] h-auto select-none drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)] transition-transform duration-150 group-hover:drop-shadow-[0_8px_14px_rgba(0,0,0,0.55)]"
           draggable={false}
           loading="eager"
           width={110}
           height={35}
           onError={() => {
-            setButtonImageSrc((current: string) =>
-              current === MUSIC_BUTTON_FALLBACK ? current : MUSIC_BUTTON_FALLBACK,
-            );
+            setButtonImageSrc(MUSIC_BUTTON);
           }}
         />
       </button>

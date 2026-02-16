@@ -340,7 +340,6 @@ export async function playOneTurn(
   }
 
   // ── Enter combat phase ───────────────────────────────────────
-  // ── Enter combat phase ───────────────────────────────────────
   while (
     isMyTurnAndAlive() &&
     getPhase() !== "combat" &&
@@ -370,7 +369,6 @@ export async function playOneTurn(
       await clearChain();
       await advancePhase();
       await clearChain();
-      await refreshView();
     }
 
     await refreshView();

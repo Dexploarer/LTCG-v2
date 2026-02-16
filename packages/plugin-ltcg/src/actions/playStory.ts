@@ -206,7 +206,16 @@ export const playStoryAction: Action = {
     } catch (err) {
       client.setMatch(null);
       const msg = err instanceof Error ? err.message : String(err);
-      if (callback) await callback({ text: `Story mode failed: ${msg}` });
+      const normalized = msg.toLowerCase();
+      const isDeckMissingError =
+        normalized.includes("deck") &&
+        (normalized.includes("active") ||
+          normalized.includes("missing") ||
+          normalized.includes("select"));
+      const text = isDeckMissingError
+        ? "No active deck selected. Please choose a starter deck before starting the battle."
+        : `Story mode failed: ${msg}`;
+      if (callback) await callback({ text });
       return { success: false, error: msg };
     }
   },
