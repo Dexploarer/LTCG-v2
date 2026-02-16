@@ -45,3 +45,7 @@ coverage/
 # Convex
 .convex/
 .vercel
+
+# Claude Code (personal config)
+.claude/
+.agents/
