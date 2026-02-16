@@ -70,6 +70,13 @@ export const startBattleAction: Action = {
         throw new Error("No story chapters available. Run seed first.");
       }
       const chapter = chapters[0];
+      if (
+        !chapter ||
+        typeof chapter !== "object" ||
+        typeof (chapter as { _id?: unknown })._id !== "string"
+      ) {
+        throw new Error("Selected chapter is missing required properties.");
+      }
 
       // Start the battle
       const result = await client.startBattle(chapter._id, 1);
