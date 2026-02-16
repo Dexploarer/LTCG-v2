@@ -46,9 +46,7 @@ export class LTCGStory {
   }
 }
 
-// ============================================================================
 // CHAPTERS CLIENT
-// ============================================================================
 
 export class ChaptersClient {
   constructor(private component: typeof api) {}
@@ -95,9 +93,7 @@ export class ChaptersClient {
   }
 }
 
-// ============================================================================
 // STAGES CLIENT
-// ============================================================================
 
 export class StagesClient {
   constructor(private component: typeof api) {}
@@ -126,9 +122,7 @@ export class StagesClient {
   }
 }
 
-// ============================================================================
 // PROGRESS CLIENT
-// ============================================================================
 
 export class ProgressClient {
   constructor(private component: typeof api) {}
@@ -237,9 +231,7 @@ export class ProgressClient {
   }
 }
 
-// ============================================================================
 // SEEDS CLIENT
-// ============================================================================
 
 export class SeedsClient {
   constructor(private component: typeof api) {}

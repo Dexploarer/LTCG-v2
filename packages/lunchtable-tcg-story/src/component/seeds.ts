@@ -1,9 +1,7 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server.js";
 
-// ============================================================================
 // SEED DATA MUTATIONS
-// ============================================================================
 
 export const seedChapters = mutation({
   args: {

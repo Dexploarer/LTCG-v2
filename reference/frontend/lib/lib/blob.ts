@@ -8,9 +8,7 @@
 
 import { type PutBlobResult, del, list, put } from "@vercel/blob";
 
-// =============================================================================
 // Constants
-// =============================================================================
 
 /**
  * Base URL for blob assets - set after initial upload
@@ -87,9 +85,7 @@ const ASSET_PATH_MAP: Record<string, string> = {
   "/brand/backgrounds/ltcg-vertical-1024x1536.png": "brand/backgrounds/ltcg-vertical-1024x1536.png",
 };
 
-// =============================================================================
 // Asset URL Helper
-// =============================================================================
 
 /**
  * Get the URL for an asset, using Blob storage if available, falling back to public path.
@@ -138,9 +134,7 @@ export function getBlobUrl(blobPath: string): string {
   return `${BLOB_BASE_URL}/${blobPath}`;
 }
 
-// =============================================================================
 // Upload Utilities (Server-side only)
-// =============================================================================
 
 /**
  * Upload a file to Vercel Blob storage
@@ -186,9 +180,7 @@ export async function listBlobs(options?: { prefix?: string; limit?: number }) {
   return result;
 }
 
-// =============================================================================
 // Content Type Helpers
-// =============================================================================
 
 const CONTENT_TYPE_MAP: Record<string, string> = {
   ".png": "image/png",

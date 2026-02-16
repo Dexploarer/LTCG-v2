@@ -10,9 +10,7 @@
 
 const BASE = "https://retake.tv/api/v1";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export type RetakeAgent = {
   access_token: string;
@@ -55,9 +53,7 @@ export type StreamStatus = {
   viewer_count: number;
 };
 
-// ---------------------------------------------------------------------------
 // Config — reads env vars that will be set once retake is ready
-// ---------------------------------------------------------------------------
 
 export function getRetakeConfig() {
   return {
@@ -75,9 +71,7 @@ function authHeaders(token: string): HeadersInit {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Public endpoints (no auth)
-// ---------------------------------------------------------------------------
 
 /** List currently live streamers */
 export async function getLiveStreams(
@@ -129,9 +123,7 @@ export async function getAgentMetadata(userId: string, apiUrl = BASE) {
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
 // Authenticated endpoints
-// ---------------------------------------------------------------------------
 
 /** Register a new agent on retake.tv */
 export async function registerAgent(opts: {
@@ -246,9 +238,7 @@ export async function getChatComments(opts: {
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /** Build the public stream page URL for an agent */
 export function streamUrl(agentName: string) {

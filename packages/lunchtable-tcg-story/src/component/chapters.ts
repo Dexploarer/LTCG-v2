@@ -2,9 +2,7 @@ import { v } from "convex/values";
 import { literals } from "convex-helpers/validators";
 import { query, mutation } from "./_generated/server.js";
 
-// ============================================================================
 // QUERIES
-// ============================================================================
 
 export const getChapters = query({
   args: {
@@ -62,9 +60,7 @@ export const getChapterByNumber = query({
   },
 });
 
-// ============================================================================
 // MUTATIONS
-// ============================================================================
 
 export const createChapter = mutation({
   args: {

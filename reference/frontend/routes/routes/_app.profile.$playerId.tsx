@@ -540,9 +540,7 @@ function PlayerProfilePage() {
   );
 }
 
-// ============================================================================
 // Components
-// ============================================================================
 
 function StatPanel({
   icon: Icon,
@@ -628,9 +626,7 @@ function Achievement({ name, description, unlocked }: AchievementProps) {
   );
 }
 
-// ============================================================================
 // Referral Section
-// ============================================================================
 
 interface ReferralSectionProps {
   myReferralLink: { code: string; uses: number; createdAt: number } | null | undefined;

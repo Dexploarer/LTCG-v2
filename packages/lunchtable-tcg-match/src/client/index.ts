@@ -36,9 +36,7 @@ export type { api };
 export class LTCGMatch {
   constructor(private component: typeof api) {}
 
-  // ---------------------------------------------------------------------------
   // Mutations
-  // ---------------------------------------------------------------------------
 
   async createMatch(
     ctx: RunMutationCtx,
@@ -99,9 +97,7 @@ export class LTCGMatch {
     });
   }
 
-  // ---------------------------------------------------------------------------
   // Queries
-  // ---------------------------------------------------------------------------
 
   async getMatchMeta(
     ctx: RunQueryCtx,

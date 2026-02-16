@@ -83,7 +83,6 @@ describe("Integration: Full Game Loop", () => {
     expect(state.hostLifePoints).toBe(8000);
     expect(state.awayLifePoints).toBe(8000);
 
-    // -----------------------------------------------------------------------
     // Strategy: Host summons attacker and attacks each turn.
     // Away never summons, just skips turns so host can direct attack.
     //
@@ -96,7 +95,6 @@ describe("Integration: Full Game Loop", () => {
     // Turn 7 (host): attack → 2000 LP
     // Turn 8 (away): skip
     // Turn 9 (host): attack → 0 LP → GAME_ENDED
-    // -----------------------------------------------------------------------
 
     let turnCount = 0;
     const MAX_TURNS = 20;
@@ -137,9 +135,7 @@ describe("Integration: Full Game Loop", () => {
       act({ type: "END_TURN" }, seat);
     }
 
-    // -----------------------------------------------------------------------
     // Verify game ended properly
-    // -----------------------------------------------------------------------
     state = engine.getState();
     expect(state.gameOver).toBe(true);
     expect(state.winner).toBe("host");

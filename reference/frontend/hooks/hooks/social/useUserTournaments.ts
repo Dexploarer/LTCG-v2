@@ -7,9 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../auth/useConvexAuthHook";
 
-// ============================================================================
 // TYPES
-// ============================================================================
 
 import type { Visibility } from "@/types/common";
 export type { Visibility as TournamentVisibility } from "@/types/common";
@@ -79,9 +77,7 @@ export interface TournamentPreview {
   expiresAt?: number;
 }
 
-// ============================================================================
 // HOOK: usePublicUserTournaments
-// ============================================================================
 
 interface UsePublicUserTournamentsReturn {
   tournaments: UserTournamentSummary[];
@@ -111,9 +107,7 @@ export function usePublicUserTournaments(limit = 20): UsePublicUserTournamentsRe
   };
 }
 
-// ============================================================================
 // HOOK: useMyHostedTournament
-// ============================================================================
 
 interface UseMyHostedTournamentReturn {
   tournament: HostedTournament | null;
@@ -150,9 +144,7 @@ export function useMyHostedTournament(): UseMyHostedTournamentReturn {
   };
 }
 
-// ============================================================================
 // HOOK: useMyRegisteredTournaments
-// ============================================================================
 
 interface UseMyRegisteredTournamentsReturn {
   tournaments: RegisteredTournament[];
@@ -184,9 +176,7 @@ export function useMyRegisteredTournaments(): UseMyRegisteredTournamentsReturn {
   };
 }
 
-// ============================================================================
 // HOOK: useTournamentByCode
-// ============================================================================
 
 interface UseTournamentByCodeReturn {
   tournament: TournamentPreview | null;
@@ -221,9 +211,7 @@ export function useTournamentByCode(joinCode: string): UseTournamentByCodeReturn
   };
 }
 
-// ============================================================================
 // HOOK: useCreateUserTournament
-// ============================================================================
 
 interface CreateTournamentArgs {
   name: string;
@@ -285,9 +273,7 @@ export function useCreateUserTournament(): UseCreateUserTournamentReturn {
   return { createTournament, isCreating };
 }
 
-// ============================================================================
 // HOOK: useJoinUserTournament
-// ============================================================================
 
 interface UseJoinUserTournamentReturn {
   joinByCode: (code: string) => Promise<{ success: boolean; message: string; isFull: boolean }>;
@@ -348,9 +334,7 @@ export function useJoinUserTournament(): UseJoinUserTournamentReturn {
   return { joinByCode, joinById, isJoining };
 }
 
-// ============================================================================
 // HOOK: useLeaveUserTournament
-// ============================================================================
 
 interface UseLeaveUserTournamentReturn {
   leave: (tournamentId: Id<"tournaments">) => Promise<{ success: boolean; message: string }>;
@@ -393,9 +377,7 @@ export function useLeaveUserTournament(): UseLeaveUserTournamentReturn {
   return { leave, isLeaving };
 }
 
-// ============================================================================
 // HOOK: useCancelUserTournament
-// ============================================================================
 
 interface UseCancelUserTournamentReturn {
   cancel: (tournamentId: Id<"tournaments">) => Promise<{ success: boolean; message: string }>;

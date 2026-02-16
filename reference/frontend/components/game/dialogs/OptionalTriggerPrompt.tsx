@@ -9,9 +9,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, Clock, Sparkles, X, XCircle, Zap } from "lucide-react";
 import { useCallback, useState } from "react";
 
-// =============================================================================
 // Types
-// =============================================================================
 
 export interface PendingOptionalTrigger {
   cardId: Id<"cardDefinitions">;
@@ -57,9 +55,7 @@ interface OptionalTriggerPromptProps {
   onClose: () => void;
 }
 
-// =============================================================================
 // Constants
-// =============================================================================
 
 const TRIGGER_LABELS: Record<string, string> = {
   on_summon: "When Summoned",
@@ -110,9 +106,7 @@ const RARITY_BORDERS: Record<string, string> = {
   legendary: "border-yellow-500/50 shadow-lg shadow-yellow-500/20",
 };
 
-// =============================================================================
 // Component
-// =============================================================================
 
 export function OptionalTriggerPrompt({
   pendingTriggers,

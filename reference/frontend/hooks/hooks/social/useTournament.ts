@@ -4,9 +4,7 @@ import { typedApi, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers
 import type { Id } from "@convex/_generated/dataModel";
 import { useAuth } from "../auth/useConvexAuthHook";
 
-// ============================================================================
 // TYPES
-// ============================================================================
 
 import type { TournamentStatus } from "@/types/common";
 export type { TournamentStatus } from "@/types/common";
@@ -136,9 +134,7 @@ export interface UserTournamentStats {
   winRate: number;
 }
 
-// ============================================================================
 // HOOK: useTournaments
-// ============================================================================
 
 interface UseTournamentsReturn {
   tournaments: TournamentSummary[];
@@ -168,9 +164,7 @@ export function useTournaments(): UseTournamentsReturn {
   };
 }
 
-// ============================================================================
 // HOOK: useTournament
-// ============================================================================
 
 interface UseTournamentReturn {
   tournament: TournamentDetails | null;
@@ -248,9 +242,7 @@ export function useTournament(tournamentId: Id<"tournaments"> | undefined): UseT
   };
 }
 
-// ============================================================================
 // HOOK: useTournamentHistory
-// ============================================================================
 
 interface UseTournamentHistoryReturn {
   history: TournamentHistoryEntry[];

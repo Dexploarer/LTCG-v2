@@ -7,9 +7,7 @@ import type { MatchMode } from "@/types/common";
 import type { Id } from "@convex/_generated/dataModel";
 import { toast } from "sonner";
 
-// ============================================================================
 // Type Definitions
-// ============================================================================
 
 interface CreateLobbyResult {
   lobbyId: Id<"gameLobbies">;

@@ -2,9 +2,7 @@ import { v } from "convex/values";
 import { literals } from "convex-helpers/validators";
 import { query, mutation } from "./_generated/server.js";
 
-// ============================================================================
 // QUERIES
-// ============================================================================
 
 export const getStages = query({
   args: {
@@ -29,9 +27,7 @@ export const getStage = query({
   },
 });
 
-// ============================================================================
 // MUTATIONS
-// ============================================================================
 
 export const createStage = mutation({
   args: {

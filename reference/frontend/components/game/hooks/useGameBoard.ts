@@ -5,9 +5,7 @@ import { typedApi, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers
 import type { Id } from "@convex/_generated/dataModel";
 import { useCallback, useMemo } from "react";
 
-// =============================================================================
 // Query Return Types (simplified to avoid deep type instantiation)
-// =============================================================================
 
 interface CurrentUser {
   _id: Id<"users">;
@@ -142,9 +140,7 @@ interface ChainState {
   isResolving: boolean;
 }
 
-// =============================================================================
 // Types adapted to match actual schema
-// =============================================================================
 
 export interface CardInZone {
   instanceId: Id<"cardDefinitions">; // Using cardDefinitionId as instanceId for now
@@ -254,9 +250,7 @@ export interface AttackTarget {
   isFaceDown?: boolean;
 }
 
-// =============================================================================
 // Hook
-// =============================================================================
 
 /**
  * Comprehensive game board state management hook for LunchTable card battles.
@@ -337,9 +331,7 @@ export interface AttackTarget {
  * @throws Will not throw directly but actions return `{ success: boolean, error?: string }`
  */
 export function useGameBoard(lobbyId: Id<"gameLobbies">, currentPlayerId: Id<"users">) {
-  // ==========================================================================
   // Queries - using actual APIs that exist
-  // ==========================================================================
 
   // First, get lobby details to check if game is active
   const lobbyDetails = useConvexQuery(typedApi.gameplay.games.queries.getLobbyDetails, {
@@ -373,9 +365,7 @@ export function useGameBoard(lobbyId: Id<"gameLobbies">, currentPlayerId: Id<"us
     | undefined
     | null;
 
-  // ==========================================================================
   // Mutations - using actual game engine APIs
-  // ==========================================================================
 
   // Mutations using convexHelpers to avoid TS2589
   const normalSummonMutation = useConvexMutation(typedApi.gameplay.gameEngine.summons.normalSummon);
@@ -405,9 +395,7 @@ export function useGameBoard(lobbyId: Id<"gameLobbies">, currentPlayerId: Id<"us
     typedApi.gameplay.combatSystem.passResponseWindowPriority
   );
 
-  // ==========================================================================
   // Actions
-  // ==========================================================================
 
   const normalSummon = useCallback(
     async (
@@ -641,9 +629,7 @@ export function useGameBoard(lobbyId: Id<"gameLobbies">, currentPlayerId: Id<"us
     [passPriorityMutation, activateTrapMutation, activateSpellMutation, lobbyId]
   );
 
-  // ==========================================================================
   // Computed Values - adapted to actual gameState structure
-  // ==========================================================================
 
   const isPlayerTurn = useMemo(() => {
     return gameState?.isYourTurn ?? false;
@@ -1016,9 +1002,7 @@ export function useGameBoard(lobbyId: Id<"gameLobbies">, currentPlayerId: Id<"us
     return options;
   }, [player, opponent, isBattlePhase, isPlayerTurn]);
 
-  // ==========================================================================
   // Return
-  // ==========================================================================
 
   return {
     // State

@@ -15,9 +15,7 @@
 
 import { type EdgeConfigItems, get, getAll, has } from "@vercel/edge-config";
 
-// =============================================================================
 // Types
-// =============================================================================
 
 /**
  * Feature flags configuration
@@ -67,9 +65,7 @@ export interface GameConfig {
   goldMultiplier?: number;
 }
 
-// =============================================================================
 // Edge Config Keys
-// =============================================================================
 
 export const CONFIG_KEYS = {
   FEATURE_FLAGS: "featureFlags",
@@ -79,9 +75,7 @@ export const CONFIG_KEYS = {
   ANNOUNCEMENT: "announcement",
 } as const;
 
-// =============================================================================
 // Getters
-// =============================================================================
 
 /**
  * Get feature flags from Edge Config

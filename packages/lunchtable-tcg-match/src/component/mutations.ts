@@ -3,16 +3,12 @@ import { mutation } from "./_generated/server";
 import { decide, evolve } from "@lunchtable-tcg/engine";
 import type { GameState, Command, Seat } from "@lunchtable-tcg/engine";
 
-// ---------------------------------------------------------------------------
 // Shared validators
-// ---------------------------------------------------------------------------
 
 const seatValidator = v.union(v.literal("host"), v.literal("away"));
 
-// ---------------------------------------------------------------------------
 // createMatch — Insert a new match record in "waiting" status.
 // The caller (LTCGMatch client class) provides player IDs, mode, and decks.
-// ---------------------------------------------------------------------------
 
 export const createMatch = mutation({
   args: {
@@ -40,11 +36,9 @@ export const createMatch = mutation({
   },
 });
 
-// ---------------------------------------------------------------------------
 // joinMatch — fill the away seat in an existing waiting match.
 //
 // The match must be in "waiting" state and currently unoccupied on the away seat.
-// ---------------------------------------------------------------------------
 
 export const joinMatch = mutation({
   args: {
@@ -80,13 +74,11 @@ export const joinMatch = mutation({
   },
 });
 
-// ---------------------------------------------------------------------------
 // startMatch — Transition a match from "waiting" to "active".
 //
 // The client is responsible for calling createInitialState() from the engine
 // and serializing the result to JSON. This keeps the mutation thin and avoids
 // requiring card definitions inside the Convex component at mutation time.
-// ---------------------------------------------------------------------------
 
 export const startMatch = mutation({
   args: {
@@ -130,7 +122,6 @@ export const startMatch = mutation({
   },
 });
 
-// ---------------------------------------------------------------------------
 // submitAction — The core decide / evolve / persist loop.
 //
 // 1. Load the latest snapshot for the match.
@@ -138,7 +129,6 @@ export const startMatch = mutation({
 // 3. Run decide() to produce events, then evolve() to derive new state.
 // 4. Persist the new snapshot and append the event log entry.
 // 5. If the game is over, finalize the match record.
-// ---------------------------------------------------------------------------
 
 export const submitAction = mutation({
   args: {
@@ -152,9 +142,7 @@ export const submitAction = mutation({
     version: v.number(),
   }),
   handler: async (ctx, args) => {
-    // -----------------------------------------------------------------------
     // 1. Validate match is active
-    // -----------------------------------------------------------------------
     const match = await ctx.db.get(args.matchId);
     if (!match) {
       throw new Error(`Match ${args.matchId} not found`);
@@ -165,9 +153,7 @@ export const submitAction = mutation({
       );
     }
 
-    // -----------------------------------------------------------------------
     // 2. Load latest snapshot (highest version for this match)
-    // -----------------------------------------------------------------------
     const latestSnapshot = await ctx.db
       .query("matchSnapshots")
       .withIndex("by_match_version", (q) => q.eq("matchId", args.matchId))
@@ -180,9 +166,7 @@ export const submitAction = mutation({
       );
     }
 
-    // -----------------------------------------------------------------------
     // 3. Deserialize state and optionally inject cardLookup
-    // -----------------------------------------------------------------------
     let state: GameState;
     try {
       state = JSON.parse(latestSnapshot.state) as GameState;
@@ -198,9 +182,7 @@ export const submitAction = mutation({
       }
     }
 
-    // -----------------------------------------------------------------------
     // 4. Parse command
-    // -----------------------------------------------------------------------
     let parsedCommand: Command;
     try {
       parsedCommand = JSON.parse(args.command) as Command;
@@ -208,9 +190,7 @@ export const submitAction = mutation({
       throw new Error("Failed to parse command");
     }
 
-    // -----------------------------------------------------------------------
     // 5. Run decide() — produces events for the command
-    // -----------------------------------------------------------------------
     let events;
     try {
       events = decide(state, parsedCommand, args.seat as Seat);
@@ -219,9 +199,7 @@ export const submitAction = mutation({
       throw new Error(`Engine decide() failed: ${message}`);
     }
 
-    // -----------------------------------------------------------------------
     // 6. Run evolve() — apply events to produce new state
-    // -----------------------------------------------------------------------
     let newState: GameState;
     try {
       newState = evolve(state, events);
@@ -230,9 +208,7 @@ export const submitAction = mutation({
       throw new Error(`Engine evolve() failed: ${message}`);
     }
 
-    // -----------------------------------------------------------------------
     // 7. Persist new snapshot
-    // -----------------------------------------------------------------------
     const newVersion = latestSnapshot.version + 1;
 
     await ctx.db.insert("matchSnapshots", {
@@ -242,9 +218,7 @@ export const submitAction = mutation({
       createdAt: Date.now(),
     });
 
-    // -----------------------------------------------------------------------
     // 8. Append event log entry
-    // -----------------------------------------------------------------------
     await ctx.db.insert("matchEvents", {
       matchId: args.matchId,
       version: newVersion,
@@ -254,9 +228,7 @@ export const submitAction = mutation({
       createdAt: Date.now(),
     });
 
-    // -----------------------------------------------------------------------
     // 9. If game over, finalize the match record
-    // -----------------------------------------------------------------------
     if (newState.gameOver) {
       await ctx.db.patch(args.matchId, {
         status: "ended" as const,

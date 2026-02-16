@@ -16,9 +16,7 @@
 import "server-only";
 import { type FeatureFlags, getFeatureFlags } from "./edge-config";
 
-// =============================================================================
 // Feature Flag Types
-// =============================================================================
 
 /**
  * All feature flags available in the application
@@ -54,9 +52,7 @@ export const FLAG_DEFAULTS: AppFeatureFlags = {
   newPackAnimation: false,
 };
 
-// =============================================================================
 // Flag Getters (Server-side)
-// =============================================================================
 
 /**
  * Get all feature flags (server-side only)
@@ -89,9 +85,7 @@ export async function getFlag<K extends keyof AppFeatureFlags>(
   return flags[key];
 }
 
-// =============================================================================
 // Hypertune Integration (placeholder)
-// =============================================================================
 
 /**
  * HYPERTUNE SETUP INSTRUCTIONS:

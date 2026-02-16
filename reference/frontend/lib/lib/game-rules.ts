@@ -5,9 +5,7 @@
  * Used by: Rules Page, Tutorial, Tooltips
  */
 
-// =============================================================================
 // CORE GAME CONSTANTS
-// =============================================================================
 
 export const GAME_CONSTANTS = {
   STARTING_LIFE_POINTS: 8000,
@@ -22,9 +20,7 @@ export const GAME_CONSTANTS = {
   TRIBUTE_LEVEL_7_PLUS: 2,
 } as const;
 
-// =============================================================================
 // TURN PHASES
-// =============================================================================
 
 export type PhaseId = "draw" | "main" | "combat" | "breakdown_check" | "end";
 
@@ -111,9 +107,7 @@ export const TURN_PHASES: PhaseInfo[] = [
   },
 ];
 
-// =============================================================================
 // CARD TYPES
-// =============================================================================
 
 export type CardTypeId = "stereotype" | "spell" | "trap" | "class";
 
@@ -213,9 +207,7 @@ export const CARD_TYPES: CardTypeInfo[] = [
   },
 ];
 
-// =============================================================================
 // COMBAT SYSTEM
-// =============================================================================
 
 export interface CombatScenario {
   name: string;
@@ -277,9 +269,7 @@ export const COMBAT_SCENARIOS: CombatScenario[] = [
   },
 ];
 
-// =============================================================================
 // GAME ZONES
-// =============================================================================
 
 export interface ZoneInfo {
   id: string;
@@ -338,9 +328,7 @@ export const GAME_ZONES: ZoneInfo[] = [
   },
 ];
 
-// =============================================================================
 // GLOSSARY
-// =============================================================================
 
 export interface GlossaryTerm {
   term: string;
@@ -523,9 +511,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
 ];
 
-// =============================================================================
 // ELEMENTS (ARCHETYPES)
-// =============================================================================
 
 export interface ElementInfo {
   id: string;
@@ -594,9 +580,7 @@ export const ELEMENTS: ElementInfo[] = [
   },
 ];
 
-// =============================================================================
 // TUTORIAL MOMENTS
-// =============================================================================
 
 export interface TutorialMoment {
   id: number;
@@ -659,9 +643,7 @@ export const TUTORIAL_MOMENTS: TutorialMoment[] = [
   },
 ];
 
-// =============================================================================
 // TOOLTIP DEFINITIONS
-// =============================================================================
 
 export interface TooltipDefinition {
   id: string;
@@ -890,9 +872,7 @@ export const TOOLTIPS: Record<string, TooltipDefinition> = {
   },
 };
 
-// =============================================================================
 // HELPER FUNCTIONS
-// =============================================================================
 
 export function getPhaseById(id: PhaseId): PhaseInfo | undefined {
   return TURN_PHASES.find((p) => p.id === id);

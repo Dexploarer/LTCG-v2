@@ -3,9 +3,7 @@ import { query } from "./_generated/server";
 import { mask } from "@lunchtable-tcg/engine";
 import type { GameState, Seat } from "@lunchtable-tcg/engine";
 
-// ============================================================================
 // QUERIES
-// ============================================================================
 
 /**
  * Get match metadata (status, players, mode, winner).

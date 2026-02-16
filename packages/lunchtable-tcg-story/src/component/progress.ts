@@ -2,9 +2,7 @@ import { v } from "convex/values";
 import { literals } from "convex-helpers/validators";
 import { query, mutation } from "./_generated/server.js";
 
-// ============================================================================
 // QUERIES
-// ============================================================================
 
 export const getProgress = query({
   args: {
@@ -77,9 +75,7 @@ export const getStageProgress = query({
   },
 });
 
-// ============================================================================
 // MUTATIONS
-// ============================================================================
 
 export const upsertProgress = mutation({
   args: {

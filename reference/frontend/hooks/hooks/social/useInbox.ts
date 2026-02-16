@@ -7,9 +7,7 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { useAuth } from "../auth/useConvexAuthHook";
 
-// ============================================================================
 // Types
-// ============================================================================
 
 export type InboxMessageType =
   | "reward"

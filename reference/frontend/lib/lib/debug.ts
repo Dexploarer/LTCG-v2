@@ -11,9 +11,7 @@
  * - Use componentLogger() for component-level debugging
  */
 
-// ============================================================================
 // Types
-// ============================================================================
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -25,9 +23,7 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
-// ============================================================================
 // Environment Configuration
-// ============================================================================
 
 const IS_BROWSER = typeof window !== "undefined";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
@@ -45,9 +41,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-// ============================================================================
 // Core Logger
-// ============================================================================
 
 class FrontendLogger {
   private minLevel: number;
@@ -133,9 +127,7 @@ class FrontendLogger {
   }
 }
 
-// ============================================================================
 // Component Logger
-// ============================================================================
 
 /**
  * Create a logger scoped to a specific component
@@ -158,9 +150,7 @@ export function componentLogger(componentName: string) {
   };
 }
 
-// ============================================================================
 // Performance Monitoring
-// ============================================================================
 
 class PerformanceMonitor {
   /**
@@ -215,9 +205,7 @@ class PerformanceMonitor {
   }
 }
 
-// ============================================================================
 // React Hooks for Debugging
-// ============================================================================
 
 /**
  * Hook to log component lifecycle
@@ -286,9 +274,7 @@ export function useWhyDidYouUpdate(componentName: string, props: Record<string, 
   }
 }
 
-// ============================================================================
 // Error Tracking
-// ============================================================================
 
 /**
  * Track and log errors
@@ -328,9 +314,7 @@ export function setupErrorHandlers(): void {
   });
 }
 
-// ============================================================================
 // Debug Utilities
-// ============================================================================
 
 /**
  * Enable verbose debug logging via console
@@ -353,9 +337,7 @@ export function disableDebugMode(): void {
   }
 }
 
-// ============================================================================
 // Exports
-// ============================================================================
 
 export const logger = new FrontendLogger();
 export const perf = new PerformanceMonitor();
