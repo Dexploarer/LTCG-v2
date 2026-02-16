@@ -15,6 +15,7 @@ import type {
   GameCommand,
   PlayerView,
 } from "../types.js";
+import { resolveLifePoints, resolvePhase } from "../shared/gameView.js";
 import {
   MAX_CHAIN_RESPONSE_ATTEMPTS,
   MAX_MONSTER_ZONE_SIZE,
@@ -36,12 +37,6 @@ interface TurnSnapshot {
   opponentBoardStateSignature: string;
   chainLength: number;
   gameOver: boolean;
-}
-
-type PhaseView = { currentPhase?: string; phase?: string };
-
-function resolvePhase(view: PhaseView): string {
-  return view.currentPhase ?? view.phase ?? "draw";
 }
 
 /**
@@ -245,53 +240,62 @@ export async function playOneTurn(
       isMyTurnAndAlive() &&
       getPhase() === "combat"
     ) {
-      const attacker = getBoard(currentView.value)
+      const attackers = getBoard(currentView.value)
         .filter((card) => !card.faceDown)
         .filter((card) => card.canAttack !== false)
-        .filter((card) => !card.hasAttackedThisTurn)[0];
+        .filter((card) => !card.hasAttackedThisTurn);
 
-      if (!attacker) break;
+      if (attackers.length === 0) {
+        break;
+      }
 
-      const attackerId = attacker.cardId ?? attacker.instanceId;
-      if (!attackerId) break;
+      let madeProgress = false;
 
-      const opponentBoard = getOpponentBoard(currentView.value);
-      const possibleTargets =
-        opponentBoard.length > 0
-          ? opponentBoard
-              .map((card) => card.cardId ?? card.instanceId)
-              .filter(Boolean)
-          : [undefined];
+      for (const attacker of attackers) {
+        const attackerId = attacker.cardId ?? attacker.instanceId;
+        if (!attackerId) continue;
 
-      let attacked = false;
-      for (const targetId of possibleTargets) {
-        const didAttack = await submitAction(
-          {
-            type: "DECLARE_ATTACK",
-            attackerId,
-            ...(targetId ? { targetId } : {}),
-          },
-          targetId
-            ? `Monster ${attackerId} attacked ${targetId}`
-            : `Monster ${attackerId} attacked directly`,
-        );
-        if (didAttack) {
-          attacked = true;
+        const opponentBoard = getOpponentBoard(currentView.value);
+        const possibleTargets =
+          opponentBoard.length > 0
+            ? opponentBoard
+                .map((card) => card.cardId ?? card.instanceId)
+                .filter(Boolean)
+            : [undefined];
+
+        let attacked = false;
+        for (const targetId of possibleTargets) {
+          const didAttack = await submitAction(
+            {
+              type: "DECLARE_ATTACK",
+              attackerId,
+              ...(targetId ? { targetId } : {}),
+            },
+            targetId
+              ? `Monster ${attackerId} attacked ${targetId}`
+              : `Monster ${attackerId} attacked directly`,
+          );
+          if (didAttack) {
+            attacked = true;
+            madeProgress = true;
+            break;
+          }
+        }
+
+        if (!attacked) continue;
+
+        await clearChain();
+        if (currentView.value.gameOver) break;
+        const afterAttack = await refreshView();
+        if (
+          afterAttack.currentTurnPlayer !== seat ||
+          resolvePhase(afterAttack) !== "combat"
+        ) {
           break;
         }
       }
 
-      if (!attacked) {
-        break;
-      }
-
-      await clearChain();
-      if (currentView.value.gameOver) break;
-      const afterAttack = await refreshView();
-      if (
-        afterAttack.currentTurnPlayer !== seat ||
-        resolvePhase(afterAttack) !== "combat"
-      ) {
+      if (!madeProgress) {
         break;
       }
     }
@@ -336,7 +340,8 @@ export async function playOneTurn(
   }
 
   // ── Enter combat phase ───────────────────────────────────────
-    while (
+  // ── Enter combat phase ───────────────────────────────────────
+  while (
     isMyTurnAndAlive() &&
     getPhase() !== "combat" &&
     getPhase() !== "end"
@@ -394,34 +399,6 @@ export function gameOverSummary(
   if (myLP > oppLP) return `VICTORY! (You: ${myLP} LP — Opponent: ${oppLP} LP)`;
   if (myLP < oppLP) return `DEFEAT. (You: ${myLP} LP — Opponent: ${oppLP} LP)`;
   return `DRAW. (Both: ${myLP} LP)`;
-}
-
-function resolveLifePoints(
-  view: {
-    lifePoints?: number;
-    opponentLifePoints?: number;
-    players?: {
-      host: { lifePoints: number };
-      away: { lifePoints: number };
-    };
-  },
-  seat: Seat,
-) {
-  if (view.lifePoints !== undefined || view.opponentLifePoints !== undefined) {
-    return seat === "host"
-      ? {
-          myLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
-          oppLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
-        }
-      : {
-          myLP: view.opponentLifePoints ?? view.lifePoints ?? 0,
-          oppLP: view.lifePoints ?? view.opponentLifePoints ?? 0,
-        };
-  }
-
-  const host = view.players?.host?.lifePoints ?? 0;
-  const away = view.players?.away?.lifePoints ?? 0;
-  return seat === "host" ? { myLP: host, oppLP: away } : { myLP: away, oppLP: host };
 }
 
 function dedupe(items: string[]): string[] {

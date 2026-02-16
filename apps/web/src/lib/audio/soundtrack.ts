@@ -85,19 +85,17 @@ function toBlobUrl(reference: string): string {
 }
 
 function resolveTrackUrl(reference: string): string {
-  if (typeof window === "undefined") return reference;
-
   const normalized = normalizeTrackPath(reference);
-  const parsed = resolveTrackUrlFromOrigin(normalized);
 
-  if (!import.meta.env.DEV && isLunchtableTrack(normalized)) {
+  if (isLunchtableTrack(normalized)) {
     return toBlobUrl(normalized);
   }
 
-  return parsed;
+  return resolveTrackUrlFromOrigin(normalized);
 }
 
 function resolveTrackUrlFromOrigin(reference: string): string {
+  if (typeof window === "undefined") return reference;
   try {
     return new URL(reference, window.location.origin).toString();
   } catch {
@@ -289,7 +287,7 @@ export async function loadSoundtrackManifest(
 ): Promise<SoundtrackManifest> {
   const loadFromUrl = async (
     requestSource: string,
-    cacheMode: RequestCache = "force-cache",
+    cacheMode: RequestCache = "no-store",
   ): Promise<SoundtrackManifest> => {
     const response = await fetch(requestSource, {
       cache: cacheMode,
@@ -320,18 +318,12 @@ export async function loadSoundtrackManifest(
     return cachedManifest;
   }
 
-  if (cachedManifest && cached) {
-    void loadFromUrl(source, "no-cache")
-      .then((next) => {
-        if (next.source === source) {
-          writeCachedManifest(source, next, true);
-        }
-      })
-      .catch(() => {
-        // ignore async refresh failures
-      });
-
-    return cachedManifest;
+  if (cachedManifest) {
+    try {
+      return await loadFromUrl(source, "no-store");
+    } catch {
+      return cachedManifest;
+    }
   }
 
   try {

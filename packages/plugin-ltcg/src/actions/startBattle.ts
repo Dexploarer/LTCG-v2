@@ -45,8 +45,8 @@ export const startBattleAction: Action = {
       const me = await client.getMe();
 
       // Get first available chapter
-      const chapters = await client.getChapters();
-      if (!chapters.length) {
+      const chapters = (await client.getChapters()) ?? [];
+      if (!Array.isArray(chapters) || !chapters.length) {
         throw new Error("No story chapters available. Run seed first.");
       }
       const chapter = chapters[0];

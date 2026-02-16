@@ -6,6 +6,7 @@
  */
 
 import { getClient } from "../client.js";
+import { resolveLifePoints, resolvePhase } from "../shared/gameView.js";
 import type {
   Action,
   BoardCard,
@@ -54,11 +55,10 @@ export const getStatusAction: Action = {
     try {
       const view = await client.getView(matchId, "host");
       const phase = resolvePhase(view);
+      const { myLP, oppLP } = resolveLifePoints(view);
 
       if (view.gameOver) {
         client.setMatch(null);
-        const myLP = view.players.host.lifePoints;
-        const oppLP = view.players.away.lifePoints;
         const outcome =
           myLP > oppLP
             ? "Victory!"
@@ -81,7 +81,7 @@ export const getStatusAction: Action = {
       const text = [
         `Match: ${matchId}`,
         `Phase: ${phase} — ${isMyTurn ? "Your turn" : "Opponent's turn"}`,
-        `LP: You ${view.players.host.lifePoints} / Opponent ${view.players.away.lifePoints}`,
+        `LP: You ${myLP} / Opponent ${oppLP}`,
         `Hand: ${view.hand?.length ?? 0} cards | Field: ${myMonsters.length} vs ${oppMonsters.length} monsters`,
       ].join("\n");
 
@@ -126,10 +126,3 @@ export const getStatusAction: Action = {
     ],
   ],
 };
-
-function resolvePhase(view: {
-  currentPhase?: string | undefined;
-  phase?: string | undefined;
-}): string {
-  return view.currentPhase ?? view.phase ?? "draw";
-}

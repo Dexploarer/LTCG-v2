@@ -13,6 +13,7 @@
 
 import { getClient } from "../client.js";
 import { playOneTurn } from "./turnLogic.js";
+import { resolveLifePoints } from "../shared/gameView.js";
 import type {
   Action,
   HandlerCallback,
@@ -66,14 +67,14 @@ export const playStoryAction: Action = {
     try {
       // ── 1. Find next stage ───────────────────────────────────
       const progress = await client.getStoryProgress();
-      const chapters = progress.chapters;
+      const chapters = progress.chapters ?? [];
 
-      if (!chapters.length) {
+      if (!Array.isArray(chapters) || !chapters.length) {
         throw new Error("No story chapters available. Run seed first.");
       }
 
       const completedStages = new Set(
-        progress.stageProgress
+        (progress.stageProgress ?? [])
           .filter((s) => s.starsEarned > 0)
           .map((s) => `${s.chapterId}:${s.stageNumber}`),
       );
@@ -150,8 +151,7 @@ export const playStoryAction: Action = {
 
       // ── 5. Check outcome ─────────────────────────────────────
       const finalView = await client.getView(matchId, "host");
-      const myLP = finalView.players.host.lifePoints;
-      const oppLP = finalView.players.away.lifePoints;
+      const { myLP, oppLP } = resolveLifePoints(finalView);
       const won = myLP > oppLP;
 
       log.push(

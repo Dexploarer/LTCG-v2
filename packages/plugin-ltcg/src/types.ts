@@ -174,7 +174,7 @@ export interface StarterDeck {
 }
 
 /** Card in the player's hand (from PlayerView.hand) */
-export interface CardInHand {
+export interface CardInHandRecord {
   instanceId?: string;
   cardId?: string;
   cardType: "stereotype" | "spell" | "trap";
@@ -184,6 +184,8 @@ export interface CardInHand {
   level?: number;
   description?: string;
 }
+
+export type CardInHand = CardInHandRecord | string;
 
 /** Card on the game field */
 export interface BoardCard {

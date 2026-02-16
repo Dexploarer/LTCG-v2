@@ -18,7 +18,7 @@ import { MUSIC_BUTTON } from "@/lib/blobUrls";
 const AUDIO_SETTINGS_STORAGE_KEY = "ltcg.audio.settings.v1";
 const SOUNDTRACK_MANIFEST_SOURCE = "/api/soundtrack";
 const VOLUME_PRESET_VALUES = [0, 25, 50, 75, 100];
-const MUSIC_BUTTON_FALLBACK = "/lunchtable/music-button.png";
+const MUSIC_BUTTON_FALLBACK = MUSIC_BUTTON;
 const MAX_CONSECUTIVE_TRACK_ERRORS = 4;
 
 function clamp01(value: number): number {
@@ -120,7 +120,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const currentQueueRef = useRef<string[]>([]);
   const trackIndexRef = useRef(0);
   const shuffleModeRef = useRef(false);
-  const unlockedRef = useRef(false);
   const audioUnlockedRef = useRef(false);
   const consecutiveTrackErrorRef = useRef(0);
   const currentTrackRef = useRef<string | null>(null);
@@ -197,11 +196,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setAutoplayBlocked(false);
       clearTrackErrorState();
     } catch (error) {
-      markTrackError(currentTrackRef.current);
       if (!isAutoplayBlockedError(error)) {
+        markTrackError(currentTrackRef.current);
         setAutoplayBlocked(false);
-      }
-      if (isAutoplayBlockedError(error)) {
+      } else {
         setAutoplayBlocked(true);
       }
     }
@@ -210,7 +208,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const requestAudioUnlock = useCallback(() => {
     if (!audioUnlockedRef.current) {
       audioUnlockedRef.current = true;
-      unlockedRef.current = true;
       setAudioUnlocked(true);
     }
 
@@ -265,7 +262,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const prefetchTrack = queue[prefetchIndex];
       if (prefetchTrack) preloadTrack(prefetchTrack);
 
-      if (unlockedRef.current) {
+      if (audioUnlockedRef.current) {
         void safePlay(audio);
       }
     },
@@ -365,7 +362,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (audio.src && audio.paused && unlockedRef.current) {
+    if (audio.src && audio.paused && audioUnlockedRef.current) {
       void safePlay(audio);
     }
   }, [settings.musicMuted, settings.musicVolume, safePlay]);
@@ -412,7 +409,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const pool = sfxPoolRef.current;
     if (pool.length === 0) return;
 
-    const slot = pool.find((audio) => audio.paused || audio.ended) ?? pool[0];
+    const slot = pool.find((audio) => audio.paused || audio.ended);
     if (!slot) return;
 
     slot.pause();
