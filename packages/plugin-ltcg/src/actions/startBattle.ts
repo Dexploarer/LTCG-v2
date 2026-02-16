@@ -1,8 +1,8 @@
 /**
  * Action: START_LTCG_BATTLE
  *
- * Starts a story mode battle. Auto-selects a starter deck if the agent
- * doesn't have one, picks the first available chapter, and begins the match.
+ * Starts a story mode battle, picks the first available chapter, and begins
+ * the match using the currently selected active deck.
  */
 
 import { getClient } from "../client.js";
@@ -43,22 +43,6 @@ export const startBattleAction: Action = {
 
     try {
       const me = await client.getMe();
-
-      // Ensure agent has a deck — auto-select if not
-      try {
-        const decks = await client.getStarterDecks();
-        if (decks.length > 0) {
-          const deck = decks[Math.floor(Math.random() * decks.length)];
-          await client.selectDeck(deck.deckCode);
-        }
-      } catch (err) {
-        // Deck selection failed — agent likely already has one.
-        // Other errors (network, auth) will surface when startBattle runs.
-        console.warn(
-          "[LTCG] Deck selection skipped:",
-          err instanceof Error ? err.message : String(err),
-        );
-      }
 
       // Get first available chapter
       const chapters = await client.getChapters();

@@ -41,12 +41,13 @@ export const gameStateProvider: Provider = {
     }
 
     try {
-      const view = await client.getView(matchId);
+      const view = await client.getView(matchId, "host");
+      const phase = resolvePhase(view);
       return {
         text: formatView(view, matchId),
         values: {
           ltcgMatchId: matchId,
-          ltcgPhase: view.phase,
+          ltcgPhase: phase,
           ltcgIsMyTurn: String(view.currentTurnPlayer === "host"),
         },
       };
@@ -62,6 +63,7 @@ export const gameStateProvider: Provider = {
 // ── Formatting ───────────────────────────────────────────────────
 
 function formatView(v: PlayerView, matchId: string): string {
+  const phase = resolvePhase(v);
   if (v.gameOver) {
     const myLP = v.players.host.lifePoints;
     const oppLP = v.players.away.lifePoints;
@@ -73,7 +75,7 @@ function formatView(v: PlayerView, matchId: string): string {
   const isMyTurn = v.currentTurnPlayer === "host";
   const lines: string[] = [
     `=== LTCG MATCH ${matchId} ===`,
-    `Phase: ${v.phase} | ${isMyTurn ? "YOUR TURN" : "OPPONENT'S TURN"}`,
+    `Phase: ${phase} | ${isMyTurn ? "YOUR TURN" : "OPPONENT'S TURN"}`,
     `LP: You ${v.players.host.lifePoints} | Opponent ${v.players.away.lifePoints}`,
     "",
   ];
@@ -135,4 +137,10 @@ function formatHandCard(c: CardInHand): string {
     return `${c.name} (ATK:${c.attack ?? "?"} DEF:${c.defense ?? "?"} Lv:${c.level ?? "?"} id:${c.instanceId})`;
   }
   return `${c.name} [${c.cardType}] (id:${c.instanceId})`;
+}
+
+type PhaseView = { currentPhase?: string; phase?: string };
+
+function resolvePhase(view: PhaseView): string {
+  return view.currentPhase ?? view.phase ?? "draw";
 }

@@ -50,9 +50,10 @@ export const statusRoute: Route = {
       // If there's an active match, include its state
       if (matchId) {
         try {
-          const view = await client.getView(matchId);
+          const view = await client.getView(matchId, "host");
+          const phase = resolvePhase(view);
           status.match = {
-            phase: view.phase,
+            phase,
             gameOver: view.gameOver,
             isMyTurn: view.currentTurnPlayer === "host",
             myLP: view.players.host.lifePoints,
@@ -90,3 +91,7 @@ export const statusRoute: Route = {
     }
   },
 };
+
+function resolvePhase(view: { currentPhase?: string; phase?: string }): string {
+  return view.currentPhase ?? view.phase ?? "draw";
+}

@@ -24,7 +24,7 @@ import {
 type BoardCardLike = BoardCard & { cardId?: string; instanceId?: string };
 
 interface TurnSnapshot {
-  phase: PlayerView["phase"];
+  phase: string;
   turnPlayer: "host" | "away";
   myLife: number;
   oppLife: number;
@@ -35,6 +35,12 @@ interface TurnSnapshot {
   opponentBoardStateSignature: string;
   chainLength: number;
   gameOver: boolean;
+}
+
+type PhaseView = { currentPhase?: string; phase?: string };
+
+function resolvePhase(view: PhaseView): string {
+  return view.currentPhase ?? view.phase ?? "draw";
 }
 
 /**
@@ -48,6 +54,8 @@ export async function playOneTurn(
   const client = getClient();
   const currentView = { value: view };
   const actions: string[] = [];
+
+  const getPhase = (): string => resolvePhase(currentView.value);
 
   const refreshView = async (): Promise<PlayerView> => {
     const next = await client.getView(matchId, seat);
@@ -110,7 +118,7 @@ export async function playOneTurn(
   };
 
   const advancePhase = async (): Promise<boolean> => {
-    const from = currentView.value.phase;
+    const from = getPhase();
     const ok = await submitAction(
       { type: "ADVANCE_PHASE" },
       `Advanced phase from ${from}`,
@@ -234,7 +242,7 @@ export async function playOneTurn(
   const combat = async () => {
     while (
       isMyTurnAndAlive() &&
-      currentView.value.phase === "combat"
+      getPhase() === "combat"
     ) {
       const attacker = getBoard(currentView.value)
         .filter((card) => !card.faceDown)
@@ -281,7 +289,7 @@ export async function playOneTurn(
       const afterAttack = await refreshView();
       if (
         afterAttack.currentTurnPlayer !== seat ||
-        afterAttack.phase !== "combat"
+        resolvePhase(afterAttack) !== "combat"
       ) {
         break;
       }
@@ -298,7 +306,7 @@ export async function playOneTurn(
   // Ensure we're in a playable phase.
   while (
     isMyTurnAndAlive() &&
-    !["main", "main2", "combat", "end"].includes(currentView.value.phase)
+    !["main", "main2", "combat", "end"].includes(getPhase())
   ) {
     const moved = await advancePhase();
     if (!moved) break;
@@ -306,7 +314,7 @@ export async function playOneTurn(
   }
 
   // ── Main phase: summon + spells/traps ─────────────────────────
-  if (currentView.value.phase === "main" || currentView.value.phase === "main2") {
+  if (getPhase() === "main" || getPhase() === "main2") {
     const handIds = getHandIds(currentView.value);
 
     await summonFromHand(handIds);
@@ -329,8 +337,8 @@ export async function playOneTurn(
   // ── Enter combat phase ───────────────────────────────────────
     while (
     isMyTurnAndAlive() &&
-    currentView.value.phase !== "combat" &&
-    currentView.value.phase !== "end"
+    getPhase() !== "combat" &&
+    getPhase() !== "end"
   ) {
     const moved = await advancePhase();
     if (!moved) break;
@@ -341,7 +349,7 @@ export async function playOneTurn(
   await refreshView();
 
   // ── Combat phase: attack with all legal monsters ─────────────
-  if (currentView.value.phase === "combat") {
+  if (getPhase() === "combat") {
     await combat();
   }
 
@@ -352,23 +360,25 @@ export async function playOneTurn(
 
   // ── Resolve phase end / end-turn window.
   if (isMyTurnAndAlive()) {
-    if (currentView.value.phase === "combat") {
+    if (getPhase() === "combat") {
       await clearChain();
       await advancePhase();
       await clearChain();
+      await refreshView();
     }
 
     await refreshView();
-      if (isMyTurnAndAlive()) {
-        if (currentView.value.phase !== "end") {
-          await advancePhase();
-        }
-        await clearChain();
-        await refreshView();
-        if (isMyTurnAndAlive()) {
-          await endTurn();
-        }
-      }
+    while (isMyTurnAndAlive() && getPhase() !== "end") {
+      const moved = await advancePhase();
+      if (!moved) break;
+      await clearChain();
+      await refreshView();
+    }
+
+    if (isMyTurnAndAlive()) {
+      await clearChain();
+      await endTurn();
+    }
   }
 
   return actions;
@@ -443,7 +453,7 @@ function snapshot(view: PlayerView, seat: MatchActive["seat"]): TurnSnapshot {
   ) as Array<BoardCardLike>;
 
   return {
-    phase: view.phase,
+    phase: resolvePhase(view),
     turnPlayer: view.currentTurnPlayer,
     myLife: lifePoints.myLP,
     oppLife: lifePoints.oppLP,

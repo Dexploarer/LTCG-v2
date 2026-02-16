@@ -52,7 +52,8 @@ export const getStatusAction: Action = {
     }
 
     try {
-      const view = await client.getView(matchId);
+      const view = await client.getView(matchId, "host");
+      const phase = resolvePhase(view);
 
       if (view.gameOver) {
         client.setMatch(null);
@@ -79,7 +80,7 @@ export const getStatusAction: Action = {
 
       const text = [
         `Match: ${matchId}`,
-        `Phase: ${view.phase} — ${isMyTurn ? "Your turn" : "Opponent's turn"}`,
+        `Phase: ${phase} — ${isMyTurn ? "Your turn" : "Opponent's turn"}`,
         `LP: You ${view.players.host.lifePoints} / Opponent ${view.players.away.lifePoints}`,
         `Hand: ${view.hand?.length ?? 0} cards | Field: ${myMonsters.length} vs ${oppMonsters.length} monsters`,
       ].join("\n");
@@ -87,7 +88,7 @@ export const getStatusAction: Action = {
       if (callback) await callback({ text, action: "CHECK_LTCG_STATUS" });
       return {
         success: true,
-        data: { matchId, phase: view.phase, isMyTurn },
+        data: { matchId, phase, isMyTurn },
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -125,3 +126,10 @@ export const getStatusAction: Action = {
     ],
   ],
 };
+
+function resolvePhase(view: {
+  currentPhase?: string | undefined;
+  phase?: string | undefined;
+}): string {
+  return view.currentPhase ?? view.phase ?? "draw";
+}

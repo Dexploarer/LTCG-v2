@@ -64,18 +64,7 @@ export const playStoryAction: Action = {
     const log: string[] = [];
 
     try {
-      // ── 1. Ensure agent has a deck ───────────────────────────
-      try {
-        const decks = await client.getStarterDecks();
-        if (decks.length > 0) {
-          const deck = decks[Math.floor(Math.random() * decks.length)];
-          await client.selectDeck(deck.deckCode);
-        }
-      } catch {
-        // Already has deck
-      }
-
-      // ── 2. Find next stage ───────────────────────────────────
+      // ── 1. Find next stage ───────────────────────────────────
       const progress = await client.getStoryProgress();
       const chapters = progress.chapters;
 
@@ -103,7 +92,7 @@ export const playStoryAction: Action = {
         }
       }
 
-      // ── 3. Get stage narrative ───────────────────────────────
+      // ── 2. Get stage narrative ───────────────────────────────
       let stageData: StageData | null = null;
       try {
         stageData = await client.getStage(targetChapterId, targetStageNumber);
@@ -132,7 +121,7 @@ export const playStoryAction: Action = {
         });
       }
 
-      // ── 4. Start battle ──────────────────────────────────────
+      // ── 3. Start battle ──────────────────────────────────────
       const result = await client.startBattle(
         targetChapterId,
         targetStageNumber,
@@ -141,11 +130,11 @@ export const playStoryAction: Action = {
       client.setMatch(matchId);
       log.push(`Match started: ${matchId}`);
 
-      // ── 5. Game loop — play until game over ──────────────────
+      // ── 4. Game loop — play until game over ──────────────────
       let turnCount = 0;
 
       for (let i = 0; i < MAX_TURNS; i++) {
-        const view = await client.getView(matchId);
+        const view = await client.getView(matchId, "host");
 
         if (view.gameOver) break;
 
@@ -159,8 +148,8 @@ export const playStoryAction: Action = {
         for (const a of turnActions) log.push(a);
       }
 
-      // ── 6. Check outcome ─────────────────────────────────────
-      const finalView = await client.getView(matchId);
+      // ── 5. Check outcome ─────────────────────────────────────
+      const finalView = await client.getView(matchId, "host");
       const myLP = finalView.players.host.lifePoints;
       const oppLP = finalView.players.away.lifePoints;
       const won = myLP > oppLP;
@@ -169,7 +158,7 @@ export const playStoryAction: Action = {
         `Match ended after ${turnCount} turns — ${won ? "VICTORY" : "DEFEAT"} (LP: ${myLP} vs ${oppLP})`,
       );
 
-      // ── 7. Complete stage ────────────────────────────────────
+      // ── 6. Complete stage ────────────────────────────────────
       try {
         const completion = await client.completeStage(matchId);
         log.push(`Stage complete! ${completion.starsEarned} stars earned.`);
