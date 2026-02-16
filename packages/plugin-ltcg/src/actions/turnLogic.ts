@@ -13,13 +13,14 @@ import type {
   BoardCard,
   CardInHand,
   GameCommand,
-  MatchActive,
   PlayerView,
 } from "../types.js";
 import {
   MAX_CHAIN_RESPONSE_ATTEMPTS,
   MAX_MONSTER_ZONE_SIZE,
-} from "../../../shared/turnConstants";
+} from "../shared/turnConstants.js";
+
+type Seat = "host" | "away";
 
 type BoardCardLike = BoardCard & { cardId?: string; instanceId?: string };
 
@@ -49,7 +50,7 @@ function resolvePhase(view: PhaseView): string {
 export async function playOneTurn(
   matchId: string,
   view: PlayerView,
-  seat: MatchActive["seat"] = "host",
+  seat: Seat = "host",
 ): Promise<string[]> {
   const client = getClient();
   const currentView = { value: view };
@@ -387,7 +388,7 @@ export async function playOneTurn(
 /** Format a game-over summary from the final view */
 export function gameOverSummary(
   view: PlayerView,
-  seat: MatchActive["seat"] = "host",
+  seat: Seat = "host",
 ): string {
   const { myLP, oppLP } = resolveLifePoints(view, seat);
   if (myLP > oppLP) return `VICTORY! (You: ${myLP} LP — Opponent: ${oppLP} LP)`;
@@ -404,7 +405,7 @@ function resolveLifePoints(
       away: { lifePoints: number };
     };
   },
-  seat: MatchActive["seat"],
+  seat: Seat,
 ) {
   if (view.lifePoints !== undefined || view.opponentLifePoints !== undefined) {
     return seat === "host"
@@ -441,7 +442,7 @@ function boardStateSignature(cards: BoardCardLike[]): string {
     .join(";");
 }
 
-function snapshot(view: PlayerView, seat: MatchActive["seat"]): TurnSnapshot {
+function snapshot(view: PlayerView, seat: Seat): TurnSnapshot {
   const lifePoints = resolveLifePoints(view, seat);
   const board = (view.board?.length
     ? view.board

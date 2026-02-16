@@ -32,6 +32,7 @@ export const CRUMPLED_PAPER = blob("crumpled-paper.png");
 
 // ── Decorative ────────────────────────────────────────────
 export const INK_FRAME = blob("ink-frame.png");
+export const MUSIC_BUTTON = blob("music-button.png");
 export const TAPE = blob("tape.png");
 export const DECO_PILLS = blob("deco-pills.png");
 export const DECO_SHIELD = blob("deco-shield.png");
