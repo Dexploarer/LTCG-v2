@@ -26,6 +26,12 @@ function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+function normalizeStoredVolume(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value ?? NaN)) return fallback;
+  const normalized = value > 1 ? value / 100 : value;
+  return clamp01(normalized);
+}
+
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -59,8 +65,8 @@ function parseStoredSettings(raw: string | null): AudioSettings {
     if (!raw) return DEFAULT_AUDIO_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<AudioSettings>;
     return {
-      musicVolume: clamp01(parsed.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume),
-      sfxVolume: clamp01(parsed.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.sfxVolume),
+      musicVolume: normalizeStoredVolume(parsed.musicVolume, DEFAULT_AUDIO_SETTINGS.musicVolume),
+      sfxVolume: normalizeStoredVolume(parsed.sfxVolume, DEFAULT_AUDIO_SETTINGS.sfxVolume),
       musicMuted: Boolean(parsed.musicMuted),
       sfxMuted: Boolean(parsed.sfxMuted),
     };
@@ -116,9 +122,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const unlockedRef = useRef(false);
   const audioUnlockedRef = useRef(false);
   const consecutiveTrackErrorRef = useRef(0);
+  const currentTrackRef = useRef<string | null>(null);
+  const lastErroredTrackRef = useRef<string | null>(null);
 
   settingsRef.current = settings;
   soundtrackRef.current = soundtrack;
+
+  const markTrackError = useCallback((track: string | null) => {
+    const nextKey = track ? toAbsoluteTrackUrl(track) : "unknown";
+    if (lastErroredTrackRef.current === nextKey) return;
+    lastErroredTrackRef.current = nextKey;
+    consecutiveTrackErrorRef.current += 1;
+  }, []);
+
+  const clearTrackErrorState = useCallback(() => {
+    consecutiveTrackErrorRef.current = 0;
+    lastErroredTrackRef.current = null;
+  }, []);
 
   useEffect(() => {
     const audio = new Audio();
@@ -174,18 +194,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     try {
       await audio.play();
       setAutoplayBlocked(false);
-      consecutiveTrackErrorRef.current = 0;
+      clearTrackErrorState();
     } catch (error) {
+      markTrackError(currentTrackRef.current);
       if (!isAutoplayBlockedError(error)) {
-        consecutiveTrackErrorRef.current += 1;
+        setAutoplayBlocked(false);
       }
       if (isAutoplayBlockedError(error)) {
         setAutoplayBlocked(true);
-      } else {
-        setAutoplayBlocked(false);
       }
     }
-  }, []);
+  }, [clearTrackErrorState, markTrackError]);
 
   const requestAudioUnlock = useCallback(() => {
     if (!audioUnlockedRef.current) {
@@ -222,7 +241,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
       const next = queue[index]!;
       trackIndexRef.current = index;
+      currentTrackRef.current = next;
       consecutiveTrackErrorRef.current = 0;
+      lastErroredTrackRef.current = null;
       setCurrentTrack(next);
 
       const nextUrl = toAbsoluteTrackUrl(next);
@@ -274,7 +295,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     };
     const onError = () => {
       setAutoplayBlocked(false);
-      consecutiveTrackErrorRef.current += 1;
+      markTrackError(currentTrackRef.current);
       if (consecutiveTrackErrorRef.current >= MAX_CONSECUTIVE_TRACK_ERRORS) return;
       if (currentQueueRef.current.length <= 1) return;
       advanceTrack();
@@ -286,7 +307,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [advanceTrack]);
+  }, [advanceTrack, markTrackError]);
 
   useEffect(() => {
     if (!audioUnlocked) {

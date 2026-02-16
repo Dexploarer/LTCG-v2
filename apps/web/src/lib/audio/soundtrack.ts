@@ -232,7 +232,8 @@ function readCachedManifest(source: string): CachedManifestEntry | null {
     }
 
     return data;
-  } catch {
+  } catch (error) {
+    console.warn("Failed to parse cached soundtrack manifest", error);
     return null;
   }
 }
@@ -286,9 +287,12 @@ function normalizeManifestForPlayback(manifest: SoundtrackManifest): SoundtrackM
 export async function loadSoundtrackManifest(
   source = "/api/soundtrack",
 ): Promise<SoundtrackManifest> {
-  const loadFromUrl = async (requestSource: string): Promise<SoundtrackManifest> => {
+  const loadFromUrl = async (
+    requestSource: string,
+    cacheMode: RequestCache = "force-cache",
+  ): Promise<SoundtrackManifest> => {
     const response = await fetch(requestSource, {
-      cache: "force-cache",
+      cache: cacheMode,
       headers: { Accept: "application/json, text/plain;q=0.9" },
     });
 
@@ -317,7 +321,7 @@ export async function loadSoundtrackManifest(
   }
 
   if (cachedManifest && cached) {
-    void loadFromUrl(source)
+    void loadFromUrl(source, "no-cache")
       .then((next) => {
         if (next.source === source) {
           writeCachedManifest(source, next, true);
@@ -333,6 +337,7 @@ export async function loadSoundtrackManifest(
   try {
     return await loadFromUrl(source);
   } catch (error) {
+    console.error("Failed to load soundtrack manifest", { source, error });
     if (cached) return normalizeManifestForPlayback(cached.manifest);
 
     if (source !== "/soundtrack.in") {
