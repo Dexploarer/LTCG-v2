@@ -15,6 +15,7 @@ export default defineConfig({
       org: "lunchtable",
       project: "lunchtable",
       authToken: process.env.SENTRY_AUTH_TOKEN,
+      silent: true, // Suppress verbose logs
     }),
   ],
   resolve: {
