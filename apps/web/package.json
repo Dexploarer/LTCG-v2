@@ -30,6 +30,8 @@
     "build:vercel": "vite build",
     "preview": "vite preview --port 3334",
     "type-check": "tsc --noEmit",
+    "avatars:standardize": "bun run scripts/standardize-signup-avatars.ts",
+    "avatars:upload": "bun run scripts/upload-signup-avatars-to-blob.ts",
     "upload:soundtrack": "bun run scripts/migrate-soundtrack-to-blob.ts"
   },
   "dependencies": {

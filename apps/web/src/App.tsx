@@ -25,6 +25,8 @@ const Leaderboard = lazy(() => import("@/pages/Leaderboard").then(m => ({ defaul
 const Watch = lazy(() => import("@/pages/Watch").then(m => ({ default: m.Watch })));
 const DeckBuilder = lazy(() => import("@/pages/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cliques })));
+const Profile = lazy(() => import("@/pages/Profile").then(m => ({ default: m.Profile })));
+const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.Settings })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -131,6 +133,8 @@ export function App() {
         <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
         <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
         <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
+        <Route path="/profile" element={<Guarded><Profile /></Guarded>} />
+        <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
         <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
       </SentryRoutes>
       <AudioControlsDock />

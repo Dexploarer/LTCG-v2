@@ -356,6 +356,409 @@ export declare const components: {
       >;
     };
   };
+  lunchtable_tcg_guilds: {
+    chat: {
+      deleteMessage: FunctionReference<
+        "mutation",
+        "internal",
+        { deletedBy: string; messageId: string },
+        null
+      >;
+      getMessages: FunctionReference<
+        "query",
+        "internal",
+        { before?: number; guildId: string; limit?: number },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          guildId: string;
+          isSystem: boolean;
+          message: string;
+          userId: string;
+          username: string;
+        }>
+      >;
+      getRecentMessages: FunctionReference<
+        "query",
+        "internal",
+        { count?: number; guildId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          guildId: string;
+          isSystem: boolean;
+          message: string;
+          userId: string;
+          username: string;
+        }>
+      >;
+      sendMessage: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          guildId: string;
+          isSystem?: boolean;
+          message: string;
+          userId: string;
+          username: string;
+        },
+        string
+      >;
+    };
+    discovery: {
+      approveJoinRequest: FunctionReference<
+        "mutation",
+        "internal",
+        { approvedBy: string; requestId: string },
+        null
+      >;
+      getJoinRequests: FunctionReference<
+        "query",
+        "internal",
+        { guildId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          guildId: string;
+          message?: string;
+          respondedAt?: number;
+          respondedBy?: string;
+          status: "pending" | "approved" | "rejected" | "cancelled";
+          userId: string;
+        }>
+      >;
+      getPlayerRequests: FunctionReference<
+        "query",
+        "internal",
+        { userId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          guildId: string;
+          message?: string;
+          respondedAt?: number;
+          respondedBy?: string;
+          status: "pending" | "approved" | "rejected" | "cancelled";
+          userId: string;
+        }>
+      >;
+      rejectJoinRequest: FunctionReference<
+        "mutation",
+        "internal",
+        { rejectedBy: string; requestId: string },
+        null
+      >;
+      searchGuilds: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; searchTerm: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          bannerImageId?: string;
+          createdAt: number;
+          description?: string;
+          memberCount: number;
+          name: string;
+          ownerId: string;
+          profileImageId?: string;
+          updatedAt: number;
+          visibility: "public" | "private";
+        }>
+      >;
+      submitJoinRequest: FunctionReference<
+        "mutation",
+        "internal",
+        { guildId: string; message?: string; userId: string },
+        string
+      >;
+    };
+    guilds: {
+      create: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          bannerImageId?: string;
+          description?: string;
+          name: string;
+          ownerId: string;
+          profileImageId?: string;
+          visibility?: "public" | "private";
+        },
+        string
+      >;
+      disband: FunctionReference<
+        "mutation",
+        "internal",
+        { id: string; ownerId: string },
+        null
+      >;
+      getById: FunctionReference<
+        "query",
+        "internal",
+        { id: string },
+        {
+          _creationTime: number;
+          _id: string;
+          bannerImageId?: string;
+          createdAt: number;
+          description?: string;
+          memberCount: number;
+          name: string;
+          ownerId: string;
+          profileImageId?: string;
+          updatedAt: number;
+          visibility: "public" | "private";
+        } | null
+      >;
+      getByOwner: FunctionReference<
+        "query",
+        "internal",
+        { ownerId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          bannerImageId?: string;
+          createdAt: number;
+          description?: string;
+          memberCount: number;
+          name: string;
+          ownerId: string;
+          profileImageId?: string;
+          updatedAt: number;
+          visibility: "public" | "private";
+        }>
+      >;
+      getPublicGuilds: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          bannerImageId?: string;
+          createdAt: number;
+          description?: string;
+          memberCount: number;
+          name: string;
+          ownerId: string;
+          profileImageId?: string;
+          updatedAt: number;
+          visibility: "public" | "private";
+        }>
+      >;
+      update: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          bannerImageId?: string;
+          description?: string;
+          id: string;
+          name?: string;
+          ownerId: string;
+          profileImageId?: string;
+          visibility?: "public" | "private";
+        },
+        null
+      >;
+    };
+    invites: {
+      acceptInvite: FunctionReference<
+        "mutation",
+        "internal",
+        { inviteId: string; userId: string },
+        string
+      >;
+      cancelInvite: FunctionReference<
+        "mutation",
+        "internal",
+        { cancelledBy: string; inviteId: string },
+        null
+      >;
+      createInvite: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          expiresIn?: number;
+          guildId: string;
+          invitedBy: string;
+          invitedUserId: string;
+        },
+        string
+      >;
+      createInviteLink: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          createdBy: string;
+          expiresIn?: number;
+          guildId: string;
+          maxUses?: number;
+        },
+        string
+      >;
+      declineInvite: FunctionReference<
+        "mutation",
+        "internal",
+        { inviteId: string; userId: string },
+        null
+      >;
+      deleteInviteLink: FunctionReference<
+        "mutation",
+        "internal",
+        { deletedBy: string; linkId: string },
+        null
+      >;
+      getGuildInviteLinks: FunctionReference<
+        "query",
+        "internal",
+        { activeOnly?: boolean; guildId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          code: string;
+          createdAt: number;
+          createdBy: string;
+          expiresAt: number;
+          guildId: string;
+          isActive: boolean;
+          maxUses?: number;
+          uses: number;
+        }>
+      >;
+      getGuildInvites: FunctionReference<
+        "query",
+        "internal",
+        {
+          guildId: string;
+          status?: "pending" | "accepted" | "declined" | "expired";
+        },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          expiresAt: number;
+          guildId: string;
+          invitedBy: string;
+          invitedUserId: string;
+          respondedAt?: number;
+          status: "pending" | "accepted" | "declined" | "expired";
+        }>
+      >;
+      getPendingInvites: FunctionReference<
+        "query",
+        "internal",
+        { userId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          createdAt: number;
+          expiresAt: number;
+          guildId: string;
+          invitedBy: string;
+          invitedUserId: string;
+          respondedAt?: number;
+          status: "pending" | "accepted" | "declined" | "expired";
+        }>
+      >;
+      useInviteLink: FunctionReference<
+        "mutation",
+        "internal",
+        { code: string; userId: string },
+        string
+      >;
+    };
+    members: {
+      getMemberCount: FunctionReference<
+        "query",
+        "internal",
+        { guildId: string },
+        number
+      >;
+      getMembers: FunctionReference<
+        "query",
+        "internal",
+        { guildId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          guildId: string;
+          joinedAt: number;
+          lastActiveAt?: number;
+          role: "owner" | "member";
+          userId: string;
+        }>
+      >;
+      getPlayerGuild: FunctionReference<
+        "query",
+        "internal",
+        { userId: string },
+        {
+          guild: {
+            _creationTime: number;
+            _id: string;
+            bannerImageId?: string;
+            createdAt: number;
+            description?: string;
+            memberCount: number;
+            name: string;
+            ownerId: string;
+            profileImageId?: string;
+            updatedAt: number;
+            visibility: "public" | "private";
+          };
+          membership: {
+            _creationTime: number;
+            _id: string;
+            guildId: string;
+            joinedAt: number;
+            lastActiveAt?: number;
+            role: "owner" | "member";
+            userId: string;
+          };
+        } | null
+      >;
+      join: FunctionReference<
+        "mutation",
+        "internal",
+        { guildId: string; userId: string },
+        string
+      >;
+      kick: FunctionReference<
+        "mutation",
+        "internal",
+        { guildId: string; kickedBy: string; targetUserId: string },
+        null
+      >;
+      leave: FunctionReference<
+        "mutation",
+        "internal",
+        { guildId: string; userId: string },
+        null
+      >;
+      transferOwnership: FunctionReference<
+        "mutation",
+        "internal",
+        { currentOwnerId: string; guildId: string; newOwnerId: string },
+        null
+      >;
+      updateRole: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          guildId: string;
+          newRole: "owner" | "member";
+          targetUserId: string;
+          updatedBy: string;
+        },
+        null
+      >;
+    };
+  };
   lunchtable_tcg_match: {
     mutations: {
       createMatch: FunctionReference<

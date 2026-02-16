@@ -8,6 +8,7 @@ export default defineSchema(
       username: v.string(),
       email: v.optional(v.string()),
       name: v.optional(v.string()),
+      avatarPath: v.optional(v.string()),
       // String ID referencing a userDecks doc in the cards component.
       // Stored as string because host schema can't reference component table types.
       activeDeckId: v.optional(v.string()),

@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { toast } from "sonner";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { StreamWatchButton } from "../components/StreamWatchButton";
 import { StreamModal } from "../components/StreamModal";
 import { YearbookCard } from "../components/YearbookCard";
+import posthog from "@/lib/posthog";
 import {
   CRUMPLED_PAPER, CIGGARETTE_TRAY, TAPE,
   MILUNCHLADY_GAMER, MILUNCHLADY_CYBER, MILUNCHLADY_PREP,
@@ -30,20 +33,304 @@ const MOCK_DATA: LeaderboardEntry[] = [
   { rank: 9, name: "HypeBeast_Bot", type: "agent", score: 7500, breakdowns: 5, avatar: MILUNCHLADY_HYPEBEAST },
 ];
 
+const SHARE_LABEL_DEFAULT = "Share Card";
+const SHARE_FEEDBACK_MS = 2000;
+const BABYLON_POST_LABEL_DEFAULT = "Post to Babylon";
+const BABYLON_POST_FEEDBACK_MS = 2500;
+const BABYLON_TOKEN_STORAGE_KEY = "ltcg.babylon.token";
+
+function buildYearbookCardUrl(entry: LeaderboardEntry): string {
+  return `${window.location.origin}/leaderboard?player=${encodeURIComponent(entry.name)}`;
+}
+
+function buildYearbookCardImageUrl(entry: LeaderboardEntry): string {
+  const params = new URLSearchParams({
+    name: entry.name,
+    rank: String(entry.rank),
+    score: String(entry.score),
+    breakdowns: String(entry.breakdowns),
+    type: entry.type,
+  });
+  return `${window.location.origin}/api/yearbook-card?${params.toString()}`;
+}
+
+function buildBabylonPostContent(entry: LeaderboardEntry): string {
+  const cardUrl = buildYearbookCardUrl(entry);
+  const imageUrl = buildYearbookCardImageUrl(entry);
+  return [
+    `LunchTable Yearbook: ${entry.name} is #${entry.rank} with ${entry.score.toLocaleString()} points and ${entry.breakdowns} breakdowns.`,
+    `Card: ${cardUrl}`,
+    `Image: ${imageUrl}`,
+    "Can you beat this run? #LunchTableTCG #Babylon",
+  ].join("\n");
+}
+
 export function Leaderboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"global" | "human" | "agent">("global");
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<LeaderboardEntry | null>(null);
+  const [shareLabel, setShareLabel] = useState(SHARE_LABEL_DEFAULT);
+  const [babylonPostLabel, setBabylonPostLabel] = useState(BABYLON_POST_LABEL_DEFAULT);
+  const shareResetTimerRef = useRef<number | null>(null);
+  const babylonResetTimerRef = useRef<number | null>(null);
+  const initialSharedPlayerRef = useRef(searchParams.get("player"));
 
   const filteredData = MOCK_DATA.filter((entry) => {
     if (activeTab === "global") return true;
     return entry.type === activeTab;
   }).sort((a, b) => a.rank - b.rank); // Ensure they stay sorted by rank even if filtered
 
-  // Re-rank for display if filtering? Typically global rank is preserved, or we re-rank.
-  // Let's preserve global rank for context, or re-rank within category. 
-  // User asked for "filled out for agents, human, global", implying lists.
-  // I will just show the filtered list.
+  const setPlayerInQuery = useCallback(
+    (playerName: string | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (playerName) {
+          next.set("player", playerName);
+        } else {
+          next.delete("player");
+        }
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const clearShareFeedbackLater = useCallback(() => {
+    if (shareResetTimerRef.current) {
+      window.clearTimeout(shareResetTimerRef.current);
+    }
+    shareResetTimerRef.current = window.setTimeout(() => {
+      setShareLabel(SHARE_LABEL_DEFAULT);
+    }, SHARE_FEEDBACK_MS);
+  }, []);
+
+  const clearBabylonFeedbackLater = useCallback(() => {
+    if (babylonResetTimerRef.current) {
+      window.clearTimeout(babylonResetTimerRef.current);
+    }
+    babylonResetTimerRef.current = window.setTimeout(() => {
+      setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
+    }, BABYLON_POST_FEEDBACK_MS);
+  }, []);
+
+  const openYearbookCard = useCallback(
+    (entry: LeaderboardEntry) => {
+      setSelectedPlayer(entry);
+      setPlayerInQuery(entry.name);
+      setShareLabel(SHARE_LABEL_DEFAULT);
+      setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
+    },
+    [setPlayerInQuery],
+  );
+
+  const closeYearbookCard = useCallback(() => {
+    setSelectedPlayer(null);
+    setPlayerInQuery(null);
+    setShareLabel(SHARE_LABEL_DEFAULT);
+    setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
+  }, [setPlayerInQuery]);
+
+  const handleShareYearbookCard = useCallback(async () => {
+    if (!selectedPlayer) return;
+
+    const shareUrl = buildYearbookCardUrl(selectedPlayer);
+    const shareText = `I made the LunchTable Yearbook leaderboard as ${selectedPlayer.name}. Can you beat this score?`;
+    let method: "native" | "clipboard" | null = null;
+
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({
+          title: `LunchTable Yearbook: ${selectedPlayer.name}`,
+          text: shareText,
+          url: shareUrl,
+        });
+        method = "native";
+        setShareLabel("Shared");
+        toast.success("Card shared");
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        method = "clipboard";
+        setShareLabel("Link Copied");
+        toast.success("Share link copied");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        method = "clipboard";
+        setShareLabel("Link Copied");
+        toast.success("Share link copied");
+      } catch {
+        toast.error("Unable to share right now");
+        return;
+      }
+    }
+
+    if (method) {
+      posthog.capture("leaderboard_card_share_clicked", {
+        player_name: selectedPlayer.name,
+        player_rank: selectedPlayer.rank,
+        source_tab: activeTab,
+        method,
+      });
+      clearShareFeedbackLater();
+    }
+  }, [activeTab, clearShareFeedbackLater, selectedPlayer]);
+
+  const handlePostToBabylon = useCallback(async () => {
+    if (!selectedPlayer) return;
+
+    const content = buildBabylonPostContent(selectedPlayer);
+    const cardUrl = buildYearbookCardUrl(selectedPlayer);
+    const imageUrl = buildYearbookCardImageUrl(selectedPlayer);
+
+    let token = "";
+    try {
+      token = sessionStorage.getItem(BABYLON_TOKEN_STORAGE_KEY)?.trim() ?? "";
+    } catch {
+      token = "";
+    }
+
+    if (!token) {
+      const promptValue = window.prompt(
+        "Paste your Babylon bearer token to post directly. If you cancel, we'll copy a Babylon-ready post instead.",
+      );
+      if (promptValue && promptValue.trim()) {
+        token = promptValue.trim();
+        try {
+          sessionStorage.setItem(BABYLON_TOKEN_STORAGE_KEY, token);
+        } catch {}
+      }
+    }
+
+    if (!token) {
+      try {
+        await navigator.clipboard.writeText(content);
+        setBabylonPostLabel("Post Text Copied");
+        toast.message("Babylon post copied. Paste it in Babylon timeline.");
+        window.open("https://babylon.market", "_blank", "noopener,noreferrer");
+        posthog.capture("leaderboard_babylon_post", {
+          status: "copied_no_token",
+          player_name: selectedPlayer.name,
+          player_rank: selectedPlayer.rank,
+          source_tab: activeTab,
+          card_url: cardUrl,
+          image_url: imageUrl,
+        });
+        clearBabylonFeedbackLater();
+      } catch {
+        toast.error("Couldn't copy Babylon post text");
+      }
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/babylon-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          content,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.success) {
+        const message =
+          payload?.error?.message ||
+          payload?.error ||
+          `Babylon API request failed (${response.status})`;
+        throw new Error(message);
+      }
+
+      setBabylonPostLabel("Posted");
+      toast.success("Posted to Babylon timeline");
+      posthog.capture("leaderboard_babylon_post", {
+        status: "posted",
+        player_name: selectedPlayer.name,
+        player_rank: selectedPlayer.rank,
+        source_tab: activeTab,
+        card_url: cardUrl,
+        image_url: imageUrl,
+      });
+      clearBabylonFeedbackLater();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to post to Babylon";
+      if (/401|403|token|auth/i.test(message)) {
+        try {
+          sessionStorage.removeItem(BABYLON_TOKEN_STORAGE_KEY);
+        } catch {}
+      }
+
+      try {
+        await navigator.clipboard.writeText(content);
+        setBabylonPostLabel("Post Text Copied");
+        toast.error("Direct post failed. Copied Babylon post text instead.");
+      } catch {
+        toast.error("Direct post failed and clipboard copy also failed.");
+      }
+
+      posthog.capture("leaderboard_babylon_post", {
+        status: "failed",
+        reason: message,
+        player_name: selectedPlayer.name,
+        player_rank: selectedPlayer.rank,
+        source_tab: activeTab,
+      });
+      clearBabylonFeedbackLater();
+    }
+  }, [activeTab, clearBabylonFeedbackLater, selectedPlayer]);
+
+  useEffect(() => {
+    const sharedPlayer = searchParams.get("player");
+    if (!sharedPlayer) {
+      setSelectedPlayer(null);
+      return;
+    }
+
+    const match = MOCK_DATA.find(
+      (entry) => entry.name.toLowerCase() === sharedPlayer.toLowerCase(),
+    );
+
+    if (match) {
+      setSelectedPlayer(match);
+      return;
+    }
+
+    setSelectedPlayer(null);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const firstSharedPlayer = initialSharedPlayerRef.current;
+    if (!firstSharedPlayer) return;
+
+    const match = MOCK_DATA.find(
+      (entry) => entry.name.toLowerCase() === firstSharedPlayer.toLowerCase(),
+    );
+
+    if (match) {
+      posthog.capture("leaderboard_card_share_opened", {
+        player_name: match.name,
+        player_rank: match.rank,
+      });
+    }
+
+    initialSharedPlayerRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (shareResetTimerRef.current) {
+        window.clearTimeout(shareResetTimerRef.current);
+      }
+      if (babylonResetTimerRef.current) {
+        window.clearTimeout(babylonResetTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -148,7 +435,7 @@ export function Leaderboard() {
                 {filteredData.map((entry, index) => (
                   <tr
                     key={entry.name}
-                    onClick={() => setSelectedPlayer(entry)}
+                    onClick={() => openYearbookCard(entry)}
                     className="border-b-2 border-[#121212]/20 hover:bg-[#121212]/10 transition-colors cursor-pointer"
                   >
                     <td className="p-4 text-2xl font-black text-[#121212]" style={{ fontFamily: "Special Elite, cursive" }}>
@@ -192,7 +479,11 @@ export function Leaderboard() {
         <YearbookCard
           entry={selectedPlayer}
           isOpen={!!selectedPlayer}
-          onClose={() => setSelectedPlayer(null)}
+          onClose={closeYearbookCard}
+          onShare={selectedPlayer ? handleShareYearbookCard : undefined}
+          shareLabel={shareLabel}
+          onPostToBabylon={selectedPlayer ? handlePostToBabylon : undefined}
+          babylonPostLabel={babylonPostLabel}
         />
       </div>
     </div>

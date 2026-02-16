@@ -18,6 +18,7 @@
   "dependencies": {
     "@lunchtable-tcg/cards": "workspace:*",
     "@lunchtable-tcg/engine": "workspace:*",
+    "@lunchtable-tcg/guilds": "workspace:*",
     "@lunchtable-tcg/match": "workspace:*",
     "@lunchtable-tcg/story": "workspace:*",
     "@sentry/node": "^10.38.0",

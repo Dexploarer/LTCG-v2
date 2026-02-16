@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useConvexAuth } from "convex/react";
 import * as Sentry from "@sentry/react";
+import { toast } from "sonner";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
+import posthog from "@/lib/posthog";
 import { LANDING_BG, MENU_TEXTURE, MILUNCHLADY_PFP_AGENT, OPENCLAWD_PFP } from "@/lib/blobUrls";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -57,6 +59,11 @@ const ARCHETYPE_EMOJI: Record<string, string> = {
   nerds: "\u{1F4DA}",
   goodies: "\u{2728}",
 };
+
+const BABYLON_QUICKSTART_URL =
+  "https://github.com/elizaos-plugins/plugin-babylon?tab=readme-ov-file#-quick-start";
+const SHARE_BABYLON_LABEL_DEFAULT = "Share Babylon Quick Start";
+const SHARE_FEEDBACK_MS = 2000;
 
 // ── Sub-components ─────────────────────────────────────────────────
 
@@ -193,6 +200,8 @@ export function AgentDev() {
   const [deckAssigning, setDeckAssigning] = useState(false);
   const [deckAssigned, setDeckAssigned] = useState(false);
   const [deckError, setDeckError] = useState("");
+  const [shareBabylonLabel, setShareBabylonLabel] = useState(SHARE_BABYLON_LABEL_DEFAULT);
+  const shareBabylonTimerRef = useRef<number | null>(null);
 
   const convexSiteUrl = (import.meta.env.VITE_CONVEX_URL ?? "")
     .replace(".convex.cloud", ".convex.site");
@@ -282,6 +291,67 @@ export function AgentDev() {
       setDeckAssigning(false);
     }
   };
+
+  const clearShareBabylonFeedbackLater = useCallback(() => {
+    if (shareBabylonTimerRef.current) {
+      window.clearTimeout(shareBabylonTimerRef.current);
+    }
+    shareBabylonTimerRef.current = window.setTimeout(() => {
+      setShareBabylonLabel(SHARE_BABYLON_LABEL_DEFAULT);
+    }, SHARE_FEEDBACK_MS);
+  }, []);
+
+  const handleShareBabylonQuickStart = useCallback(async () => {
+    const shareText = "Use this plugin-babylon quick-start guide to get running fast.";
+    let method: "native" | "clipboard" | null = null;
+
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({
+          title: "plugin-babylon Quick Start",
+          text: shareText,
+          url: BABYLON_QUICKSTART_URL,
+        });
+        method = "native";
+        setShareBabylonLabel("Shared");
+        toast.success("Babylon quick start shared");
+      } else {
+        await navigator.clipboard.writeText(BABYLON_QUICKSTART_URL);
+        method = "clipboard";
+        setShareBabylonLabel("Link Copied");
+        toast.success("Babylon quick-start link copied");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(BABYLON_QUICKSTART_URL);
+        method = "clipboard";
+        setShareBabylonLabel("Link Copied");
+        toast.success("Babylon quick-start link copied");
+      } catch {
+        toast.error("Unable to share right now");
+        return;
+      }
+    }
+
+    if (method) {
+      posthog.capture("agent_dev_babylon_quickstart_shared", {
+        platform,
+        method,
+      });
+      clearShareBabylonFeedbackLater();
+    }
+  }, [clearShareBabylonFeedbackLater, platform]);
+
+  useEffect(() => {
+    return () => {
+      if (shareBabylonTimerRef.current) {
+        window.clearTimeout(shareBabylonTimerRef.current);
+      }
+    };
+  }, []);
 
   const selectedDeckInfo = starterDecks?.find((d) => d.deckCode === selectedDeck);
 
@@ -747,15 +817,24 @@ LTCG_SOUNDTRACK_API_URL=${soundtrackApiUrl}`}
         {platform && (
           <div className="mt-8 text-center">
             <div className="w-16 h-px bg-white/10 mx-auto mb-6" />
-            <a
-              href={PLATFORM_INFO[platform].docs}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block px-6 py-2.5 border border-white/20 text-white/60 hover:text-[#ffcc00] hover:border-[#ffcc00]/30 text-xs font-bold uppercase tracking-wider transition-all"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {PLATFORM_INFO[platform].name} Documentation &rarr;
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <a
+                href={PLATFORM_INFO[platform].docs}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-6 py-2.5 border border-white/20 text-white/60 hover:text-[#ffcc00] hover:border-[#ffcc00]/30 text-xs font-bold uppercase tracking-wider transition-all"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {PLATFORM_INFO[platform].name} Documentation &rarr;
+              </a>
+              <button
+                onClick={handleShareBabylonQuickStart}
+                className="inline-block px-6 py-2.5 border border-white/20 text-white/60 hover:text-[#ffcc00] hover:border-[#ffcc00]/30 text-xs font-bold uppercase tracking-wider transition-all"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {shareBabylonLabel}
+              </button>
+            </div>
           </div>
         )}
       </div>

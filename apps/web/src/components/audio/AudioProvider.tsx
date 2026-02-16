@@ -16,8 +16,8 @@ import {
 import { MUSIC_BUTTON } from "@/lib/blobUrls";
 
 const AUDIO_SETTINGS_STORAGE_KEY = "ltcg.audio.settings.v1";
+const AUDIO_DOCK_MODE_STORAGE_KEY = "ltcg.audio.dock.mode.v1";
 const SOUNDTRACK_MANIFEST_SOURCE = "/api/soundtrack";
-const VOLUME_PRESET_VALUES = [0, 25, 50, 75, 100];
 const MUSIC_BUTTON_FALLBACK = "/lunchtable/music-button.png";
 
 function clamp01(value: number): number {
@@ -40,6 +40,8 @@ export interface AudioSettings {
   musicMuted: boolean;
   sfxMuted: boolean;
 }
+
+export type RepeatMode = "all" | "one" | "off";
 
 const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   musicVolume: 0.65,
@@ -75,6 +77,8 @@ interface AudioContextValue {
   contextKey: string;
   currentTrack: string | null;
   autoplayBlocked: boolean;
+  isPlaying: boolean;
+  repeatMode: RepeatMode;
   settings: AudioSettings;
   setContextKey: (contextKey: string) => void;
   setMusicVolume: (volume: number) => void;
@@ -83,6 +87,13 @@ interface AudioContextValue {
   setSfxMuted: (muted: boolean) => void;
   toggleMusicMuted: () => void;
   toggleSfxMuted: () => void;
+  pauseMusic: () => void;
+  resumeMusic: () => void;
+  togglePlayPause: () => void;
+  stopMusic: () => void;
+  skipToNextTrack: () => void;
+  skipToPreviousTrack: () => void;
+  cycleRepeatMode: () => void;
   playSfx: (sfxId: string) => void;
   soundtrack: SoundtrackManifest | null;
 }
@@ -96,6 +107,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [currentTrack, setCurrentTrack] = useState<string | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>("all");
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const sfxPoolRef = useRef<HTMLAudioElement[]>([]);
@@ -105,16 +118,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const currentQueueRef = useRef<string[]>([]);
   const trackIndexRef = useRef(0);
   const shuffleModeRef = useRef(false);
+  const repeatModeRef = useRef<RepeatMode>(repeatMode);
   const unlockedRef = useRef(false);
+  const manualPauseRef = useRef(false);
 
   settingsRef.current = settings;
   soundtrackRef.current = soundtrack;
+  repeatModeRef.current = repeatMode;
 
   useEffect(() => {
     const audio = new Audio();
     audio.preload = "metadata";
     audio.crossOrigin = "anonymous";
     musicAudioRef.current = audio;
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
 
     const pool: HTMLAudioElement[] = [];
     for (let i = 0; i < 8; i += 1) {
@@ -140,6 +160,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         musicPreloadRef.current.pause();
         musicPreloadRef.current.src = "";
       }
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
       sfxPoolRef.current = [];
       musicPreloadRef.current = null;
     };
@@ -186,6 +208,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const queue = currentQueueRef.current;
       if (!audio || queue.length === 0 || index < 0 || index >= queue.length) return;
 
+      manualPauseRef.current = false;
       const next = queue[index]!;
       trackIndexRef.current = index;
       setCurrentTrack(next);
@@ -215,25 +238,43 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     [safePlay, preloadTrack],
   );
 
-  const advanceTrack = useCallback(() => {
-    const queue = currentQueueRef.current;
-    if (queue.length === 0) return;
+  const advanceTrack = useCallback(
+    (trigger: "ended" | "manual" = "ended") => {
+      const queue = currentQueueRef.current;
+      if (queue.length === 0) return;
 
-    let nextIndex = trackIndexRef.current + 1;
-    if (nextIndex >= queue.length) {
-      if (shuffleModeRef.current) {
-        currentQueueRef.current = shuffle([...queue]);
+      if (trigger === "ended" && repeatModeRef.current === "one") {
+        playTrackAtIndex(trackIndexRef.current);
+        return;
       }
-      nextIndex = 0;
-    }
 
-    playTrackAtIndex(nextIndex);
-  }, [playTrackAtIndex]);
+      let nextIndex = trackIndexRef.current + 1;
+      if (nextIndex >= queue.length) {
+        if (trigger === "ended" && repeatModeRef.current === "off") {
+          manualPauseRef.current = true;
+          const audio = musicAudioRef.current;
+          if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+          }
+          return;
+        }
+
+        if (shuffleModeRef.current) {
+          currentQueueRef.current = shuffle([...queue]);
+        }
+        nextIndex = 0;
+      }
+
+      playTrackAtIndex(nextIndex);
+    },
+    [playTrackAtIndex],
+  );
 
   useEffect(() => {
     const audio = musicAudioRef.current;
     if (!audio) return;
-    const onEnded = () => advanceTrack();
+    const onEnded = () => advanceTrack("ended");
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
   }, [advanceTrack]);
@@ -246,6 +287,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const currentSettings = settingsRef.current;
       if (!current.src) return;
       if (currentSettings.musicMuted || currentSettings.musicVolume <= 0) return;
+      if (manualPauseRef.current) return;
       void safePlay(current);
     };
 
@@ -297,7 +339,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (audio.src && audio.paused && unlockedRef.current) {
+    if (audio.src && audio.paused && unlockedRef.current && !manualPauseRef.current) {
       void safePlay(audio);
     }
   }, [settings.musicMuted, settings.musicVolume, safePlay]);
@@ -312,8 +354,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     currentQueueRef.current = queue;
 
     if (queue.length === 0) {
+      manualPauseRef.current = true;
       const audio = musicAudioRef.current;
-      if (audio) audio.pause();
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
       setCurrentTrack(null);
       return;
     }
@@ -350,6 +396,81 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     void slot.play().catch(() => {});
   }, []);
 
+  const pauseMusic = useCallback(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) return;
+    manualPauseRef.current = true;
+    audio.pause();
+  }, []);
+
+  const resumeMusic = useCallback(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) return;
+
+    const currentSettings = settingsRef.current;
+    if (currentSettings.musicMuted || currentSettings.musicVolume <= 0) return;
+
+    manualPauseRef.current = false;
+
+    if (!audio.src) {
+      const queue = currentQueueRef.current;
+      if (queue.length === 0) return;
+      const index = Math.min(Math.max(trackIndexRef.current, 0), queue.length - 1);
+      playTrackAtIndex(index);
+      return;
+    }
+
+    void safePlay(audio);
+  }, [playTrackAtIndex, safePlay]);
+
+  const stopMusic = useCallback(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) return;
+    manualPauseRef.current = true;
+    audio.pause();
+    audio.currentTime = 0;
+  }, []);
+
+  const skipToNextTrack = useCallback(() => {
+    manualPauseRef.current = false;
+    advanceTrack("manual");
+  }, [advanceTrack]);
+
+  const skipToPreviousTrack = useCallback(() => {
+    const audio = musicAudioRef.current;
+    const queue = currentQueueRef.current;
+    if (!audio || queue.length === 0) return;
+
+    manualPauseRef.current = false;
+    if (audio.currentTime > 5) {
+      audio.currentTime = 0;
+      if (audio.paused) void safePlay(audio);
+      return;
+    }
+
+    let previousIndex = trackIndexRef.current - 1;
+    if (previousIndex < 0) previousIndex = queue.length - 1;
+    playTrackAtIndex(previousIndex);
+  }, [playTrackAtIndex, safePlay]);
+
+  const togglePlayPause = useCallback(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      resumeMusic();
+      return;
+    }
+    pauseMusic();
+  }, [pauseMusic, resumeMusic]);
+
+  const cycleRepeatMode = useCallback(() => {
+    setRepeatMode((previous) => {
+      if (previous === "all") return "one";
+      if (previous === "one") return "off";
+      return "all";
+    });
+  }, []);
+
   const value = useMemo<AudioContextValue>(
     () => ({
       loading,
@@ -357,6 +478,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       contextKey,
       currentTrack,
       autoplayBlocked,
+      isPlaying,
+      repeatMode,
       settings,
       setContextKey,
       setMusicVolume: (volume: number) =>
@@ -371,10 +494,34 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setSettings((prev) => ({ ...prev, musicMuted: !prev.musicMuted })),
       toggleSfxMuted: () =>
         setSettings((prev) => ({ ...prev, sfxMuted: !prev.sfxMuted })),
+      pauseMusic,
+      resumeMusic,
+      togglePlayPause,
+      stopMusic,
+      skipToNextTrack,
+      skipToPreviousTrack,
+      cycleRepeatMode,
       playSfx,
       soundtrack,
     }),
-    [loading, soundtrack, contextKey, currentTrack, autoplayBlocked, settings, playSfx],
+    [
+      loading,
+      soundtrack,
+      contextKey,
+      currentTrack,
+      autoplayBlocked,
+      isPlaying,
+      repeatMode,
+      settings,
+      pauseMusic,
+      resumeMusic,
+      togglePlayPause,
+      stopMusic,
+      skipToNextTrack,
+      skipToPreviousTrack,
+      cycleRepeatMode,
+      playSfx,
+    ],
   );
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
@@ -394,9 +541,30 @@ function formatTrackLabel(track: string | null): string {
   const parts = clean.split("/");
   const raw = parts.at(-1) ?? track;
   try {
-    return decodeURIComponent(raw) || track;
+    const decoded = decodeURIComponent(raw) || track;
+    return decoded
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
   } catch {
-    return raw || track;
+    return (raw || track).replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ").trim();
+  }
+}
+
+function repeatModeLabel(mode: RepeatMode): string {
+  if (mode === "one") return "REP 1";
+  if (mode === "off") return "REP OFF";
+  return "REP ALL";
+}
+
+function loadDockModePreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = window.localStorage.getItem(AUDIO_DOCK_MODE_STORAGE_KEY);
+    if (!stored) return true;
+    return stored === "ticker";
+  } catch {
+    return true;
   }
 }
 
@@ -404,126 +572,148 @@ export function AudioControlsDock() {
   const {
     settings,
     setMusicVolume,
-    setSfxVolume,
     toggleMusicMuted,
-    toggleSfxMuted,
     autoplayBlocked,
     currentTrack,
-    contextKey,
-    loading,
+    isPlaying,
+    repeatMode,
+    togglePlayPause,
+    stopMusic,
+    skipToNextTrack,
+    skipToPreviousTrack,
+    cycleRepeatMode,
   } = useAudio();
-  const [open, setOpen] = useState(false);
   const [buttonImageSrc, setButtonImageSrc] = useState(MUSIC_BUTTON);
+  const [showTickerBar, setShowTickerBar] = useState<boolean>(() => loadDockModePreference());
 
   const musicVolumePercent = Math.round(settings.musicVolume * 100);
-  const sfxVolumePercent = Math.round(settings.sfxVolume * 100);
+  const trackLabel = formatTrackLabel(currentTrack);
+  const repeatLabel = repeatModeLabel(repeatMode);
 
-  const presetButtons = (type: "music" | "sfx") => (
-    <div className="mt-1.5 flex gap-1.5">
-      {VOLUME_PRESET_VALUES.map((preset) => (
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        AUDIO_DOCK_MODE_STORAGE_KEY,
+        showTickerBar ? "ticker" : "floating",
+      );
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [showTickerBar]);
+
+  const transportButtons = () => {
+    const buttonClass =
+      "text-[9px] sm:text-[10px] px-2 py-1 border border-[#121212] bg-white text-[#121212] font-bold uppercase tracking-wide transition hover:bg-[#121212] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffcc00]";
+
+    return (
+      <>
         <button
           type="button"
-          key={`${type}-${preset}`}
-          onClick={() =>
-            type === "music" ? setMusicVolume(preset / 100) : setSfxVolume(preset / 100)
-          }
-          className={`text-[10px] px-2 py-1 border transition-all ${
-            (type === "music" ? musicVolumePercent : sfxVolumePercent) === preset
-              ? "border-[#ffcc00] bg-[#121212] text-[#ffcc00]"
-              : "border-[#121212] hover:border-[#ffcc00]/70"
-          }`}
-          style={{ fontFamily: "Outfit, sans-serif" }}
+          onClick={skipToPreviousTrack}
+          className={buttonClass}
+          aria-label="Previous track"
+          title="Previous track"
         >
-          {preset}
+          Prev
         </button>
-      ))}
-    </div>
-  );
-
-  const panelTransitionClass = open
-    ? "max-h-80 opacity-100 translate-y-0 scale-100 pointer-events-auto"
-    : "max-h-0 opacity-0 -translate-y-2 scale-95 pointer-events-none overflow-hidden";
-
-  const sharedRangeClasses =
-    "h-1.5 w-full cursor-pointer accent-[#121212] rounded-full bg-[#121212]/15";
+        <button
+          type="button"
+          onClick={togglePlayPause}
+          className={buttonClass}
+          aria-label={isPlaying ? "Pause music" : "Resume music"}
+          title={isPlaying ? "Pause music" : "Resume music"}
+        >
+          {isPlaying ? "Pause" : "Play"}
+        </button>
+        <button
+          type="button"
+          onClick={stopMusic}
+          className={buttonClass}
+          aria-label="Stop music"
+          title="Stop music"
+        >
+          Stop
+        </button>
+        <button
+          type="button"
+          onClick={skipToNextTrack}
+          className={buttonClass}
+          aria-label="Next track"
+          title="Next track"
+        >
+          Next
+        </button>
+        <button
+          type="button"
+          onClick={cycleRepeatMode}
+          className={`${buttonClass} ${repeatMode === "off" ? "" : "bg-[#ffcc00]/20"}`}
+          aria-label={`Cycle repeat mode, current mode ${repeatLabel}`}
+          title={`Repeat mode: ${repeatLabel}`}
+        >
+          {repeatLabel}
+        </button>
+      </>
+    );
+  };
 
   return (
-    <div className="fixed top-3 right-3 z-[60]">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-label={open ? "Close audio options" : "Open audio options"}
-        title={open ? "Close audio options" : "Open audio options"}
-        className="group block rounded-sm transition-transform duration-150 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffcc00]"
-        aria-expanded={open}
-        aria-controls="audio-controls-panel"
-      >
-        <img
-          src={buttonImageSrc}
-          alt="Open music options"
-          className="w-[110px] h-auto select-none drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)] transition-transform duration-150 group-hover:drop-shadow-[0_8px_14px_rgba(0,0,0,0.55)]"
-          draggable={false}
-          loading="eager"
-          width={110}
-          height={35}
-          onError={() => {
-            setButtonImageSrc((current) =>
-              current === MUSIC_BUTTON_FALLBACK ? current : MUSIC_BUTTON_FALLBACK,
-            );
-          }}
-        />
-      </button>
+    <>
+      <div className="fixed top-3 right-3 z-[60]">
+        <button
+          type="button"
+          onClick={() => setShowTickerBar((current) => !current)}
+          aria-label={showTickerBar ? "Hide audio ticker" : "Show audio ticker"}
+          title={showTickerBar ? "Hide audio ticker" : "Show audio ticker"}
+          className="group block rounded-sm transition-transform duration-150 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffcc00]"
+          aria-pressed={showTickerBar}
+        >
+          <img
+            src={buttonImageSrc}
+            alt="Open music options"
+            className="w-[110px] h-auto select-none drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)] transition-transform duration-150 group-hover:drop-shadow-[0_8px_14px_rgba(0,0,0,0.55)]"
+            draggable={false}
+            loading="eager"
+            width={110}
+            height={35}
+            onError={() => {
+              setButtonImageSrc((current) =>
+                current === MUSIC_BUTTON_FALLBACK ? current : MUSIC_BUTTON_FALLBACK,
+              );
+            }}
+          />
+        </button>
+      </div>
 
-      <div
-        id="audio-controls-panel"
-        className={`paper-panel mt-2 w-72 p-3 transform-gpu transition-[max-height,opacity,transform] duration-300 ease-[cubic-bezier(.22,.61,.36,1)] backdrop-blur-sm ${panelTransitionClass}`}
-        style={{ willChange: "transform, opacity, max-height" }}
-        aria-hidden={!open}
-      >
-        <div className={open ? "" : "invisible pointer-events-none"}>
-          <div className="flex items-center justify-between mb-2">
-            <p
-              className="text-[10px] uppercase tracking-wider text-[#121212]/60"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {loading ? "Loading soundtrack..." : `Context: ${contextKey}`}
-            </p>
-            <p
-              className="text-[10px] text-[#121212]/50 truncate max-w-[130px] text-right"
-              style={{ fontFamily: "Special Elite, cursive" }}
-              title={currentTrack ?? "No track"}
-            >
-              {formatTrackLabel(currentTrack)}
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded border border-[#121212]/20 p-2">
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className="text-[11px] font-bold uppercase"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Music
-                </span>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-[10px] text-[#121212]/70"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {musicVolumePercent}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleMusicMuted}
-                    aria-label={settings.musicMuted ? "Unmute music" : "Mute music"}
-                    className="text-[10px] underline uppercase"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {settings.musicMuted ? "Unmute" : "Mute"}
-                  </button>
-                </div>
-              </div>
+      {showTickerBar && (
+        <div className="fixed bottom-0 left-0 right-0 z-[65] border-t-2 border-[#121212] bg-[#fef8c8]/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-2 py-1.5 sm:px-3 sm:py-2">
+            <div className="min-w-0 flex-1 overflow-hidden border border-[#121212] bg-white/80 px-2 py-1">
+              <p
+                className="ltcg-ticker-marquee text-[10px] sm:text-[11px] uppercase tracking-wide text-[#121212]"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                title={trackLabel}
+              >
+                {`${trackLabel} • ${trackLabel} • ${trackLabel}`}
+              </p>
+            </div>
+            <div className="shrink-0 flex items-center gap-1">{transportButtons()}</div>
+            <div className="shrink-0 flex items-center gap-1 border border-[#121212] bg-white/90 px-2 py-1">
+              <button
+                type="button"
+                onClick={toggleMusicMuted}
+                aria-label={settings.musicMuted ? "Unmute music" : "Mute music"}
+                className="text-[9px] sm:text-[10px] px-1.5 py-1 border border-[#121212] font-bold uppercase tracking-wide transition hover:bg-[#121212] hover:text-white"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {settings.musicMuted ? "Unmute" : "Mute"}
+              </button>
+              <span
+                className="text-[9px] sm:text-[10px] text-[#121212]"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Vol {musicVolumePercent}%
+              </span>
               <input
                 type="range"
                 min={0}
@@ -532,62 +722,21 @@ export function AudioControlsDock() {
                 value={musicVolumePercent}
                 onChange={(event) => setMusicVolume(Number(event.target.value) / 100)}
                 aria-label="Music volume"
-                className={sharedRangeClasses}
+                className="h-1.5 w-20 sm:w-28 cursor-pointer accent-[#121212] rounded-full bg-[#121212]/15"
               />
-              {presetButtons("music")}
-            </div>
-
-            <div className="rounded border border-[#121212]/20 p-2">
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className="text-[11px] font-bold uppercase"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  SFX
-                </span>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-[10px] text-[#121212]/70"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {sfxVolumePercent}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleSfxMuted}
-                    aria-label={settings.sfxMuted ? "Unmute sound effects" : "Mute sound effects"}
-                    className="text-[10px] underline uppercase"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {settings.sfxMuted ? "Unmute" : "Mute"}
-                  </button>
-                </div>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={sfxVolumePercent}
-                onChange={(event) => setSfxVolume(Number(event.target.value) / 100)}
-                aria-label="Sound effects volume"
-                className={sharedRangeClasses}
-              />
-              {presetButtons("sfx")}
             </div>
           </div>
-
           {autoplayBlocked && (
             <p
-              className="text-[10px] text-[#b45309] mt-2"
+              className="px-3 pb-2 text-[10px] text-[#b45309]"
               style={{ fontFamily: "Special Elite, cursive" }}
             >
               Browser blocked autoplay. Click anywhere once to enable music.
             </p>
           )}
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 

@@ -10,6 +10,8 @@ const textLinks: Array<
   { label: "Cliques", path: "/cliques", auth: true },
   { label: "Agent Dev", path: "/agent-dev", auth: true },
   { label: "Leaderboard", path: "/leaderboard", auth: false },
+  { label: "Profile", path: "/profile", auth: true },
+  { label: "Settings", path: "/settings", auth: true },
   { label: "Docs", path: "/about", auth: false },
   { label: "X / Twitter", href: "https://x.com/LunchTableTCG" },
   { label: "Discord", href: import.meta.env.VITE_DISCORD_URL || "#" },
@@ -60,14 +62,28 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
       <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30">
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="transition-transform duration-200 hover:scale-110 active:scale-95"
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          className="group transition-transform duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none"
         >
-          <img
-            src={LOGO}
-            alt="Menu"
-            className={`h-10 w-10 drop-shadow-[2px_2px_0px_rgba(0,0,0,0.8)] ${invert ? "invert" : ""}`}
-            draggable={false}
-          />
+          <span className="relative flex items-center justify-center">
+            <span className="absolute -inset-2 rounded-full bg-[#ffcc00]/40 blur-sm" />
+            <span className="relative grid place-items-center h-14 w-14 rounded-full border-2 border-[#121212] bg-[#ffcc00] shadow-[0_10px_20px_rgba(18,18,18,0.35)]">
+              <img
+                src={LOGO}
+                alt="Menu"
+                className={`h-10 w-10 drop-shadow-[2px_2px_0px_rgba(0,0,0,0.8)] ${invert ? "invert" : ""}`}
+                draggable={false}
+              />
+            </span>
+            <span
+              className="pointer-events-none absolute right-[-8px] top-1/2 z-20 -translate-y-1/2 mr-2 px-3 py-1.5 rounded-md border-2 border-[#121212] bg-[#fff] text-[#121212] shadow-[2px_2px_0px_rgba(0,0,0,0.8)]"
+              style={{ fontFamily: "Permanent Marker, cursive", letterSpacing: "0.08em" }}
+            >
+              Open Menu
+              <span className="absolute left-[-10px] top-1/2 -translate-y-1/2 h-0 w-0 border-y-4 border-y-transparent border-r-[10px] border-r-[#121212]" />
+              <span className="absolute left-[-8px] top-1/2 -translate-y-1/2 h-0 w-0 border-y-3 border-y-transparent border-r-[8px] border-r-[#fff]" />
+            </span>
+          </span>
         </button>
       </div>
 

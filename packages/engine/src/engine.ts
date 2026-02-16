@@ -200,6 +200,7 @@ export function mask(state: GameState, seat: Seat): PlayerView {
     opponentDeckCount,
     opponentBreakdownsCaused,
     currentTurnPlayer: state.currentTurnPlayer,
+    currentPriorityPlayer: state.currentPriorityPlayer,
     turnNumber: state.turnNumber,
     currentPhase: state.currentPhase,
     currentChain: state.currentChain,

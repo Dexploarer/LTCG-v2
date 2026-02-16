@@ -766,8 +766,8 @@ export const executeAITurn = internalMutation({
       cardLookup[card._id] = card;
     }
 
-  // Loop up to 20 actions
-  for (let i = 0; i < 20; i++) {
+    // Loop up to 20 actions
+    for (let i = 0; i < 20; i++) {
       const viewJson = await match.getPlayerView(ctx, {
         matchId: args.matchId,
         seat: aiSeat,

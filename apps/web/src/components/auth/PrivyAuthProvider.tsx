@@ -12,7 +12,7 @@ export function PrivyAuthProvider({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["email", "telegram"],
+        loginMethods: ["email", "telegram", "discord"],
         embeddedWallets: {
           solana: { createOnLogin: "users-without-wallets" },
         },

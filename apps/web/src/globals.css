@@ -493,3 +493,21 @@ html {
   border: 2px solid currentColor;
   transform: rotate(-4deg);
 }
+
+@keyframes ltcg-ticker-slide {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ltcg-ticker-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  min-width: max-content;
+  padding-right: 1.5rem;
+  animation: ltcg-ticker-slide 14s linear infinite;
+}

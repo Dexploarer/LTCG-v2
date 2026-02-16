@@ -6,6 +6,11 @@ import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { useUserSync } from "@/hooks/auth/useUserSync";
 import { consumeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { LANDING_BG } from "@/lib/blobUrls";
+import {
+  DEFAULT_SIGNUP_AVATAR_PATH,
+  SIGNUP_AVATAR_OPTIONS,
+  type SignupAvatarPath,
+} from "@/lib/signupAvatarCatalog";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -44,30 +49,33 @@ export function Onboarding() {
   const { isAuthenticated } = useConvexAuth();
 
   const setUsernameMutation = useConvexMutation(apiAny.auth.setUsername);
+  const setAvatarPathMutation = useConvexMutation(apiAny.auth.setAvatarPath);
   const selectStarterDeckMutation = useConvexMutation(apiAny.game.selectStarterDeck);
-  const getCliqueByArchetype = useConvexQuery(apiAny.cliques.getCliqueByArchetype, isAuthenticated ? {} : "skip");
-  const joinCliqueMutation = useConvexMutation(apiAny.cliques.joinClique);
   const starterDecks = useConvexQuery(apiAny.game.getStarterDecks, isAuthenticated ? {} : "skip") as
     | StarterDeck[]
     | undefined;
 
-  // Track selected deck archetype for clique step
-  const [selectedArchetype, setSelectedArchetype] = useState<string | null>(null);
-
   // Determine which step we're on based on onboarding status
   const needsUsername = onboardingStatus && !onboardingStatus.hasUsername;
-  const needsDeck = onboardingStatus && onboardingStatus.hasUsername && !onboardingStatus.hasStarterDeck;
-  const needsClique = onboardingStatus && onboardingStatus.hasStarterDeck && selectedArchetype;
+  const needsAvatar =
+    onboardingStatus &&
+    onboardingStatus.hasUsername &&
+    !onboardingStatus.hasAvatar;
+  const needsDeck =
+    onboardingStatus &&
+    onboardingStatus.hasUsername &&
+    onboardingStatus.hasAvatar &&
+    !onboardingStatus.hasStarterDeck;
 
   const handleUsernameComplete = useCallback(() => {
     // onboardingStatus will reactively update
   }, []);
 
-  const handleDeckComplete = useCallback((archetype: string) => {
-    setSelectedArchetype(archetype);
+  const handleAvatarComplete = useCallback(() => {
+    // onboardingStatus will reactively update
   }, []);
 
-  const handleCliqueComplete = useCallback(() => {
+  const handleDeckComplete = useCallback(() => {
     navigate(consumeRedirect() ?? "/");
   }, [navigate]);
 
@@ -106,7 +114,11 @@ export function Onboarding() {
             className="text-[#ffcc00] text-lg drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Special Elite, cursive" }}
           >
-            {needsUsername ? "Step 1 of 3: Choose your name" : needsDeck ? "Step 2 of 3: Pick your deck" : "Step 3 of 3: Join your clique"}
+            {needsUsername
+              ? "Step 1 of 3: Choose your name"
+              : needsAvatar
+                ? "Step 2 of 3: Pick your avatar"
+                : "Step 3 of 3: Pick your deck"}
           </p>
         </div>
 
@@ -117,20 +129,18 @@ export function Onboarding() {
           />
         )}
 
+        {needsAvatar && (
+          <AvatarSelectionStep
+            setAvatarPathMutation={setAvatarPathMutation}
+            onComplete={handleAvatarComplete}
+          />
+        )}
+
         {needsDeck && (
           <DeckSelectionStep
             decks={starterDecks}
             selectDeckMutation={selectStarterDeckMutation}
             onComplete={handleDeckComplete}
-          />
-        )}
-
-        {needsClique && (
-          <CliqueJoinStep
-            archetype={selectedArchetype!}
-            getCliqueByArchetype={getCliqueByArchetype}
-            joinCliqueMutation={joinCliqueMutation}
-            onComplete={handleCliqueComplete}
           />
         )}
       </div>
@@ -219,12 +229,98 @@ function UsernameStep({
   );
 }
 
-// ── Step 2: Deck Selection ────────────────────────────────────────
+// ── Step 2: Avatar Selection ──────────────────────────────────────
+
+function AvatarSelectionStep({
+  setAvatarPathMutation,
+  onComplete,
+}: {
+  setAvatarPathMutation: (args: { avatarPath: string }) => Promise<{ success: boolean; avatarPath: string }>;
+  onComplete: () => void;
+}) {
+  const [selectedAvatarPath, setSelectedAvatarPath] =
+    useState<SignupAvatarPath>(DEFAULT_SIGNUP_AVATAR_PATH);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleContinue = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      await setAvatarPathMutation({ avatarPath: selectedAvatarPath });
+      onComplete();
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to save avatar.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="paper-panel p-6 md:p-8 mx-auto max-w-5xl">
+      <h2
+        className="text-2xl md:text-3xl mb-6 text-center"
+        style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
+      >
+        PICK YOUR PROFILE AVATAR
+      </h2>
+
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4 max-h-[56vh] overflow-y-auto p-1 mb-6">
+        {SIGNUP_AVATAR_OPTIONS.map((avatar) => {
+          const selected = selectedAvatarPath === avatar.path;
+          return (
+            <button
+              key={avatar.id}
+              type="button"
+              onClick={() => setSelectedAvatarPath(avatar.path)}
+              className={`relative border-[3px] transition-all ${
+                selected
+                  ? "border-[#ffcc00] ring-3 ring-[#ffcc00]/70 scale-[1.03]"
+                  : "border-[#121212] hover:border-[#ffcc00] hover:scale-[1.02]"
+              }`}
+              style={{
+                boxShadow: selected
+                  ? "6px 6px 0px 0px rgba(255,204,0,0.8)"
+                  : "4px 4px 0px 0px rgba(18,18,18,1)",
+              }}
+              aria-label={`Choose ${avatar.id}`}
+            >
+              <img
+                src={avatar.url}
+                alt={avatar.id}
+                className="w-full aspect-[3/4] object-cover bg-[#101010]"
+                loading="lazy"
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      {error && (
+        <p className="text-red-600 text-sm font-bold uppercase text-center mb-4">{error}</p>
+      )}
+
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={handleContinue}
+          disabled={submitting}
+          className="tcg-button-primary px-10 py-4 text-xl uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? "Saving avatar..." : "Continue"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 3: Deck Selection ────────────────────────────────────────
 
 interface DeckSelectionStepProps {
   decks: StarterDeck[] | undefined;
   selectDeckMutation: (args: { deckCode: string }) => Promise<{ deckId: string; cardCount: number }>;
-  onComplete: (archetype: string) => void;
+  onComplete: () => void;
 }
 
 function DeckSelectionStep({
@@ -243,9 +339,8 @@ function DeckSelectionStep({
     setError("");
 
     try {
-      const deck = decks?.find((d) => d.deckCode === selected);
       await selectDeckMutation({ deckCode: selected });
-      onComplete(deck?.archetype ?? "dropouts");
+      onComplete();
     } catch (err: any) {
       Sentry.captureException(err);
       setError(err.message ?? "Failed to select deck.");
@@ -324,104 +419,12 @@ function DeckSelectionStep({
         >
           {submitting ? "Building deck..." : "Choose This Deck"}
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 3: Clique Join ──────────────────────────────────────────
-
-interface Clique {
-  _id: string;
-  name: string;
-  archetype: string;
-  description: string;
-  memberCount: number;
-}
-
-interface CliqueJoinStepProps {
-  archetype: string;
-  getCliqueByArchetype: Clique | null | undefined;
-  joinCliqueMutation: (args: { cliqueId: string }) => Promise<Clique>;
-  onComplete: () => void;
-}
-
-function CliqueJoinStep({
-  archetype,
-  getCliqueByArchetype,
-  joinCliqueMutation,
-  onComplete,
-}: CliqueJoinStepProps) {
-  const [joining, setJoining] = useState(false);
-  const [error, setError] = useState("");
-
-  const clique = getCliqueByArchetype;
-  const color = ARCHETYPE_COLORS[archetype] ?? "#666";
-  const emoji = ARCHETYPE_EMOJI[archetype] ?? "\u{1F0CF}";
-
-  const handleJoin = async () => {
-    if (!clique) return;
-    setJoining(true);
-    setError("");
-    try {
-      await joinCliqueMutation({ cliqueId: clique._id });
-      onComplete();
-    } catch (err: any) {
-      Sentry.captureException(err);
-      setError(err.message ?? "Failed to join clique.");
-    } finally {
-      setJoining(false);
-    }
-  };
-
-  if (!clique) {
-    return (
-      <div className="text-center py-12">
-        <div className="w-8 h-8 border-4 border-[#ffcc00] border-t-transparent rounded-full animate-spin mx-auto" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="paper-panel p-8 md:p-12 mx-auto max-w-md text-center">
-      <div className="text-5xl mb-4">{emoji}</div>
-      <h2
-        className="text-3xl mb-4"
-        style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900, color }}
-      >
-        JOIN {clique.name.toUpperCase()}
-      </h2>
-      <p
-        className="text-[#666] mb-6"
-        style={{ fontFamily: "Special Elite, cursive" }}
-      >
-        {clique.description}
-      </p>
-      <p className="text-sm text-[#999] mb-8">
-        {clique.memberCount} members and counting
-      </p>
-
-      {error && (
-        <p className="text-red-600 text-sm font-bold uppercase mb-4">{error}</p>
-      )}
-
-      <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={handleJoin}
-          disabled={joining}
-          className="tcg-button-primary px-8 py-3 text-lg uppercase disabled:opacity-50"
-          style={{ borderColor: color, boxShadow: `4px 4px 0px 0px ${color}` }}
+        <p
+          className="text-xs text-[#666] uppercase tracking-wide mt-3"
+          style={{ fontFamily: "Special Elite, cursive" }}
         >
-          {joining ? "Joining..." : `Join ${clique.name}`}
-        </button>
-        <button
-          type="button"
-          onClick={onComplete}
-          className="text-sm text-[#666] hover:text-[#333] transition-colors uppercase tracking-wide"
-        >
-          Skip for now
-        </button>
+          Clique assignment happens automatically from this starter deck.
+        </p>
       </div>
     </div>
   );

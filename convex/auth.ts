@@ -83,6 +83,12 @@ export const currentUser = query({
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
+const VALID_SIGNUP_AVATAR_PATHS = new Set(
+  Array.from({ length: 29 }, (_, index) => {
+    const suffix = String(index + 1).padStart(3, "0");
+    return `avatars/signup/avatar-${suffix}.png`;
+  }),
+);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
   if (!deckId) return null;
   const trimmed = deckId.trim();
@@ -104,7 +110,12 @@ export const getOnboardingStatus = query({
       .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
       .first();
     if (!user)
-      return { exists: false, hasUsername: false, hasStarterDeck: false };
+      return {
+        exists: false,
+        hasUsername: false,
+        hasAvatar: false,
+        hasStarterDeck: false,
+      };
 
     const userDecks = await cards.decks.getUserDecks(ctx, user._id);
     const activeDeckId = normalizeDeckId(user.activeDeckId);
@@ -115,6 +126,7 @@ export const getOnboardingStatus = query({
     return {
       exists: true,
       hasUsername: !user.username.startsWith("player_"),
+      hasAvatar: Boolean(user.avatarPath),
       hasStarterDeck: hasActiveDeck,
     };
   },
@@ -145,5 +157,23 @@ export const setUsername = mutation({
     }
     await ctx.db.patch(user._id, { username: trimmed });
     return { success: true };
+  },
+});
+
+/**
+ * Sets the signup avatar path for the authenticated user.
+ */
+export const setAvatarPath = mutation({
+  args: { avatarPath: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const avatarPath = args.avatarPath.trim();
+
+    if (!VALID_SIGNUP_AVATAR_PATHS.has(avatarPath)) {
+      throw new Error("Invalid avatar selection.");
+    }
+
+    await ctx.db.patch(user._id, { avatarPath });
+    return { success: true, avatarPath };
   },
 });

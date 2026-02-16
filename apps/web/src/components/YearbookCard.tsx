@@ -27,14 +27,33 @@ interface YearbookCardProps {
   entry: LeaderboardEntry | null;
   isOpen: boolean;
   onClose: () => void;
+  onShare?: () => void;
+  shareLabel?: string;
+  onPostToBabylon?: () => void;
+  babylonPostLabel?: string;
 }
 
-export function YearbookCard({ entry, isOpen, onClose }: YearbookCardProps) {
+export function YearbookCard({
+  entry,
+  isOpen,
+  onClose,
+  onShare,
+  shareLabel,
+  onPostToBabylon,
+  babylonPostLabel,
+}: YearbookCardProps) {
   if (!isOpen || !entry) return null;
 
   const quote = YEARBOOK_QUOTES[entry.name] ?? DEFAULT_QUOTE;
   const winRate = entry.score > 0 ? Math.min(99, Math.round((entry.score / (entry.score + entry.breakdowns * 100)) * 100)) : 0;
   const classYear = 2026;
+  const actionCount = [Boolean(onShare), Boolean(onPostToBabylon), true].filter(Boolean).length;
+  const actionGridClass =
+    actionCount >= 3
+      ? "grid-cols-1 sm:grid-cols-3"
+      : actionCount === 2
+        ? "grid-cols-1 sm:grid-cols-2"
+        : "grid-cols-1";
 
   return (
     <>
@@ -191,8 +210,26 @@ export function YearbookCard({ entry, isOpen, onClose }: YearbookCardProps) {
               />
             </div>
 
-            {/* Close button */}
-            <div className="px-6 pb-6">
+            {/* Actions */}
+            <div className={`px-6 pb-6 grid ${actionGridClass} gap-2`}>
+              {onShare && (
+                <button
+                  onClick={onShare}
+                  className="w-full py-3 tcg-button text-sm"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {shareLabel ?? "Share Card"}
+                </button>
+              )}
+              {onPostToBabylon && (
+                <button
+                  onClick={onPostToBabylon}
+                  className="w-full py-3 tcg-button text-sm"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {babylonPostLabel ?? "Post to Babylon"}
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="w-full py-3 bg-[#121212] text-white font-black uppercase tracking-wider text-sm border-2 border-[#121212] transition-all hover:bg-[#121212]/80"

@@ -67,9 +67,31 @@ export const DEFAULT_ARCHETYPE_THEME: ArchetypeTheme = {
   glowColor: "shadow-purple-500/30",
 };
 
+const ARCHETYPE_ALIASES: Record<string, string> = {
+  dropout: "dropout",
+  dropouts: "dropout",
+  prep: "prep",
+  preps: "prep",
+  geek: "geek",
+  geeks: "geek",
+  freak: "freak",
+  freaks: "freak",
+  nerd: "nerd",
+  nerds: "nerd",
+  goodie: "goodie_two_shoes",
+  goodies: "goodie_two_shoes",
+  goodie_two_shoes: "goodie_two_shoes",
+  goodietwoshoes: "goodie_two_shoes",
+};
+
+function normalizeArchetypeKey(archetype: string) {
+  const raw = archetype.trim().toLowerCase().replace(/\s+/g, "_");
+  return ARCHETYPE_ALIASES[raw] ?? raw;
+}
+
 export function getArchetypeTheme(archetype: string | undefined): ArchetypeTheme {
   if (!archetype) return DEFAULT_ARCHETYPE_THEME;
-  return ARCHETYPE_THEMES[archetype] ?? DEFAULT_ARCHETYPE_THEME;
+  return ARCHETYPE_THEMES[normalizeArchetypeKey(archetype)] ?? DEFAULT_ARCHETYPE_THEME;
 }
 
 export function getArchetypeTextColor(archetype: string | undefined) {
