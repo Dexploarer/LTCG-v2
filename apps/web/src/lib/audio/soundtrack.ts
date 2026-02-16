@@ -125,6 +125,22 @@ function normalizeTrackList(values: unknown): string[] {
   return tracks;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isSoundtrackManifest(value: unknown): value is SoundtrackManifest {
+  if (!isObject(value)) return false;
+  if (!isObject(value.playlists) || !isObject(value.sfx)) return false;
+  if (typeof value.source !== "string" || typeof value.loadedAt !== "number") return false;
+
+  for (const tracks of Object.values(value.playlists)) {
+    if (!Array.isArray(tracks)) return false;
+  }
+
+  return true;
+}
+
 function normalizeSfxMap(value: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (value == null || typeof value !== "object") return out;
@@ -224,12 +240,19 @@ function readCachedManifest(source: string): CachedManifestEntry | null {
     const raw = window.localStorage.getItem(SOUNDTRACK_CACHE_KEY);
     if (!raw) return null;
 
-    const data = JSON.parse(raw) as CachedManifestEntry;
-    if (data.source !== source || typeof data.cachedAt !== "number" || !data.manifest) {
+    const rawData = JSON.parse(raw);
+    if (!isObject(rawData)) return null;
+    if (
+      typeof rawData.source !== "string" ||
+      rawData.source !== source ||
+      typeof rawData.cachedAt !== "number" ||
+      typeof rawData.normalized !== "boolean" ||
+      !isSoundtrackManifest(rawData.manifest)
+    ) {
       return null;
     }
 
-    return data;
+    return rawData as unknown as CachedManifestEntry;
   } catch (error) {
     console.warn("Failed to parse cached soundtrack manifest", error);
     return null;
