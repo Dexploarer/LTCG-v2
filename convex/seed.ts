@@ -36,6 +36,17 @@ export const seedAll = mutation({
       }
     }
 
+    // Seed 6 cliques (one per archetype)
+    const cliques = await ctx.db.query("cliques").first();
+    if (!cliques) {
+      await ctx.db.insert("cliques", { name: "Dropout Gang", archetype: "dropouts", description: "High-risk, high-reward chaos. Live fast, break things.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+      await ctx.db.insert("cliques", { name: "Honor Club", archetype: "preps", description: "Status and social warfare. Always be closing.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+      await ctx.db.insert("cliques", { name: "Geek Squad", archetype: "geeks", description: "Card draw and tech control. Outsmart the opposition.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+      await ctx.db.insert("cliques", { name: "Freak Show", archetype: "freaks", description: "Disruption and chaos. Make things weird.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+      await ctx.db.insert("cliques", { name: "Nerd Herd", archetype: "nerds", description: "Defensive control. The best defense is a good offense.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+      await ctx.db.insert("cliques", { name: "Goodie Two-Shoes", archetype: "goodies", description: "Attrition and grind. Never give an inch.", memberCount: 0, totalWins: 0, createdAt: Date.now() });
+    }
+
     return {
       cards: cardResult,
       decks: deckResult,

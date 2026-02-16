@@ -11,10 +11,14 @@ export default defineSchema(
       // String ID referencing a userDecks doc in the cards component.
       // Stored as string because host schema can't reference component table types.
       activeDeckId: v.optional(v.string()),
+      // Clique membership
+      cliqueId: v.optional(v.id("cliques")),
+      cliqueRole: v.optional(v.union(v.literal("member"), v.literal("leader"), v.literal("founder"))),
       createdAt: v.number(),
     })
       .index("by_privyId", ["privyId"])
-      .index("by_username", ["username"]),
+      .index("by_username", ["username"])
+      .index("by_clique", ["cliqueId"]),
 
     agents: defineTable({
       name: v.string(),
@@ -68,6 +72,18 @@ export default defineSchema(
     })
       .index("by_agent_day", ["agentId", "weekNumber", "dayOfWeek"])
       .index("by_userId", ["userId"]),
+
+    // Cliques - one per archetype
+    cliques: defineTable({
+      name: v.string(),           // e.g., "Honor Club"
+      archetype: v.string(),      // dropouts, preps, geeks, freaks, nerds, goodies
+      description: v.string(),
+      iconUrl: v.optional(v.string()),
+      memberCount: v.number(),
+      totalWins: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_archetype", ["archetype"]),
   },
   { schemaValidation: false },
 );

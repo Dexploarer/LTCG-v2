@@ -45,19 +45,29 @@ export function Onboarding() {
 
   const setUsernameMutation = useConvexMutation(apiAny.auth.setUsername);
   const selectStarterDeckMutation = useConvexMutation(apiAny.game.selectStarterDeck);
+  const getCliqueByArchetype = useConvexQuery(apiAny.cliques.getCliqueByArchetype, isAuthenticated ? {} : "skip");
+  const joinCliqueMutation = useConvexMutation(apiAny.cliques.joinClique);
   const starterDecks = useConvexQuery(apiAny.game.getStarterDecks, isAuthenticated ? {} : "skip") as
     | StarterDeck[]
     | undefined;
 
+  // Track selected deck archetype for clique step
+  const [selectedArchetype, setSelectedArchetype] = useState<string | null>(null);
+
   // Determine which step we're on based on onboarding status
   const needsUsername = onboardingStatus && !onboardingStatus.hasUsername;
   const needsDeck = onboardingStatus && onboardingStatus.hasUsername && !onboardingStatus.hasStarterDeck;
+  const needsClique = onboardingStatus && onboardingStatus.hasStarterDeck && selectedArchetype;
 
   const handleUsernameComplete = useCallback(() => {
     // onboardingStatus will reactively update
   }, []);
 
-  const handleDeckComplete = useCallback(() => {
+  const handleDeckComplete = useCallback((archetype: string) => {
+    setSelectedArchetype(archetype);
+  }, []);
+
+  const handleCliqueComplete = useCallback(() => {
     navigate(consumeRedirect() ?? "/");
   }, [navigate]);
 
@@ -96,7 +106,7 @@ export function Onboarding() {
             className="text-[#ffcc00] text-lg drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Special Elite, cursive" }}
           >
-            {needsUsername ? "Step 1 of 2: Choose your name" : "Step 2 of 2: Pick your deck"}
+            {needsUsername ? "Step 1 of 3: Choose your name" : needsDeck ? "Step 2 of 3: Pick your deck" : "Step 3 of 3: Join your clique"}
           </p>
         </div>
 
@@ -112,6 +122,15 @@ export function Onboarding() {
             decks={starterDecks}
             selectDeckMutation={selectStarterDeckMutation}
             onComplete={handleDeckComplete}
+          />
+        )}
+
+        {needsClique && (
+          <CliqueJoinStep
+            archetype={selectedArchetype!}
+            getCliqueByArchetype={getCliqueByArchetype}
+            joinCliqueMutation={joinCliqueMutation}
+            onComplete={handleCliqueComplete}
           />
         )}
       </div>
@@ -202,15 +221,17 @@ function UsernameStep({
 
 // ── Step 2: Deck Selection ────────────────────────────────────────
 
+interface DeckSelectionStepProps {
+  decks: StarterDeck[] | undefined;
+  selectDeckMutation: (args: { deckCode: string }) => Promise<{ deckId: string; cardCount: number }>;
+  onComplete: (archetype: string) => void;
+}
+
 function DeckSelectionStep({
   decks,
   selectDeckMutation,
   onComplete,
-}: {
-  decks: StarterDeck[] | undefined;
-  selectDeckMutation: (args: { deckCode: string }) => Promise<{ deckId: string; cardCount: number }>;
-  onComplete: () => void;
-}) {
+}: DeckSelectionStepProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -222,8 +243,9 @@ function DeckSelectionStep({
     setError("");
 
     try {
+      const deck = decks?.find((d) => d.deckCode === selected);
       await selectDeckMutation({ deckCode: selected });
-      onComplete();
+      onComplete(deck?.archetype ?? "dropouts");
     } catch (err: any) {
       Sentry.captureException(err);
       setError(err.message ?? "Failed to select deck.");
@@ -301,6 +323,104 @@ function DeckSelectionStep({
           className="tcg-button-primary px-10 py-4 text-xl uppercase disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? "Building deck..." : "Choose This Deck"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 3: Clique Join ──────────────────────────────────────────
+
+interface Clique {
+  _id: string;
+  name: string;
+  archetype: string;
+  description: string;
+  memberCount: number;
+}
+
+interface CliqueJoinStepProps {
+  archetype: string;
+  getCliqueByArchetype: Clique | null | undefined;
+  joinCliqueMutation: (args: { cliqueId: string }) => Promise<Clique>;
+  onComplete: () => void;
+}
+
+function CliqueJoinStep({
+  archetype,
+  getCliqueByArchetype,
+  joinCliqueMutation,
+  onComplete,
+}: CliqueJoinStepProps) {
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState("");
+
+  const clique = getCliqueByArchetype;
+  const color = ARCHETYPE_COLORS[archetype] ?? "#666";
+  const emoji = ARCHETYPE_EMOJI[archetype] ?? "\u{1F0CF}";
+
+  const handleJoin = async () => {
+    if (!clique) return;
+    setJoining(true);
+    setError("");
+    try {
+      await joinCliqueMutation({ cliqueId: clique._id });
+      onComplete();
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to join clique.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  if (!clique) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-8 h-8 border-4 border-[#ffcc00] border-t-transparent rounded-full animate-spin mx-auto" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="paper-panel p-8 md:p-12 mx-auto max-w-md text-center">
+      <div className="text-5xl mb-4">{emoji}</div>
+      <h2
+        className="text-3xl mb-4"
+        style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900, color }}
+      >
+        JOIN {clique.name.toUpperCase()}
+      </h2>
+      <p
+        className="text-[#666] mb-6"
+        style={{ fontFamily: "Special Elite, cursive" }}
+      >
+        {clique.description}
+      </p>
+      <p className="text-sm text-[#999] mb-8">
+        {clique.memberCount} members and counting
+      </p>
+
+      {error && (
+        <p className="text-red-600 text-sm font-bold uppercase mb-4">{error}</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={handleJoin}
+          disabled={joining}
+          className="tcg-button-primary px-8 py-3 text-lg uppercase disabled:opacity-50"
+          style={{ borderColor: color, boxShadow: `4px 4px 0px 0px ${color}` }}
+        >
+          {joining ? "Joining..." : `Join ${clique.name}`}
+        </button>
+        <button
+          type="button"
+          onClick={onComplete}
+          className="text-sm text-[#666] hover:text-[#333] transition-colors uppercase tracking-wide"
+        >
+          Skip for now
         </button>
       </div>
     </div>

@@ -22,6 +22,7 @@ const AgentDev = lazy(() => import("@/pages/AgentDev").then(m => ({ default: m.A
 const Leaderboard = lazy(() => import("@/pages/Leaderboard").then(m => ({ default: m.Leaderboard })));
 const Watch = lazy(() => import("@/pages/Watch").then(m => ({ default: m.Watch })));
 const DeckBuilder = lazy(() => import("@/pages/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
+const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cliques })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -113,6 +114,7 @@ export function App() {
         <Route path="/story/:chapterId" element={<Guarded><StoryChapter /></Guarded>} />
         <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
         <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
+        <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
         <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
       </SentryRoutes>
       <Toaster
