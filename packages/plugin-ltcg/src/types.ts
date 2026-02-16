@@ -175,10 +175,10 @@ export interface StarterDeck {
 
 /** Card in the player's hand (from PlayerView.hand) */
 export interface CardInHand {
-  instanceId: string;
   cardId?: string;
-  cardType: "stereotype" | "spell" | "trap";
-  name: string;
+  instanceId?: string;
+  cardType?: "monster" | "stereotype" | "spell" | "trap" | "effect";
+  name?: string;
   attack?: number;
   defense?: number;
   level?: number;
@@ -187,12 +187,25 @@ export interface CardInHand {
 
 /** Card on the game field */
 export interface BoardCard {
-  instanceId: string;
-  name: string;
-  attack: number;
-  defense: number;
+  cardId: string;
+  definitionId?: string;
+  instanceId?: string;
   position?: "attack" | "defense";
   faceDown?: boolean;
+  canAttack?: boolean;
+  hasAttackedThisTurn?: boolean;
+  changedPositionThisTurn?: boolean;
+  viceCounters?: number;
+  temporaryBoosts?: { attack?: number; defense?: number };
+  attack?: number;
+  defense?: number;
+  name?: string;
+}
+
+/** Small view for an active match request */
+export interface MatchActive {
+  matchId: string;
+  seat: "host" | "away";
 }
 
 /** GET /api/agent/game/view */
@@ -207,19 +220,25 @@ export interface PlayerView {
     | "breakdown_check"
     | "end";
   currentTurnPlayer: "host" | "away";
+  hand: Array<CardInHand>;
+  board?: BoardCard[];
+  opponentBoard?: BoardCard[];
+  spellTrapZone?: BoardCard[];
+  playerField?: {
+    monsters?: (BoardCard | null)[];
+    spellTraps?: (BoardCard | null)[];
+  };
+  opponentField?: {
+    monsters?: (BoardCard | null)[];
+    spellTraps?: (BoardCard | null)[];
+  };
+  currentChain?: Array<{ cardId?: string; [key: string]: unknown }>;
   players: {
     host: { lifePoints: number };
     away: { lifePoints: number };
   };
-  hand: CardInHand[];
-  playerField: {
-    monsters: (BoardCard | null)[];
-    spellTraps?: (unknown | null)[];
-  };
-  opponentField: {
-    monsters: (BoardCard | null)[];
-    spellTraps?: (unknown | null)[];
-  };
+  lifePoints?: number;
+  opponentLifePoints?: number;
 }
 
 /** GET /api/agent/game/match-status */
@@ -288,22 +307,23 @@ export interface StageCompletionResult {
 
 /** Commands sent via POST /api/agent/game/action */
 export type GameCommand =
-  | { type: "SUMMON"; cardInstanceId: string; position: "attack" | "defense" }
-  | { type: "SET_MONSTER"; cardInstanceId: string }
-  | { type: "ACTIVATE_SPELL"; cardInstanceId: string }
-  | { type: "ACTIVATE_TRAP"; cardInstanceId: string }
+  | { type: "SUMMON"; cardId: string; position: "attack" | "defense"; tributeCardIds?: string[] }
+  | { type: "SET_MONSTER"; cardId: string }
+  | { type: "SET_SPELL_TRAP"; cardId: string }
+  | { type: "ACTIVATE_SPELL"; cardId: string }
+  | { type: "ACTIVATE_TRAP"; cardId: string }
   | {
       type: "DECLARE_ATTACK";
-      attackerInstanceId: string;
-      targetInstanceId?: string;
+      attackerId: string;
+      targetId?: string;
     }
   | { type: "ADVANCE_PHASE" }
   | { type: "END_TURN" }
   | {
       type: "CHANGE_POSITION";
-      cardInstanceId: string;
-      newPosition: string;
+      cardId: string;
+      newPosition: "attack" | "defense";
     }
-  | { type: "FLIP_SUMMON"; cardInstanceId: string }
-  | { type: "CHAIN_RESPONSE"; responseType: string }
+  | { type: "FLIP_SUMMON"; cardId: string }
+  | { type: "CHAIN_RESPONSE"; cardId?: string; pass: boolean }
   | { type: "SURRENDER" };

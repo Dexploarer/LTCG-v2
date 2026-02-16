@@ -16,10 +16,9 @@ import type {
   MatchActive,
   PlayerView,
 } from "../types.js";
-import {
-  MAX_CHAIN_RESPONSE_ATTEMPTS,
-  MAX_MONSTER_ZONE_SIZE,
-} from "../../../shared/turnConstants";
+
+const MAX_CHAIN_RESPONSE_ATTEMPTS = 8;
+const MAX_MONSTER_ZONE_SIZE = 5;
 
 type BoardCardLike = BoardCard & { cardId?: string; instanceId?: string };
 

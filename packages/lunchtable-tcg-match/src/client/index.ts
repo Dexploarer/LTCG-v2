@@ -144,4 +144,31 @@ export class LTCGMatch {
       seat: args.seat,
     });
   }
+
+  /**
+   * Temporary compatibility shim for callers still invoking legacy joinMatch API.
+   * The current schema models lobby creation through createMatch() and does not
+   * expose a separate join flow, so we intentionally reject early with
+   * a clear error to prevent silent undefined behavior.
+   */
+  async joinMatch(
+    _ctx: RunMutationCtx,
+    _args: {
+      matchId: string;
+      awayId: string;
+      awayDeck: string[];
+    }
+  ) {
+    throw new Error("joinMatch API is deprecated. Use createMatch with both host/away payloads.");
+  }
+
+  /**
+   * Compatibility alias for legacy consumers expecting this query name.
+   */
+  async getOpenLobbyByHost(
+    ctx: RunQueryCtx,
+    args: { hostId: string }
+  ) {
+    return await this.getActiveMatchByHost(ctx, args);
+  }
 }

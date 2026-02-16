@@ -5,19 +5,19 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.ts",
       "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     },
     "./types": {
-      "types": "./src/types/index.ts",
+      "types": "./dist/types/index.d.ts",
       "import": "./src/types/index.ts",
-      "default": "./src/types/index.ts"
+      "default": "./dist/types/index.js"
     },
     "./rules": {
-      "types": "./src/rules/index.ts",
+      "types": "./dist/rules/index.d.ts",
       "import": "./src/rules/index.ts",
-      "default": "./src/rules/index.ts"
+      "default": "./dist/rules/index.js"
     }
   },
   "scripts": {
