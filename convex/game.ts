@@ -14,6 +14,15 @@ const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
 const story = new LTCGStory(components.lunchtable_tcg_story as any);
 
+const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
+const normalizeDeckId = (deckId: string | undefined): string | null => {
+  if (!deckId) return null;
+  const trimmed = deckId.trim();
+  if (!trimmed) return null;
+  if (RESERVED_DECK_IDS.has(trimmed.toLowerCase())) return null;
+  return trimmed;
+};
+
 // ── Card Queries ───────────────────────────────────────────────────
 
 export const getAllCards = query({
@@ -44,7 +53,11 @@ export const getUserDecks = query({
 
 export const getDeckWithCards = query({
   args: { deckId: v.string() },
-  handler: async (ctx, args) => cards.decks.getDeckWithCards(ctx, args.deckId),
+  handler: async (ctx, args) => {
+    const deckId = normalizeDeckId(args.deckId);
+    if (!deckId) return null;
+    return cards.decks.getDeckWithCards(ctx, deckId);
+  },
 });
 
 // ── Deck Mutations ─────────────────────────────────────────────────
@@ -69,8 +82,12 @@ export const setActiveDeck = mutation({
   args: { deckId: v.string() },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    await cards.decks.setActiveDeck(ctx, user._id, args.deckId);
-    await ctx.db.patch(user._id, { activeDeckId: args.deckId });
+    const deckId = normalizeDeckId(args.deckId);
+    if (!deckId) {
+      throw new Error("Invalid deck id");
+    }
+    await cards.decks.setActiveDeck(ctx, user._id, deckId);
+    await ctx.db.patch(user._id, { activeDeckId: deckId });
   },
 });
 
@@ -230,8 +247,9 @@ export const startStoryBattle = mutation({
     );
     if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
 
-    if (!user.activeDeckId) throw new Error("No active deck set");
-    const deckData = await cards.decks.getDeckWithCards(ctx, user.activeDeckId);
+    const deckId = normalizeDeckId(user.activeDeckId);
+    if (!deckId) throw new Error("No active deck set");
+    const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
     if (!deckData) throw new Error("Deck not found");
 
     const playerDeck: string[] = [];
@@ -284,7 +302,7 @@ export const startStoryBattle = mutation({
   },
 });
 
-function buildAIDeck(allCards: any[]): string[] {
+export function buildAIDeck(allCards: any[]): string[] {
   const active = (allCards ?? []).filter((c: any) => c.isActive);
   const stereotypes = active.filter((c: any) => c.cardType === "stereotype");
   const spells = active.filter((c: any) => c.cardType === "spell");
@@ -309,6 +327,20 @@ function buildAIDeck(allCards: any[]): string[] {
   return deck.slice(0, 40);
 }
 
+function resolveAICupSeat(meta: any): "host" | "away" | null {
+  if (!meta || !(meta as any)?.isAIOpponent) return null;
+  if ((meta as any)?.hostId === "cpu") return "host";
+  if ((meta as any)?.awayId === "cpu") return "away";
+  return null;
+}
+
+function resolveSeatForUser(meta: any, userId: string): "host" | "away" | null {
+  if (!meta || !userId) return null;
+  if ((meta as any)?.hostId === userId) return "host";
+  if ((meta as any)?.awayId === userId) return "away";
+  return null;
+}
+
 // ── Submit Action ──────────────────────────────────────────────────
 
 export const submitAction = mutation({
@@ -325,12 +357,18 @@ export const submitAction = mutation({
     });
 
     // Schedule AI turn only if: game is active, it's an AI match, and
-    // this was a host action that didn't end the game.
+    // this was the human action (i.e., not AI seat) that didn't end the game.
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-    if ((meta as any)?.status === "active" && (meta as any)?.isAIOpponent) {
+    const aiSeat = resolveAICupSeat(meta);
+    if (
+      (meta as any)?.status === "active" &&
+      aiSeat &&
+      (meta as any)?.isAIOpponent &&
+      args.seat !== aiSeat
+    ) {
       const events = JSON.parse(result.events);
       const gameOver = events.some((e: any) => e.type === "GAME_OVER");
-      if (!gameOver && args.seat === "host") {
+      if (!gameOver) {
         await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
           matchId: args.matchId,
         });
@@ -338,6 +376,23 @@ export const submitAction = mutation({
     }
 
     return result;
+  },
+});
+
+export const joinMatch = mutation({
+  args: {
+    matchId: v.string(),
+    awayId: v.string(),
+    awayDeck: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await match.joinMatch(ctx, {
+      matchId: args.matchId,
+      awayId: args.awayId,
+      awayDeck: args.awayDeck,
+    });
+    return null;
   },
 });
 
@@ -511,7 +566,8 @@ export const executeAITurn = internalMutation({
     // This prevents duplicate AI turns if the scheduler fires twice
     // (e.g., from rapid player actions or network retries).
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-    if ((meta as any)?.status !== "active") return;
+    const aiSeat = resolveAICupSeat(meta);
+    if ((meta as any)?.status !== "active" || !aiSeat) return;
 
     // Get all cards for card lookup
     const allCards = await cards.cards.getAllCards(ctx);
@@ -524,14 +580,14 @@ export const executeAITurn = internalMutation({
     for (let i = 0; i < 20; i++) {
       const viewJson = await match.getPlayerView(ctx, {
         matchId: args.matchId,
-        seat: "away",
+        seat: aiSeat,
       });
       if (!viewJson) return;
 
       const view = JSON.parse(viewJson);
 
       // Stop if game is over or no longer AI's turn
-      if (view.gameOver || view.currentTurnPlayer !== "away") return;
+      if (view.gameOver || view.currentTurnPlayer !== aiSeat) return;
 
       // Pick AI command
       const command = pickAICommand(view, cardLookup);
@@ -540,7 +596,7 @@ export const executeAITurn = internalMutation({
         await match.submitAction(ctx, {
           matchId: args.matchId,
           command: JSON.stringify(command),
-          seat: "away",
+          seat: aiSeat,
         });
       } catch {
         // Game ended or state changed between check and submit — safe to ignore
@@ -576,6 +632,13 @@ export const getRecentEvents = query({
 export const getActiveMatchByHost = query({
   args: { hostId: v.string() },
   handler: async (ctx, args) => match.getActiveMatchByHost(ctx, args),
+});
+
+export const getOpenLobbyByHost = query({
+  args: { hostId: v.string() },
+  handler: async (ctx, args) => {
+    return await match.getOpenLobbyByHost(ctx, args);
+  },
 });
 
 // ── Story Match Context ─────────────────────────────────────────────
@@ -654,19 +717,47 @@ export const completeStoryStage = mutation({
       throw new Error("Match is not ended yet");
     }
 
-    const won = (meta as any)?.winner === "host";
+    const winnerSeat = (meta as any)?.winner as "host" | "away" | null;
+    const storyPlayerSeat =
+      resolveSeatForUser(meta, storyMatch.userId) ?? "host";
+    let won = false;
+
+    if (winnerSeat) {
+      won = winnerSeat === storyPlayerSeat;
+    } else {
+      // Fallback when winner isn't set.
+      const fallbackViewJson = await match.getPlayerView(ctx, {
+        matchId: args.matchId,
+        seat: storyPlayerSeat,
+      });
+      if (fallbackViewJson) {
+        const view = JSON.parse(fallbackViewJson);
+        const myLife =
+          storyPlayerSeat === "host"
+            ? view.players?.host?.lifePoints
+            : view.players?.away?.lifePoints;
+        const oppLife =
+          storyPlayerSeat === "host"
+            ? view.players?.away?.lifePoints
+            : view.players?.host?.lifePoints;
+        won = (myLife ?? 0) > (oppLife ?? 0);
+      }
+    }
     const outcome = won ? "won" : "lost";
 
     // Get final LP for star calculation
     const viewJson = await match.getPlayerView(ctx, {
       matchId: args.matchId,
-      seat: "host",
+      seat: storyPlayerSeat,
     });
     let finalLP = 0;
     const maxLP = 8000;
     if (viewJson) {
       const view = JSON.parse(viewJson);
-      finalLP = view?.players?.host?.lifePoints ?? 0;
+      finalLP =
+        storyPlayerSeat === "host"
+          ? view?.players?.host?.lifePoints ?? 0
+          : view?.players?.away?.lifePoints ?? 0;
     }
 
     const starsEarned = calculateStars(won, finalLP, maxLP);

@@ -38,6 +38,7 @@ function StoryChapterInner() {
   const startBattle = useConvexMutation(apiAny.game.startStoryBattle);
   const [starting, setStarting] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const RESERVED_MATCH_IDS = new Set(["undefined", "null", "skip"]);
 
   const sorted = [...(stages ?? [])].sort((a, b) => a.stageNumber - b.stageNumber);
 
@@ -55,8 +56,17 @@ function StoryChapterInner() {
       // Battle transition
       pushEvents([{ type: "transition", variant: "battle-start" }]);
 
-      const result = await startBattle({ chapterId, stageNumber: stage.stageNumber });
-      navigate(`/play/${result.matchId}`);
+      const result = await startBattle({
+        chapterId,
+        stageNumber: stage.stageNumber,
+      }) as { matchId?: string };
+
+      const nextMatchId = typeof result?.matchId === "string" ? result.matchId.trim() : "";
+      if (!nextMatchId || RESERVED_MATCH_IDS.has(nextMatchId.toLowerCase())) {
+        throw new Error("No match ID was returned from the battle starter.");
+      }
+
+      navigate(`/play/${nextMatchId}`);
     } catch (err: any) {
       Sentry.captureException(err);
       setError(err.message ?? "Failed to start battle.");
