@@ -9,7 +9,7 @@ export type Command =
   | { type: "ACTIVATE_SPELL"; cardId: string; effectIndex?: number; targets?: string[] }
   | { type: "ACTIVATE_TRAP"; cardId: string; effectIndex?: number; targets?: string[] }
   | { type: "ACTIVATE_EFFECT"; cardId: string; effectIndex: number; targets?: string[] }
-  | { type: "DECLARE_ATTACK"; attackerId: string; targetId?: string }
+  | { type: "DECLARE_ATTACK"; attackerId: string; attackerSlot?: number; targetId?: string; targetSlot?: number }
   | { type: "ADVANCE_PHASE" }
   | { type: "END_TURN" }
   | {
