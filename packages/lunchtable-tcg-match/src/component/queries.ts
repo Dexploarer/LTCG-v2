@@ -132,6 +132,22 @@ export const getRecentEvents = query({
   },
 });
 
+export const getLatestSnapshotVersion = query({
+  args: {
+    matchId: v.id("matches"),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db
+      .query("matchSnapshots")
+      .withIndex("by_match_version", (q) => q.eq("matchId", args.matchId))
+      .order("desc")
+      .first();
+
+    return snapshot?.version ?? -1;
+  },
+});
+
 /**
  * Get the most recent active (or waiting) match where the given player is host or away.
  * Returns the match document or null if none found.

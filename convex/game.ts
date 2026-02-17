@@ -30,6 +30,30 @@ const normalizeDeckId = (deckId: string | undefined): string | null => {
 const normalizeDeckRecordId = (deckRecord?: { deckId?: string } | null) =>
   normalizeDeckId(deckRecord?.deckId);
 
+const buildDeterministicSeed = (seedInput: string): number => {
+  let hash = 2166136261;
+  for (let i = 0; i < seedInput.length; i++) {
+    hash ^= seedInput.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const makeRng = (seed: number) => {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const buildMatchSeed = (parts: Array<string | number | null | undefined>): number => {
+  const values = parts.map((value) => String(value ?? "")).join("|");
+  return buildDeterministicSeed(values);
+};
+
 const resolveDefaultStarterDeckCode = () => {
   const configured = STARTER_DECKS.find((deck) => DECK_RECIPES[deck.deckCode]);
   if (configured?.deckCode) return configured.deckCode;
@@ -623,6 +647,17 @@ export const startStoryBattle = mutation({
     const aiDeck = buildAIDeck(allCards);
 
     const cardLookup = buildCardLookup(allCards as any);
+    const seed = buildMatchSeed([
+      "story",
+      user._id,
+      "host",
+      args.chapterId,
+      stageNum,
+      playerDeck.length,
+      aiDeck.length,
+      playerDeck[0],
+      aiDeck[0],
+    ]);
 
     const initialState = createInitialState(
       cardLookup,
@@ -632,6 +667,7 @@ export const startStoryBattle = mutation({
       playerDeck,
       aiDeck,
       "host",
+      makeRng(seed),
     );
 
     const matchId = await match.createMatch(ctx, {
@@ -829,7 +865,7 @@ export const submitAction = mutation({
       args.seat !== aiSeat
     ) {
       const events = JSON.parse(result.events);
-      const gameOver = events.some((e: any) => e.type === "GAME_OVER");
+      const gameOver = events.some((e: any) => e.type === "GAME_ENDED");
       if (!gameOver) {
         await ctx.scheduler.runAfter(500, internal.game.executeAITurn, {
           matchId: args.matchId,

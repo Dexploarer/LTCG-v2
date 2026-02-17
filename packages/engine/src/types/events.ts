@@ -33,7 +33,7 @@ export type EngineEvent =
       field: "attack" | "defense";
       amount: number;
       source: string;
-      duration?: "turn" | "permanent";
+      expiresAt: "end_of_turn" | "end_of_next_turn" | "permanent";
     }
   | { type: "MODIFIER_EXPIRED"; cardId: string; source: string }
   | { type: "CHAIN_STARTED" }

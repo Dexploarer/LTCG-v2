@@ -4,6 +4,9 @@ import { expectDefined } from "../internal/invariant.js";
 
 export function checkStateBasedActions(state: GameState): EngineEvent[] {
   const events: EngineEvent[] = [];
+  if (state.gameOver) {
+    return events;
+  }
 
   // 1. LP win condition — if either player's LP <= 0, game ends
   if (state.hostLifePoints <= 0) {

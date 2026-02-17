@@ -47,6 +47,7 @@ export interface TemporaryModifier {
   amount: number;
   expiresAt: "end_of_turn" | "end_of_next_turn" | "permanent";
   source: string;
+  expiresOnTurn?: number;
 }
 
 export interface LingeringEffect {

@@ -140,16 +140,21 @@ export class LTCGClient {
     matchId: string,
     command: GameCommand,
     seat?: MatchActive["seat"],
+    expectedVersion?: number,
   ): Promise<unknown> {
     const resolvedSeat = seat ?? this.seat;
     const payload: {
       matchId: string;
       command: GameCommand;
       seat?: MatchActive["seat"];
+      expectedVersion?: number;
     } = { matchId, command };
 
     if (resolvedSeat) {
       payload.seat = resolvedSeat;
+    }
+    if (typeof expectedVersion === "number") {
+      payload.expectedVersion = expectedVersion;
     }
 
     return this.post("/api/agent/game/action", payload);

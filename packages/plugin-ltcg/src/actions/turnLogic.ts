@@ -19,6 +19,8 @@ import type {
 
 type BoardCardLike = BoardCard & { cardId?: string; instanceId?: string };
 
+const MAX_BOARD_SLOTS = 3;
+
 interface TurnSnapshot {
   phase: PlayerView["phase"];
   turnPlayer: "host" | "away";
@@ -155,7 +157,7 @@ export async function playOneTurn(
   const summonFromHand = async (ids: string[]): Promise<boolean> => {
     for (const cardId of ids) {
       const board = getBoard(currentView.value);
-      if (board.length >= 5) return false;
+      if (board.length >= MAX_BOARD_SLOTS) return false;
 
       const summoned = await submitAction(
         {

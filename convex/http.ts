@@ -377,10 +377,18 @@ corsRoute({
     if (!agent) return errorResponse("Unauthorized", 401);
 
     const body = await request.json();
-    const { matchId, command, seat: requestedSeat } = body;
+    const {
+      matchId,
+      command,
+      seat: requestedSeat,
+      expectedVersion,
+    } = body;
 
     if (!matchId || !command) {
       return errorResponse("matchId and command are required.");
+    }
+    if (expectedVersion !== undefined && typeof expectedVersion !== "number") {
+      return errorResponse("expectedVersion must be a number.");
     }
 
     let resolvedSeat: MatchSeat;
@@ -417,6 +425,8 @@ corsRoute({
         matchId,
         command: JSON.stringify(normalizedCommand),
         seat: resolvedSeat,
+        expectedVersion:
+          typeof expectedVersion === "number" ? Number(expectedVersion) : undefined,
       });
       return jsonResponse(result);
     } catch (e: any) {

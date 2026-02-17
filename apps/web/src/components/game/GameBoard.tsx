@@ -17,6 +17,9 @@ import { GameMotionOverlay } from "./GameMotionOverlay";
 import { AnimatePresence } from "framer-motion";
 import type { Phase } from "./types";
 
+const MAX_BOARD_SLOTS = 3;
+const MAX_SPELL_TRAP_SLOTS = 3;
+
 interface GameBoardProps {
   matchId: string;
   seat: Seat;
@@ -42,8 +45,9 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
     isLoading,
     notFound,
     openPrompt,
+    latestSnapshotVersion,
   } = useGameState(matchId, seat);
-  const actions = useGameActions(matchId, seat);
+  const actions = useGameActions(matchId, seat, latestSnapshotVersion);
   const endSfxPlayedRef = useRef(false);
   const matchEndNotifiedRef = useRef(false);
   const pendingMatchEndRef = useRef(onMatchEnd);
@@ -418,12 +422,12 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
           <FieldRow
             cards={opponentBoard}
             cardLookup={cardLookup}
-            maxSlots={5}
+            maxSlots={MAX_BOARD_SLOTS}
             reversed
           />
           {/* Spell/Trap row — cast to BoardCard-like shape */}
           <div className="flex gap-1 justify-center">
-            {Array.from({ length: 5 }).map((_, i) => {
+            {Array.from({ length: MAX_SPELL_TRAP_SLOTS }).map((_, i) => {
               const st = opponentSpellTraps[i];
               return (
                 <div
@@ -456,13 +460,13 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
           <FieldRow
             cards={playerBoard}
             cardLookup={cardLookup}
-            maxSlots={5}
+            maxSlots={MAX_BOARD_SLOTS}
             highlightIds={new Set([...attackableIds, ...flipSummonIds])}
             onSlotClick={handleBoardCardClick}
           />
           {/* Spell/Trap row */}
           <div className="flex gap-1 justify-center">
-            {Array.from({ length: 5 }).map((_, i) => {
+            {Array.from({ length: MAX_SPELL_TRAP_SLOTS }).map((_, i) => {
               const st = playerSpellTraps[i];
               return (
                 <div
