@@ -344,6 +344,32 @@ corsRoute({
 });
 
 corsRoute({
+  path: "/api/agent/game/join",
+  method: "POST",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
+
+    const body = await request.json();
+    const { matchId } = body;
+
+    if (!matchId || typeof matchId !== "string") {
+      return errorResponse("matchId is required.");
+    }
+
+    try {
+      const result = await ctx.runMutation(api.agentAuth.agentJoinMatch, {
+        agentUserId: agent.userId,
+        matchId,
+      });
+      return jsonResponse(result);
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+  },
+});
+
+corsRoute({
   path: "/api/agent/game/action",
   method: "POST",
   handler: async (ctx, request) => {
@@ -546,6 +572,7 @@ corsRoute({
     try {
       const result = await ctx.runMutation(api.game.completeStoryStage, {
         matchId,
+        actorUserId: agent.userId,
       });
       return jsonResponse(result);
     } catch (e: any) {

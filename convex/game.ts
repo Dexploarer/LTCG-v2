@@ -415,6 +415,210 @@ export function findStageByNumber(stages: any, stageNumber: number) {
   return (stages as any[])?.find((s: any) => s.stageNumber === stageNumber);
 }
 
+function compareStoryChaptersByOrder(a: any, b: any) {
+  const actDelta = (a?.actNumber ?? 0) - (b?.actNumber ?? 0);
+  if (actDelta !== 0) return actDelta;
+  return (a?.chapterNumber ?? 0) - (b?.chapterNumber ?? 0);
+}
+
+function isChapterProgressCompleted(entry: any) {
+  if (!entry) return false;
+  if (entry.status === "starred" || entry.status === "completed") return true;
+  return Number(entry.timesCompleted ?? 0) > 0;
+}
+
+function isStageProgressCompleted(entry: any) {
+  if (!entry) return false;
+  if (entry.status === "starred" || entry.status === "completed") return true;
+  return Number(entry.timesCompleted ?? 0) > 0;
+}
+
+function resolveStoryLevelFromProgress(progress: any[]) {
+  let maxCompletedAct = 0;
+  for (const entry of progress ?? []) {
+    if (!isChapterProgressCompleted(entry)) continue;
+    const actNumber = Number(entry.actNumber ?? 0);
+    if (!Number.isFinite(actNumber) || actNumber < 0) continue;
+    maxCompletedAct = Math.max(maxCompletedAct, actNumber);
+  }
+
+  // Acts start at 1; derive a small, stable player level fallback.
+  return Math.max(1, maxCompletedAct + 1);
+}
+
+export function normalizeFirstClearBonus(rawBonus: unknown): number {
+  if (typeof rawBonus === "number") return Number.isFinite(rawBonus) ? rawBonus : 0;
+  if (!rawBonus || typeof rawBonus !== "object") return 0;
+  const typedBonus = rawBonus as {
+    gold?: number;
+    xp?: number;
+    gems?: number;
+  };
+  const gold = Number(typedBonus.gold ?? 0);
+  const xp = Number(typedBonus.xp ?? 0);
+  const gems = Number(typedBonus.gems ?? 0);
+  const total = gold + xp + gems;
+  return Number.isFinite(total) ? total : 0;
+}
+
+const STORY_DEFAULT_DIFFICULTY = "normal" as const;
+
+export async function assertStoryStageUnlocked(
+  ctx: any,
+  userId: string,
+  chapterId: string,
+  stageNumber: number,
+) {
+  const chapter = await story.chapters.getChapter(ctx, { chapterId: chapterId as any });
+  if (!chapter) {
+    throw new Error("Chapter not found");
+  }
+
+  const stages = await story.stages.getStages(ctx, chapterId);
+  const stage = findStageByNumber(stages, stageNumber);
+  if (!stage) {
+    throw new Error(`Stage ${stageNumber} not found in chapter`);
+  }
+
+  const allChapters = await story.chapters.getChapters(ctx, { status: "published" });
+  const sortedChapters = [...(allChapters ?? [])].sort(compareStoryChaptersByOrder);
+  const chapterIndex = sortedChapters.findIndex((item: any) => item?._id === chapterId);
+  if (chapterIndex === -1) {
+    throw new Error("Chapter is not available");
+  }
+
+  const unlockRequirements = chapter.unlockRequirements ?? {};
+  if (typeof unlockRequirements.minimumLevel === "number") {
+    const progress = await story.progress.getProgress(ctx, userId);
+    const playerLevel = resolveStoryLevelFromProgress(progress ?? []);
+    if (playerLevel < unlockRequirements.minimumLevel) {
+      throw new Error(
+        `Minimum level ${unlockRequirements.minimumLevel} is required to access this chapter.`,
+      );
+    }
+  }
+
+  if (unlockRequirements.previousChapter || unlockRequirements.requiredChapterId) {
+    let requiredChapterId =
+      unlockRequirements.requiredChapterId?.trim?.() ??
+      (unlockRequirements.previousChapter && chapterIndex > 0 ? sortedChapters[chapterIndex - 1]?._id : "");
+
+    if (requiredChapterId) {
+      const requiredChapter = await story.chapters.getChapter(ctx, {
+        chapterId: requiredChapterId,
+      });
+      if (!requiredChapter) {
+        throw new Error("Required chapter not found");
+      }
+
+      const requiredChapterProgress = await story.progress.getChapterProgress(ctx, {
+        userId,
+        actNumber: requiredChapter.actNumber ?? 0,
+        chapterNumber: requiredChapter.chapterNumber ?? 0,
+      });
+      if (!isChapterProgressCompleted(requiredChapterProgress)) {
+        throw new Error("Previous chapter must be completed first");
+      }
+    }
+  }
+
+  if (stageNumber > 1) {
+    const previousStage = findStageByNumber(stages, stageNumber - 1);
+    if (!previousStage) {
+      throw new Error(`Previous stage ${stageNumber - 1} not found in chapter`);
+    }
+
+    const previousProgress = await story.progress.getStageProgress(
+      ctx,
+      userId,
+      previousStage._id,
+    );
+    if (!isStageProgressCompleted(previousProgress)) {
+      throw new Error(`Stage ${stageNumber - 1} must be cleared first`);
+    }
+  }
+
+  const existingProgress = await story.progress.getChapterProgress(ctx, {
+    userId,
+    actNumber: chapter.actNumber ?? 0,
+    chapterNumber: chapter.chapterNumber ?? 0,
+  });
+
+  await story.progress.upsertProgress(ctx, {
+    userId,
+    actNumber: chapter.actNumber ?? 0,
+    chapterNumber: chapter.chapterNumber ?? 0,
+    difficulty: STORY_DEFAULT_DIFFICULTY,
+    status: existingProgress?.status === "completed" ? "completed" : "in_progress",
+    starsEarned: existingProgress?.starsEarned ?? 0,
+    timesAttempted: (existingProgress?.timesAttempted ?? 0) + 1,
+    timesCompleted: existingProgress?.timesCompleted ?? 0,
+    firstCompletedAt: existingProgress?.firstCompletedAt,
+    lastAttemptedAt: Date.now(),
+    bestScore: existingProgress?.bestScore,
+  });
+
+  return { chapter, stage, stages };
+}
+
+async function markStoryChapterProgress(
+  ctx: any,
+  userId: string,
+  chapter: any,
+  isCompleted: boolean,
+) {
+  const existingProgress = await story.progress.getChapterProgress(ctx, {
+    userId,
+    actNumber: chapter.actNumber ?? 0,
+    chapterNumber: chapter.chapterNumber ?? 0,
+  });
+
+  const newStatus = isCompleted
+    ? "completed"
+    : existingProgress?.status === "completed"
+      ? "completed"
+      : existingProgress?.status === "in_progress"
+        ? "in_progress"
+        : "available";
+
+  const nextTimesCompleted = (existingProgress?.timesCompleted ?? 0) + (isCompleted ? 1 : 0);
+  const starsEarned = isCompleted
+    ? Number(existingProgress?.starsEarned ?? 0)
+    : Number(existingProgress?.starsEarned ?? 0);
+
+  await story.progress.upsertProgress(ctx, {
+    userId,
+    actNumber: chapter.actNumber ?? 0,
+    chapterNumber: chapter.chapterNumber ?? 0,
+    difficulty: STORY_DEFAULT_DIFFICULTY,
+    status: newStatus,
+    starsEarned,
+    timesAttempted: (existingProgress?.timesAttempted ?? 0),
+    timesCompleted: nextTimesCompleted,
+    firstCompletedAt:
+      existingProgress?.firstCompletedAt ?? (isCompleted ? Date.now() : undefined),
+    lastAttemptedAt: Date.now(),
+    bestScore: existingProgress?.bestScore,
+  });
+}
+
+async function updateCompletedChapterProgress(ctx: any, userId: string, chapterId: string, chapter: any) {
+  const stages = await story.stages.getStages(ctx, chapterId);
+  let allCleared = false;
+  if (!Array.isArray(stages) || stages.length === 0) {
+    allCleared = true;
+  } else {
+    const clearChecks = await Promise.all(
+      stages.map((stageRow: any) =>
+        story.progress.getStageProgress(ctx, userId, stageRow._id),
+      ),
+    );
+    allCleared = clearChecks.every(isStageProgressCompleted);
+  }
+
+  await markStoryChapterProgress(ctx, userId, chapter, allCleared);
+}
+
 // ── Start Story Battle ─────────────────────────────────────────────
 
 export const startStoryBattle = mutation({
@@ -425,11 +629,12 @@ export const startStoryBattle = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const stageNum = args.stageNumber ?? 1;
-
-    // Resolve the stage to get its _id for progress tracking
-    const stages = await story.stages.getStages(ctx, args.chapterId);
-    const stage = findStageByNumber(stages, stageNum);
-    if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
+    const { stage } = await assertStoryStageUnlocked(
+      ctx,
+      user._id,
+      args.chapterId,
+      stageNum,
+    );
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
@@ -475,6 +680,104 @@ export const startStoryBattle = mutation({
     });
 
     return { matchId, chapterId: args.chapterId, stageNumber: stageNum };
+  },
+});
+
+export const startStoryBattleForAgent = mutation({
+  args: {
+    chapterId: v.string(),
+    stageNumber: v.optional(v.number()),
+  },
+  returns: v.object({
+    matchId: v.string(),
+    chapterId: v.string(),
+    stageNumber: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const stageNum = args.stageNumber ?? 1;
+    const { stage } = await assertStoryStageUnlocked(
+      ctx,
+      user._id,
+      args.chapterId,
+      stageNum,
+    );
+
+    const existingLobby = await match.getOpenLobbyByHost(ctx, { hostId: user._id });
+    if (existingLobby) {
+      throw new Error("You already have an open waiting match. Finish or cancel it first.");
+    }
+
+    const { deckData } = await resolveActiveDeckForStory(ctx, user);
+    const playerDeck = getDeckCardIdsFromDeckData(deckData);
+    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+
+    const matchId = await match.createMatch(ctx, {
+      hostId: user._id,
+      awayId: null,
+      mode: "story",
+      hostDeck: playerDeck,
+      isAIOpponent: false,
+    });
+
+    await ctx.db.insert("storyMatches", {
+      matchId,
+      userId: user._id,
+      chapterId: args.chapterId,
+      stageNumber: stageNum,
+      stageId: stage._id,
+    });
+
+    return { matchId, chapterId: args.chapterId, stageNumber: stageNum };
+  },
+});
+
+export const cancelWaitingStoryMatch = mutation({
+  args: { matchId: v.string() },
+  returns: v.object({
+    matchId: v.string(),
+    canceled: v.boolean(),
+    status: v.literal("ended"),
+    outcome: v.union(v.literal("abandoned"), v.literal("none")),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+
+    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
+    if (!meta) {
+      throw new Error("Match not found.");
+    }
+
+    if (meta.hostId !== user._id) {
+      throw new Error("You are not the host of this match.");
+    }
+
+    if ((meta as any).status !== "waiting") {
+      throw new Error(`Match is not cancellable (status: ${(meta as any).status}).`);
+    }
+
+    if ((meta as any).awayId !== null) {
+      throw new Error("Cannot cancel match after an away player has joined.");
+    }
+
+    await ctx.db.patch(meta._id, {
+      status: "ended",
+      endReason: "host_canceled",
+      endedAt: Date.now(),
+    });
+
+    const storyMatch = await ctx.db
+      .query("storyMatches")
+      .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
+      .first();
+    if (storyMatch && !storyMatch.outcome) {
+      await ctx.db.patch(storyMatch._id, {
+        outcome: "abandoned",
+        completedAt: Date.now(),
+      });
+    }
+
+    return { matchId: args.matchId, canceled: true, status: "ended", outcome: "abandoned" };
   },
 });
 
@@ -864,8 +1167,13 @@ export const getStoryMatchContext = query({
     if (!doc) return null;
 
     // Load the stage data for dialogue and reward info
-    const stages = await story.stages.getStages(ctx, doc.chapterId);
-    const stage = findStageByNumber(stages, doc.stageNumber);
+    let stage = doc.stageId
+      ? await story.stages.getStage(ctx, { stageId: doc.stageId as any })
+      : null;
+    if (!stage) {
+      const stages = await story.stages.getStages(ctx, doc.chapterId);
+      stage = findStageByNumber(stages, doc.stageNumber);
+    }
 
     return {
       matchId: doc.matchId,
@@ -877,7 +1185,8 @@ export const getStoryMatchContext = query({
       starsEarned: doc.starsEarned ?? null,
       rewardsGold: stage?.rewardGold ?? 0,
       rewardsXp: stage?.rewardXp ?? 0,
-      firstClearBonus: stage?.firstClearBonus ?? 0,
+      firstClearBonus: normalizeFirstClearBonus(stage?.firstClearBonus),
+      preMatchDialogue: stage?.preMatchDialogue ?? [],
       opponentName: stage?.opponentName ?? "Opponent",
       postMatchWinDialogue: stage?.postMatchWinDialogue ?? [],
       postMatchLoseDialogue: stage?.postMatchLoseDialogue ?? [],
@@ -896,9 +1205,18 @@ function calculateStars(won: boolean, finalLP: number, maxLP: number): number {
 }
 
 export const completeStoryStage = mutation({
-  args: { matchId: v.string() },
+  args: {
+    matchId: v.string(),
+    actorUserId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const requester = args.actorUserId
+      ? await ctx.db.get(args.actorUserId)
+      : await requireUser(ctx);
+
+    if (!requester) {
+      throw new Error("User not found.");
+    }
 
     // Look up story context
     const storyMatch = await ctx.db
@@ -906,7 +1224,15 @@ export const completeStoryStage = mutation({
       .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
       .first();
     if (!storyMatch) throw new Error("Not a story match");
-    if (storyMatch.userId !== user._id) throw new Error("Not your match");
+
+    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
+    if (!meta) throw new Error("Match metadata not found");
+    const requesterSeat = resolveSeatForUser(meta, requester._id);
+    if (storyMatch.userId !== requester._id && !requesterSeat) {
+      throw new Error("Not your match");
+    }
+
+    const progressOwnerId = storyMatch.userId;
 
     // Already completed — return cached result
     if (storyMatch.outcome) {
@@ -922,7 +1248,6 @@ export const completeStoryStage = mutation({
     }
 
     // Verify match is ended
-    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     if ((meta as any)?.status !== "ended") {
       throw new Error("Match is not ended yet");
     }
@@ -975,44 +1300,133 @@ export const completeStoryStage = mutation({
     // Look up stage for rewards
     const stages = await story.stages.getStages(ctx, storyMatch.chapterId);
     const stage = findStageByNumber(stages, storyMatch.stageNumber);
+    if (!stage) {
+      throw new Error("Stage not found");
+    }
 
-    const rewardGold = won ? (stage?.rewardGold ?? 0) : 0;
-    const rewardXp = won ? (stage?.rewardXp ?? 0) : 0;
+    const rewardGold = won ? (stage.rewardGold ?? 0) : 0;
+    const rewardXp = won ? (stage.rewardXp ?? 0) : 0;
 
-    // Check if this is first clear for bonus
-    const existingProgress = await story.progress.getStageProgress(
-      ctx,
-      user._id,
-      storyMatch.stageId,
-    );
-    const isFirstClear =
-      won && !(existingProgress as any[])?.some(
-        (p: any) => p.stageId === storyMatch.stageId && p.timesCompleted > 0,
-      );
-    const firstClearBonus = isFirstClear ? (stage?.firstClearBonus ?? 0) : 0;
+    const chapter = await story.chapters.getChapter(ctx, {
+      chapterId: storyMatch.chapterId as any,
+    });
+    if (!chapter) {
+      throw new Error("Chapter not found");
+    }
 
-    // Record stage progress in story component
+    const chapterProgress = await story.progress.getChapterProgress(ctx, {
+      userId: progressOwnerId,
+      actNumber: chapter.actNumber ?? 0,
+      chapterNumber: chapter.chapterNumber ?? 0,
+    });
+    const chapterProgressId =
+      chapterProgress?._id ??
+      (await story.progress.upsertProgress(ctx, {
+        userId: progressOwnerId,
+        actNumber: chapter.actNumber ?? 0,
+        chapterNumber: chapter.chapterNumber ?? 0,
+        difficulty: STORY_DEFAULT_DIFFICULTY,
+        status: "available",
+        starsEarned: 0,
+        timesAttempted: 1,
+        timesCompleted: 0,
+        firstCompletedAt: undefined,
+        lastAttemptedAt: Date.now(),
+      }));
+    if (!chapterProgressId) {
+      throw new Error("Unable to create chapter progress");
+    }
+
     if (won) {
+      const existingProgress = await story.progress.getStageProgress(
+        ctx,
+        progressOwnerId,
+        storyMatch.stageId,
+      );
+      const prevTimesCompleted = Number(existingProgress?.timesCompleted ?? 0);
+      const prevStarsEarned = Number(existingProgress?.starsEarned ?? 0);
+      const prevFirstClearClaimed = Boolean(existingProgress?.firstClearClaimed ?? false);
+      const isFirstClear = prevTimesCompleted === 0;
+      const firstClearBonus = isFirstClear ? normalizeFirstClearBonus(stage.firstClearBonus) : 0;
+      const nextStatus =
+        existingProgress?.status === "starred" || starsEarned >= 3
+          ? "starred"
+          : "completed";
+      const nextStarsEarned = Math.max(prevStarsEarned, starsEarned);
+
       await story.progress.upsertStageProgress(ctx, {
-        userId: user._id,
+        userId: progressOwnerId,
         stageId: storyMatch.stageId,
         chapterId: storyMatch.chapterId,
         stageNumber: storyMatch.stageNumber,
-        status: starsEarned >= 3 ? "starred" : "completed",
-        starsEarned,
-        timesCompleted: 1,
-        firstClearClaimed: isFirstClear,
+        status: nextStatus,
+        starsEarned: nextStarsEarned,
+        timesCompleted: prevTimesCompleted + 1,
+        firstClearClaimed: isFirstClear || prevFirstClearClaimed,
         lastCompletedAt: Date.now(),
+      });
+      if (chapter) {
+        await updateCompletedChapterProgress(ctx, progressOwnerId, storyMatch.chapterId, chapter);
+      }
+
+      await story.progress.recordBattleAttempt(ctx, {
+        userId: progressOwnerId,
+        progressId: chapterProgressId,
+        actNumber: chapter.actNumber ?? 0,
+        chapterNumber: chapter.chapterNumber ?? 0,
+        difficulty: STORY_DEFAULT_DIFFICULTY,
+        outcome: "won",
+        starsEarned: nextStarsEarned,
+        finalLP,
+        rewardsEarned: {
+          gold: rewardGold,
+          xp: rewardXp,
+          cards: [],
+        },
+      });
+
+      await ctx.db.patch(storyMatch._id, {
+        outcome: outcome as "won" | "lost",
+        starsEarned,
+        rewardsGold: rewardGold,
+        rewardsXp: rewardXp,
+        firstClearBonus,
+        completedAt: Date.now(),
+      });
+
+      return {
+        outcome,
+        starsEarned,
+        rewards: {
+          gold: rewardGold,
+          xp: rewardXp,
+          firstClearBonus,
+        },
+      };
+    } else {
+      await story.progress.recordBattleAttempt(ctx, {
+        userId: progressOwnerId,
+        progressId: chapterProgressId,
+        actNumber: chapter.actNumber ?? 0,
+        chapterNumber: chapter.chapterNumber ?? 0,
+        difficulty: STORY_DEFAULT_DIFFICULTY,
+        outcome: "lost",
+        starsEarned: 0,
+        finalLP,
+        rewardsEarned: {
+          gold: 0,
+          xp: 0,
+          cards: [],
+        },
       });
     }
 
-    // Update host-layer record with results
     await ctx.db.patch(storyMatch._id, {
       outcome: outcome as "won" | "lost",
       starsEarned,
       rewardsGold: rewardGold,
       rewardsXp: rewardXp,
-      firstClearBonus,
+      firstClearBonus: 0,
       completedAt: Date.now(),
     });
 
@@ -1022,7 +1436,7 @@ export const completeStoryStage = mutation({
       rewards: {
         gold: rewardGold,
         xp: rewardXp,
-        firstClearBonus,
+        firstClearBonus: 0,
       },
     };
   },

@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — Convex generated types resolve at runtime via Vite
-import { api } from "../../../../convex/_generated/api";
+import { api } from "@convex-generated-api";
 import { useMutation, useQuery, useAction } from "convex/react";
 
 /**

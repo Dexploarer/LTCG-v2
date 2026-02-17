@@ -173,6 +173,12 @@ export interface StarterDeck {
   description?: string;
 }
 
+export interface DialogueLine {
+  speaker: string;
+  text: string;
+  avatar?: string;
+}
+
 /** Card identifier in the player's hand (from PlayerView.hand). */
 export type CardInHand = string;
 
@@ -273,6 +279,13 @@ export interface MatchActive {
   seat?: "host" | "away";
 }
 
+export interface MatchJoinResult {
+  matchId: string;
+  hostId: string;
+  mode: "pvp" | "story";
+  seat: "away";
+}
+
 // ── Story Mode Types ─────────────────────────────────────────────
 
 /** Stage progress for a single stage */
@@ -306,9 +319,9 @@ export interface StageData {
   rewardXp?: number;
   firstClearBonus?: number;
   narrative: {
-    preMatchDialogue: string[];
-    postMatchWinDialogue: string[];
-    postMatchLoseDialogue: string[];
+    preMatchDialogue: DialogueLine[];
+    postMatchWinDialogue: DialogueLine[];
+    postMatchLoseDialogue: DialogueLine[];
   };
 }
 

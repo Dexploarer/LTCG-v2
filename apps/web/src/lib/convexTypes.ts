@@ -8,7 +8,7 @@ export type MatchMeta = {
   _creationTime: number;
   hostId: string;
   awayId: string | null;
-  mode: MatchStatus;
+  mode: MatchMode;
   status: MatchStatus;
   winner?: Seat | null;
   endReason?: string;
@@ -32,8 +32,8 @@ export type StoryMatchContext = {
   rewardsXp: number;
   firstClearBonus: number;
   opponentName: string;
-  postMatchWinDialogue: string[];
-  postMatchLoseDialogue: string[];
+  postMatchWinDialogue: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchLoseDialogue: Array<{ speaker: string; text: string; avatar?: string }>;
 };
 
 export type MatchEventBatch = {
@@ -142,9 +142,9 @@ export type StoryChapterStage = {
   description: string;
   opponentName?: string;
   difficulty?: string;
-  preMatchDialogue?: string[];
-  postMatchWinDialogue?: string[];
-  postMatchLoseDialogue?: string[];
+  preMatchDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchWinDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
+  postMatchLoseDialogue?: Array<{ speaker: string; text: string; avatar?: string }>;
   rewardGold?: number;
   rewardXp?: number;
   firstClearBonus?: number;

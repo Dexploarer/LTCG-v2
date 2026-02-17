@@ -14,7 +14,7 @@ import { AttackTargetSelector } from "./AttackTargetSelector";
 import { GraveyardBrowser } from "./GraveyardBrowser";
 import { GameOverOverlay } from "./GameOverOverlay";
 import { AnimatePresence } from "framer-motion";
-import type { Phase } from "@lunchtable-tcg/engine";
+import type { Phase } from "./types";
 
 interface GameBoardProps {
   matchId: string;

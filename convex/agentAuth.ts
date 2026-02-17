@@ -3,19 +3,17 @@ import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
 import { LTCGCards } from "@lunchtable-tcg/cards";
 import { LTCGMatch } from "@lunchtable-tcg/match";
-import { LTCGStory } from "@lunchtable-tcg/story";
 import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable-tcg/engine";
 import { DECK_RECIPES } from "./cardData";
 import {
   buildAIDeck,
-  findStageByNumber,
+  assertStoryStageUnlocked,
   getDeckCardIdsFromDeckData,
   resolveActiveDeckForStory,
 } from "./game";
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
-const story = new LTCGStory(components.lunchtable_tcg_story as any);
 
 // ── Agent Queries ─────────────────────────────────────────────────
 
@@ -70,11 +68,12 @@ export const agentStartBattle = mutation({
     const user = await ctx.db.get(args.agentUserId);
     if (!user) throw new Error("Agent user not found");
     const stageNum = args.stageNumber ?? 1;
-
-    // Resolve stage to get stageId for progress tracking
-    const stages = await story.stages.getStages(ctx, args.chapterId);
-    const stage = findStageByNumber(stages, stageNum);
-    if (!stage) throw new Error(`Stage ${stageNum} not found in chapter`);
+    const { stage } = await assertStoryStageUnlocked(
+      ctx,
+      user._id,
+      args.chapterId,
+      stageNum,
+    );
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
@@ -186,6 +185,88 @@ export const agentStartDuel = mutation({
     });
 
     return { matchId };
+  },
+});
+
+export const agentJoinMatch = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    matchId: v.string(),
+  },
+  returns: v.object({
+    matchId: v.string(),
+    hostId: v.string(),
+    mode: v.union(v.literal("pvp"), v.literal("story")),
+    seat: v.literal("away"),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new Error("Agent user not found");
+
+    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
+    if (!meta) throw new Error("Match not found");
+
+    if ((meta as any).isAIOpponent) {
+      throw new Error("Cannot join a match configured for built-in CPU opponent.");
+    }
+    if ((meta as any).status !== "waiting") {
+      throw new Error(`Match ${args.matchId} is not waiting (current status: ${(meta as any).status ?? "unknown"}).`);
+    }
+    if ((meta as any).awayId !== null) {
+      throw new Error(`Match ${args.matchId} already has an away player.`);
+    }
+
+    const hostId = (meta as any).hostId;
+    if (!hostId) {
+      throw new Error("Match is missing a host player.");
+    }
+    if (hostId === args.agentUserId) {
+      throw new Error("Cannot join your own match as away player.");
+    }
+
+    const hostDeck = (meta as any).hostDeck;
+    if (!Array.isArray(hostDeck) || hostDeck.length < 30) {
+      throw new Error("Host deck is invalid or too small.");
+    }
+
+    const { deckData } = await resolveActiveDeckForStory(ctx, user);
+    const awayDeck = getDeckCardIdsFromDeckData(deckData);
+    if (!Array.isArray(awayDeck) || awayDeck.length < 30) {
+      throw new Error("Your deck must have at least 30 cards.");
+    }
+
+    const allCards = await cards.cards.getAllCards(ctx);
+    const cardLookup = buildCardLookup(allCards as any);
+
+    const firstPlayer: "host" | "away" = Math.random() < 0.5 ? "host" : "away";
+
+    const initialState = createInitialState(
+      cardLookup,
+      DEFAULT_CONFIG,
+      hostId,
+      args.agentUserId,
+      hostDeck,
+      awayDeck,
+      firstPlayer,
+    );
+
+    await match.joinMatch(ctx, {
+      matchId: args.matchId,
+      awayId: args.agentUserId,
+      awayDeck,
+    });
+
+    await match.startMatch(ctx, {
+      matchId: args.matchId,
+      initialState: JSON.stringify(initialState),
+    });
+
+    return {
+      matchId: args.matchId,
+      hostId,
+      mode: (meta as any).mode as "pvp" | "story",
+      seat: "away",
+    };
   },
 });
 
