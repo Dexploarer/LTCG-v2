@@ -93,7 +93,7 @@ export function deriveValidActions(params: {
     }
 
     for (const boardCard of board) {
-      if (boardCard.faceDown && boardCard.turnSummoned < view.turnNumber) {
+      if (boardCard.faceDown && (boardCard.turnSummoned ?? 0) < view.turnNumber) {
         va.canFlipSummon.add(boardCard.cardId);
       }
     }

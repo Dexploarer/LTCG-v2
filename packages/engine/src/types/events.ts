@@ -16,7 +16,13 @@ export type EngineEvent =
   | { type: "SPELL_ACTIVATED"; seat: Seat; cardId: string; targets: string[] }
   | { type: "TRAP_ACTIVATED"; seat: Seat; cardId: string; targets: string[] }
   | { type: "EFFECT_ACTIVATED"; seat: Seat; cardId: string; effectIndex: number; targets: string[] }
-  | { type: "ATTACK_DECLARED"; seat: Seat; attackerId: string; targetId: string | null }
+  | {
+      type: "ATTACK_DECLARED";
+      seat: Seat;
+      attackerId: string;
+      attackerSlot?: number;
+      targetId: string | null;
+    }
   | { type: "DAMAGE_DEALT"; seat: Seat; amount: number; isBattle: boolean }
   | { type: "BATTLE_RESOLVED"; attackerId: string; defenderId: string | null; result: "win" | "lose" | "draw" }
   | { type: "CARD_DESTROYED"; cardId: string; reason: "battle" | "effect" | "breakdown" }

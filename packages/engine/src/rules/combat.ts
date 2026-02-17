@@ -8,7 +8,7 @@ export function decideDeclareAttack(
   command: Extract<Command, { type: "DECLARE_ATTACK" }>
 ): EngineEvent[] {
   const events: EngineEvent[] = [];
-  const { attackerId, targetId } = command;
+  const { attackerId, attackerSlot, targetId, targetSlot } = command;
 
   // Check phase
   if (state.currentPhase !== "combat") {
@@ -20,12 +20,49 @@ export function decideDeclareAttack(
     return events;
   }
 
-  // Get attacker
   const board = seat === "host" ? state.hostBoard : state.awayBoard;
-  const attacker = board.find((c) => c.cardId === attackerId);
-  if (!attacker) {
+  const opponentBoard = seat === "host" ? state.awayBoard : state.hostBoard;
+
+  const resolveBoardMonsterBySlot = (
+    boardCards: BoardCard[],
+    cardId: string,
+    slot?: number,
+  ) => {
+    if (slot !== undefined) {
+      const candidate = boardCards[slot];
+      if (
+        candidate &&
+        candidate.cardId === cardId &&
+        !candidate.faceDown &&
+        candidate.canAttack &&
+        !candidate.hasAttackedThisTurn
+      ) {
+        return { index: slot, card: candidate };
+      }
+
+      return undefined;
+    }
+
+    const candidates = boardCards
+      .map((card, index) => ({ card, index }))
+      .filter(
+        ({ card }) =>
+          card.cardId === cardId && !card.faceDown && card.canAttack && !card.hasAttackedThisTurn,
+      );
+
+    if (candidates.length !== 1) {
+      return undefined;
+    }
+
+    return candidates[0];
+  };
+
+  const resolvedAttacker = resolveBoardMonsterBySlot(board, attackerId, attackerSlot);
+  if (!resolvedAttacker) {
     return events;
   }
+
+  const attacker = resolvedAttacker.card;
 
   // Attacker must be face-up
   if (attacker.faceDown) {
@@ -36,9 +73,6 @@ export function decideDeclareAttack(
   if (!attacker.canAttack || attacker.hasAttackedThisTurn) {
     return events;
   }
-
-  // Get opponent's board
-  const opponentBoard = seat === "host" ? state.awayBoard : state.hostBoard;
 
   // Determine battle type
   if (!targetId) {
@@ -59,6 +93,7 @@ export function decideDeclareAttack(
       type: "ATTACK_DECLARED",
       seat,
       attackerId,
+      ...(attackerSlot !== undefined ? { attackerSlot } : {}),
       targetId: null,
     });
 
@@ -79,7 +114,25 @@ export function decideDeclareAttack(
     });
   } else {
     // Attack a specific monster
-    const defender = opponentBoard.find((c) => c.cardId === targetId);
+    const resolvedTargets = opponentBoard.filter((card) => card.cardId === targetId);
+
+    const selectedTargetWithSlot =
+      targetSlot !== undefined
+        ? opponentBoard[targetSlot]
+        : undefined;
+    const defender =
+      targetSlot !== undefined
+        ? selectedTargetWithSlot
+        : resolvedTargets[0];
+
+    if (targetSlot !== undefined) {
+      if (!selectedTargetWithSlot || selectedTargetWithSlot.cardId !== targetId) {
+        return events;
+      }
+    } else if (resolvedTargets.length !== 1) {
+      return events;
+    }
+
     if (!defender) {
       return events;
     }
@@ -95,6 +148,7 @@ export function decideDeclareAttack(
       type: "ATTACK_DECLARED",
       seat,
       attackerId,
+      ...(attackerSlot !== undefined ? { attackerSlot } : {}),
       targetId,
     });
 
@@ -250,12 +304,40 @@ export function evolveCombat(state: GameState, event: EngineEvent): GameState {
 
   switch (event.type) {
     case "ATTACK_DECLARED": {
-      const { seat, attackerId } = event;
+      const { seat, attackerId, attackerSlot } = event;
       const isHost = seat === "host";
 
       // Update attacker to mark it has attacked
       const board = isHost ? [...newState.hostBoard] : [...newState.awayBoard];
-      const attackerIndex = board.findIndex((c) => c.cardId === attackerId);
+      const candidateAttackers = board
+        .map((card, index) => ({ card, index }))
+        .filter(
+          (entry) =>
+            entry.card.cardId === attackerId &&
+            !entry.card.faceDown &&
+            !entry.card.hasAttackedThisTurn &&
+            entry.card.canAttack,
+        );
+
+      const explicitAttackerCard =
+        attackerSlot !== undefined &&
+        attackerSlot >= 0 &&
+        attackerSlot < board.length
+          ? board[attackerSlot]
+          : undefined;
+      let attackerIndex = -1;
+      if (
+        explicitAttackerCard !== undefined &&
+        attackerSlot !== undefined &&
+        explicitAttackerCard.cardId === attackerId &&
+        !explicitAttackerCard.faceDown &&
+        explicitAttackerCard.canAttack &&
+        !explicitAttackerCard.hasAttackedThisTurn
+      ) {
+        attackerIndex = attackerSlot;
+      } else if (candidateAttackers.length === 1 && candidateAttackers[0]) {
+        attackerIndex = candidateAttackers[0].index;
+      }
       if (attackerIndex > -1) {
         const attacker = expectDefined(
           board[attackerIndex],
