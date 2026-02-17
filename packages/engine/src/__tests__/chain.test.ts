@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createInitialState, decide, evolve } from "../engine.js";
+import { createInitialState, decide, evolve, legalMoves } from "../engine.js";
 import { DEFAULT_CONFIG } from "../types/config.js";
 import type { GameState, SpellTrapCard } from "../types/state.js";
 
@@ -187,6 +187,42 @@ describe("chain system", () => {
     if (chainLink?.type === "CHAIN_LINK_ADDED") {
       expect(chainLink.effectIndex).toBe(1);
     }
+  });
+
+  it("legalMoves only exposes chain responses to the current chain responder", () => {
+    let state = makeState({
+      currentChain: [{
+        cardId: "trap1",
+        effectIndex: 0,
+        activatingPlayer: "host",
+        targets: [],
+      }],
+      currentPriorityPlayer: "host",
+    });
+    state = setTrapInZone(state, "host", "trap1_instance", "trap1");
+
+    const hostMoves = legalMoves(state, "host");
+    const awayMoves = legalMoves(state, "away");
+
+    expect(hostMoves.some((move) => move.type === "CHAIN_RESPONSE")).toBe(true);
+    expect(awayMoves.some((move) => move.type === "CHAIN_RESPONSE")).toBe(false);
+  });
+
+  it("decide only accepts CHAIN_RESPONSE from the active chain responder", () => {
+    const state = makeState({
+      currentPhase: "main",
+      currentChain: [{
+        cardId: "trap1",
+        effectIndex: 0,
+        activatingPlayer: "host",
+        targets: ["target1"],
+      }],
+      currentPriorityPlayer: "host",
+    });
+
+    const events = decide(state, { type: "CHAIN_RESPONSE", pass: true }, "away");
+
+    expect(events).toEqual([]);
   });
 
   it("evolve CHAIN_LINK_ADDED adds to currentChain and switches priority", () => {

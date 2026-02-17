@@ -91,11 +91,14 @@ export async function playOneTurn(
       attempts += 1;
       if (attempts > 20) break;
 
-      await submitAction(
-        { type: "CHAIN_RESPONSE", pass: true },
-        "Passed chain response",
-      );
-      await refreshView();
+      if (currentView.value.currentPriorityPlayer === seat) {
+        await submitAction(
+          { type: "CHAIN_RESPONSE", pass: true },
+          "Passed chain response",
+        );
+      } else {
+        await refreshView();
+      }
 
       const nextSignature = chainStateSignature(currentView.value);
       if (nextSignature === previousSignature) {

@@ -12,6 +12,7 @@ import { evolveVice } from "./rules/vice.js";
 import { drawCard } from "./rules/stateBasedActions.js";
 import { decideChainResponse } from "./rules/chain.js";
 import { resolveEffectActions, canActivateEffect, detectTriggerEffects } from "./rules/effects.js";
+import { expectDefined } from "./internal/invariant.js";
 
 export interface EngineOptions {
   config?: Partial<EngineConfig>;
@@ -72,7 +73,10 @@ function shuffle<T>(arr: T[], rng?: () => number): T[] {
   const random = rng ?? Math.random;
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
+    const current = expectDefined(copy[i], `engine.shuffle missing value at index ${i}`);
+    const target = expectDefined(copy[j], `engine.shuffle missing value at index ${j}`);
+    copy[i] = target;
+    copy[j] = current;
   }
   return copy;
 }
@@ -126,6 +130,7 @@ export function createInitialState(
     awayNormalSummonedThisTurn: false,
     currentChain: [],
     currentPriorityPlayer: null,
+    currentChainPasser: null,
     pendingAction: null,
     temporaryModifiers: [],
     lingeringEffects: [],
@@ -213,9 +218,41 @@ export function mask(state: GameState, seat: Seat): PlayerView {
 
 export function legalMoves(state: GameState, seat: Seat): Command[] {
   if (state.gameOver) return [];
-  if (state.currentTurnPlayer !== seat) return [];
+
+  const isChainWindow = state.currentChain.length > 0;
+  const isChainResponder = isChainWindow && state.currentPriorityPlayer === seat;
+
+  if (isChainWindow) {
+    if (!isChainResponder) return [];
+  } else if (state.currentTurnPlayer !== seat) {
+    return [];
+  }
 
   const moves: Command[] = [];
+
+  if (isChainWindow) {
+    if (!isChainResponder) return moves;
+    moves.push({ type: "CHAIN_RESPONSE", pass: true });
+
+    const responderTrapZone = seat === "host"
+      ? state.hostSpellTrapZone
+      : state.awaySpellTrapZone;
+
+    for (const setCard of responderTrapZone) {
+      if (!setCard.faceDown) continue;
+
+      const setDef = state.cardLookup[setCard.definitionId];
+      if (!setDef || setDef.type !== "trap") continue;
+
+      moves.push({
+        type: "CHAIN_RESPONSE",
+        cardId: setCard.cardId,
+        pass: false,
+      });
+    }
+
+    return moves;
+  }
 
   // Always allow ADVANCE_PHASE and END_TURN and SURRENDER
   moves.push({ type: "ADVANCE_PHASE" });
@@ -385,6 +422,14 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
 
 export function decide(state: GameState, command: Command, seat: Seat): EngineEvent[] {
   if (state.gameOver) return [];
+  const chainInProgress = state.currentChain.length > 0;
+  if (chainInProgress) {
+    if (command.type !== "CHAIN_RESPONSE" || state.currentPriorityPlayer !== seat) {
+      return [];
+    }
+  } else if (state.currentTurnPlayer !== seat) {
+    return [];
+  }
 
   const events: EngineEvent[] = [];
 
@@ -469,7 +514,10 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       const cardDef = state.cardLookup[cardId];
       if (!cardDef?.effects || effectIndex < 0 || effectIndex >= cardDef.effects.length) break;
 
-      const effectDef = cardDef.effects[effectIndex];
+      const effectDef = expectDefined(
+        cardDef.effects[effectIndex],
+        "engine.decide ACTIVATE_EFFECT missing effect after bounds check"
+      );
       if (effectDef.type !== "ignition") break;
 
       // Check OPT/HOPT
@@ -620,7 +668,11 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
           const idx = newState[boardKey].findIndex((c) => c.cardId === cardId);
           if (idx > -1) {
             newState[boardKey] = [...newState[boardKey]];
-            const card = { ...newState[boardKey][idx] };
+            const existingCard = expectDefined(
+              newState[boardKey][idx],
+              `engine.evolve MODIFIER_APPLIED missing board card at index ${idx}`
+            );
+            const card = { ...existingCard };
             card.temporaryBoosts = { ...card.temporaryBoosts };
             card.temporaryBoosts[field] += amount;
             newState[boardKey][idx] = card;
@@ -682,26 +734,33 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "CHAIN_STARTED": {
         newState.currentChain = [];
+        newState.currentChainPasser = null;
+        newState.currentPriorityPlayer = null;
         break;
       }
 
       case "CHAIN_LINK_ADDED": {
-        const { cardId, seat, effectIndex } = event;
+        const { cardId, seat, effectIndex, targets = [] } = event;
         newState.currentChain = [...newState.currentChain, {
-          cardId, activatingPlayer: seat, effectIndex, targets: [],
+          cardId, activatingPlayer: seat, effectIndex, targets,
         }];
         newState.currentPriorityPlayer = opponentSeat(seat);
+        newState.currentChainPasser = null;
         break;
       }
 
       case "CHAIN_RESOLVED": {
         newState.currentChain = [];
+        newState.currentChainPasser = null;
         newState.currentPriorityPlayer = null;
         break;
       }
 
       case "CHAIN_PASSED": {
-        // Handled by chain resolution logic in decideChainResponse
+        if (newState.currentChain.length > 0) {
+          newState.currentChainPasser = event.seat;
+          newState.currentPriorityPlayer = opponentSeat(event.seat);
+        }
         break;
       }
 
@@ -726,7 +785,11 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
           const board = [...newState[boardKey]];
           const idx = board.findIndex((c) => c.cardId === cardId);
           if (idx > -1) {
-            board[idx] = { ...board[idx], position: to, changedPositionThisTurn: true };
+            const existingCard = expectDefined(
+              board[idx],
+              `engine.evolve POSITION_CHANGED missing board card at index ${idx}`
+            );
+            board[idx] = { ...existingCard, position: to, changedPositionThisTurn: true };
             newState[boardKey] = board;
             break;
           }
