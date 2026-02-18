@@ -15,20 +15,29 @@ import { deriveValidActions } from "./deriveValidActions";
 
 export type Seat = "host" | "away";
 
-export function useGameState(matchId: string | undefined, seat: Seat) {
-  const meta = useConvexQuery(
-    api.game.getMatchMeta,
-    matchId ? { matchId } : "skip",
-  ) as MatchMeta | null | undefined;
+export function useGameState(matchId: string | undefined, seat: Seat, actorUserId?: string) {
+  const matchMetaArgs =
+    matchId && actorUserId ? { matchId, actorUserId } : matchId ? { matchId } : "skip";
+  const playerViewArgs =
+    matchId && seat && actorUserId
+      ? { matchId, seat, actorUserId }
+      : matchId && seat
+        ? { matchId, seat }
+        : "skip";
 
-  const viewJson = useConvexQuery(
-    api.game.getPlayerView,
-    matchId && seat ? { matchId, seat } : "skip",
-  ) as string | null | undefined;
+  const meta = useConvexQuery(api.game.getMatchMeta, matchMetaArgs) as
+    | MatchMeta
+    | null
+    | undefined;
+
+  const viewJson = useConvexQuery(api.game.getPlayerView, playerViewArgs) as
+    | string
+    | null
+    | undefined;
 
   const openPromptRaw = useConvexQuery(
     api.game.getOpenPrompt,
-    matchId && seat ? { matchId, seat } : "skip",
+    playerViewArgs,
   ) as unknown | undefined | null;
 
   const allCards = useConvexQuery(api.game.getAllCards, {}) as CardDefinition[] | undefined;
@@ -57,7 +66,11 @@ export function useGameState(matchId: string | undefined, seat: Seat) {
   const isWaitingForInitialSnapshot = Boolean(matchId && viewJson === undefined);
   const latestSnapshotVersion = useConvexQuery(
     api.game.getLatestSnapshotVersion,
-    matchId ? { matchId } : "skip",
+    matchId && actorUserId
+      ? { matchId, actorUserId }
+      : matchId
+        ? { matchId }
+        : "skip",
   ) as number | null | undefined;
 
   const validActions = useMemo(() => {

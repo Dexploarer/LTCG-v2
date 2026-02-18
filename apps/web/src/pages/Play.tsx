@@ -87,9 +87,14 @@ export function Play() {
   const [joinError, setJoinError] = useState("");
   const autojoinAttemptedRef = useRef(false);
 
+  const currentUser = useConvexQuery(
+    apiAny.auth.currentUser,
+    {},
+  ) as CurrentUser | null | undefined;
+
   const meta = useConvexQuery(
     apiAny.game.getMatchMeta,
-    activeMatchId ? { matchId: activeMatchId } : "skip",
+    activeMatchId && currentUser ? { matchId: activeMatchId, actorUserId: currentUser._id } : "skip",
   ) as MatchMeta | null | undefined;
 
   // Story context — only loads for story mode matches
@@ -99,10 +104,6 @@ export function Play() {
     isStory && activeMatchId ? { matchId: activeMatchId } : "skip",
   ) as StoryContext | null | undefined;
 
-  const currentUser = useConvexQuery(
-    apiAny.auth.currentUser,
-    {},
-  ) as CurrentUser | null | undefined;
   const { isDiscordActivity, sdkReady } = useDiscordActivity();
 
   useEffect(() => {
@@ -164,10 +165,10 @@ export function Play() {
 
   // Loading
   if (!activeMatchId) return <CenterMessage>Invalid match ID.</CenterMessage>;
-  if (meta === undefined) return <Loading />;
-  if (meta === null) return <CenterMessage>Match not found.</CenterMessage>;
   if (currentUser === undefined) return <Loading />;
   if (currentUser === null) return <CenterMessage>Unable to load player.</CenterMessage>;
+  if (meta === undefined) return <Loading />;
+  if (meta === null) return <CenterMessage>Match not found.</CenterMessage>;
   if (!playerSeat && canJoinMatch) {
     return (
       <JoinMatchGate
@@ -185,6 +186,7 @@ export function Play() {
       <GameBoard
         matchId={activeMatchId}
         seat={playerSeat}
+        actorUserId={currentUser._id}
       />
     );
   }
@@ -196,6 +198,7 @@ export function Play() {
         playerSeat={playerSeat}
         meta={meta}
         storyCtx={storyCtx}
+        actorUserId={currentUser._id}
       />
       <DialogueBox />
       <BattleTransition />
@@ -208,9 +211,16 @@ type StoryPlayFlowProps = {
   playerSeat: Seat;
   meta: MatchMeta;
   storyCtx: StoryContext | null | undefined;
+  actorUserId?: string;
 };
 
-function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowProps) {
+function StoryPlayFlow({
+  matchId,
+  playerSeat,
+  meta,
+  storyCtx,
+  actorUserId,
+}: StoryPlayFlowProps) {
   const navigate = useNavigate();
   const { pushEvents } = useStory();
   const completeStage = useConvexMutation(apiAny.game.completeStoryStage);
@@ -236,7 +246,11 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
 
   const rawEvents = useConvexQuery(
     apiAny.game.getRecentEvents,
-    matchId ? { matchId, sinceVersion: eventCursor } : "skip",
+    matchId
+      ? actorUserId
+        ? { matchId, sinceVersion: eventCursor, actorUserId }
+        : { matchId, sinceVersion: eventCursor }
+      : "skip",
   ) as StoryLogBatch[] | undefined;
 
   const outcome = resolveStoryWon(meta?.winner, playerSeat);
@@ -515,7 +529,12 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
 
   return (
     <div className="relative h-screen">
-      <GameBoard matchId={matchId} seat={playerSeat} onMatchEnd={handleMatchEnd} />
+      <GameBoard
+        matchId={matchId}
+        seat={playerSeat}
+        onMatchEnd={handleMatchEnd}
+        actorUserId={actorUserId}
+      />
       <StoryEventLog log={eventLog} />
     </div>
   );
