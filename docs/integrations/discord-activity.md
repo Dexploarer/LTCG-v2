@@ -6,7 +6,7 @@ This repo now supports running LTCG as a Discord Activity with shared cross-play
 
 - Discord Activity runtime detection in web client.
 - Discord Embedded App SDK initialization (`@discord/embedded-app-sdk`).
-- Discord OAuth scope bootstrap for Activity commands:
+- Discord OAuth scope bootstrap for rich-presence commands:
   - `authorize` -> `/api/discord-token` -> `authenticate`.
 - Discord-native invite flow (`shareLink`) from PvP lobby screens.
 - Discord rich presence updates (`setActivity`) with join secrets per match.
@@ -19,7 +19,7 @@ This repo now supports running LTCG as a Discord Activity with shared cross-play
 
 ## Auth model
 
-App auth remains **Privy-first**. Discord OAuth in this integration is used only to enable SDK command scopes (`setActivity`, `shareLink`) inside Activity runtime.
+App auth remains **Privy-first**. Discord OAuth in this integration is used only to enable SDK command scopes needed for rich presence (`setActivity`) inside Activity runtime.
 
 ## Required environment
 
@@ -49,7 +49,7 @@ Keep existing Privy env vars configured for app session auth.
 5. Ensure the Activity can request these scopes:
    - `identify`
    - `rpc.activities.write`
-   - `activities.invites.write`
+   - `shareLink` is used for invites and does not require additional scopes.
 6. Configure URL mappings for external domains used inside Activity iframe:
    - `/.proxy/convex` -> `<your convex cloud host>`
    - `/.proxy/convex-site` -> `<your convex site host>`
@@ -71,5 +71,6 @@ Do not re-add `X-Frame-Options: DENY` or Discord Activity embedding will fail.
 ## Failure behavior
 
 - If Discord scope auth fails, gameplay still works (Privy + Convex unaffected).
-- Discord invite and rich-presence commands are disabled until scope auth succeeds.
-- UI surfaces status/error text in Activity lobby screens with retry on interactive actions.
+- `setActivity` rich-presence updates are disabled until scope auth succeeds.
+- `shareLink` invite flow remains available even if rich-presence scope auth fails.
+- UI surfaces non-fatal status/error text in Activity lobby screens.

@@ -668,8 +668,12 @@ function PvPWaitingLobby({
     setInviteStatus("");
     try {
       const result = await shareDiscordMatchInvite(matchId);
-      if (!result?.success) {
-        throw new Error("Invite share was canceled.");
+      if (!result) {
+        throw new Error("Unable to open Discord invite dialog.");
+      }
+      if (!result.success) {
+        setInviteStatus("Invite share canceled.");
+        return;
       }
       if (result.didSendMessage) {
         setInviteStatus("Invite sent in Discord.");

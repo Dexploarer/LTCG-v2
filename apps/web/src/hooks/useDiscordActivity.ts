@@ -8,10 +8,9 @@ const DISCORD_CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID as string | und
 const DISCORD_JOIN_SECRET_PREFIX = "ltcg:match:";
 const DISCORD_TOKEN_EXCHANGE_PATH = "/api/discord-token";
 const DISCORD_AUTHORIZE_STATE = "ltcg-discord-activity";
-const DISCORD_COMMAND_SCOPES: Array<"identify" | "rpc.activities.write" | "activities.invites.write"> = [
+const DISCORD_COMMAND_SCOPES: Array<"identify" | "rpc.activities.write"> = [
   "identify",
   "rpc.activities.write",
-  "activities.invites.write",
 ];
 
 type DiscordSDKInstance = import("@discord/embedded-app-sdk").DiscordSDK;
@@ -107,7 +106,7 @@ export function parseDiscordTokenAccessToken(payload: unknown): string | null {
 
 export function getDiscordScopeErrorMessage(error: unknown, interactive: boolean) {
   if (!interactive) {
-    return `Discord invite/presence permissions unavailable: ${formatErrorMessage(
+    return `Discord rich-presence permissions unavailable: ${formatErrorMessage(
       error,
       "Authorization was not granted.",
     )}`;
@@ -143,15 +142,11 @@ async function exchangeDiscordAccessToken(code: string) {
 async function authorizeDiscordCommandScopes(interactive: boolean) {
   const sdk = discordSdk;
   if (!sdk || !activityState.sdkReady || !DISCORD_CLIENT_ID) return false;
-  // SDK OAuthScopes type omits `activities.invites.write` in v2.4.0.
-  const scope = DISCORD_COMMAND_SCOPES as unknown as Parameters<
-    DiscordSDKInstance["commands"]["authorize"]
-  >[0]["scope"];
 
   const { code } = await sdk.commands.authorize({
     client_id: DISCORD_CLIENT_ID,
     response_type: "code",
-    scope,
+    scope: DISCORD_COMMAND_SCOPES,
     state: DISCORD_AUTHORIZE_STATE,
     prompt: interactive ? undefined : "none",
   });
@@ -304,7 +299,6 @@ export async function setDiscordActivityMatchContext(
 export async function shareDiscordMatchInvite(matchId: string, message?: string) {
   const sdk = discordSdk;
   if (!sdk || !activityState.sdkReady) return null;
-  if (!(await ensureDiscordCommandScopes({ interactive: true }))) return null;
 
   try {
     return await sdk.commands.shareLink({

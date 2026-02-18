@@ -140,8 +140,12 @@ export function Duel() {
     setDiscordInviteStatus("");
     try {
       const result = await shareDiscordMatchInvite(waitingLobbyId);
-      if (!result?.success) {
-        throw new Error("Invite share was canceled.");
+      if (!result) {
+        throw new Error("Unable to open Discord invite dialog.");
+      }
+      if (!result.success) {
+        setDiscordInviteStatus("Invite share canceled.");
+        return;
       }
       if (result.didSendMessage) {
         setDiscordInviteStatus("Invite sent in Discord.");

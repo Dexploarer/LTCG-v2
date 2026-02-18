@@ -31,6 +31,7 @@ describe("useDiscordActivity helpers", () => {
   });
 
   it("formats scope authorization errors for silent and interactive flows", () => {
+    expect(getDiscordScopeErrorMessage(new Error("denied"), false)).toContain("rich-presence");
     expect(getDiscordScopeErrorMessage(new Error("denied"), false)).toContain("denied");
     expect(getDiscordScopeErrorMessage("blocked", true)).toContain("blocked");
   });
