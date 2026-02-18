@@ -1024,15 +1024,15 @@ async function requireSeatOwnership(
 ) {
   const meta = await match.getMatchMeta(ctx, { matchId });
   if (!meta) {
-    throw new Error("Match not found.");
+    throw new ConvexError("Match not found.");
   }
 
   const resolvedSeat = resolveSeatForUser(meta, actorUserId);
   if (!resolvedSeat) {
-    throw new Error("You are not a participant in this match.");
+    throw new ConvexError("You are not a participant in this match.");
   }
   if (resolvedSeat !== seat) {
-    throw new Error("You can only access your own seat.");
+    throw new ConvexError("You can only access your own seat.");
   }
 
   return meta;
@@ -1117,6 +1117,7 @@ export const submitActionAsActor = internalMutation({
     expectedVersion: v.optional(v.number()),
     actorUserId: v.id("users"),
   },
+  returns: v.any(),
   handler: async (ctx, args) =>
     submitActionForActor(ctx, {
       matchId: args.matchId,

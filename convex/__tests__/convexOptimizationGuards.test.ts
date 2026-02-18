@@ -18,13 +18,18 @@ describe("convex optimization guardrails", () => {
   it("dedupes AI turn scheduling and avoids full card fetches in AI turn handler", () => {
     const gameSource = readSource("convex/game.ts");
 
+    const submitAsActorStart = gameSource.indexOf("async function submitActionForActor");
+    const submitAsActorEnd = gameSource.indexOf("// ── Submit Action", submitAsActorStart);
+    const submitAsActorSource = gameSource.slice(submitAsActorStart, submitAsActorEnd);
+    expect(submitAsActorSource).toContain("queueAITurn(ctx, args.matchId)");
+    expect(submitAsActorSource).toContain(
+      "ctx.scheduler.runAfter(500, internal.game.executeAITurn",
+    );
+
     const submitStart = gameSource.indexOf("export const submitAction");
     const submitEnd = gameSource.indexOf("// ── AI Decision Logic", submitStart);
     const submitActionSource = gameSource.slice(submitStart, submitEnd);
-    expect(submitActionSource).toContain("queueAITurn(ctx, args.matchId)");
-    expect(submitActionSource).toContain(
-      "ctx.scheduler.runAfter(500, internal.game.executeAITurn",
-    );
+    expect(submitActionSource).toContain("submitActionForActor(ctx, {");
 
     const aiStart = gameSource.indexOf("export const executeAITurn");
     const aiEnd = gameSource.indexOf("// ── Game View Queries", aiStart);
