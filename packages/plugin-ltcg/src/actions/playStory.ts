@@ -311,11 +311,11 @@ function resolveLifePoints(
 
   return seat === "host"
     ? {
-        myLP: view.players?.host?.lifePoints ?? 0,
-        oppLP: view.players?.away?.lifePoints ?? 0,
-      }
+      myLP: view.players?.host?.lifePoints ?? 0,
+      oppLP: view.players?.away?.lifePoints ?? 0,
+    }
     : {
-        myLP: view.players?.away?.lifePoints ?? 0,
-        oppLP: view.players?.host?.lifePoints ?? 0,
-      };
+      myLP: view.players?.away?.lifePoints ?? 0,
+      oppLP: view.players?.host?.lifePoints ?? 0,
+    };
 }

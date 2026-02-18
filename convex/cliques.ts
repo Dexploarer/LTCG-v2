@@ -349,6 +349,17 @@ export const getCliqueDashboard = query({
         }))
       : [];
 
+    members.sort((a, b) => (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""));
+
+    const rosterPreview = members.slice(0, 12).map((member) => ({
+      _id: member._id,
+      _creationTime: member._creationTime,
+      username: member.username,
+      name: member.name,
+      cliqueRole: member.cliqueRole,
+      createdAt: member.createdAt,
+    }));
+
     return {
       myArchetype,
       myClique,
@@ -412,13 +423,12 @@ export const leaveClique = mutation({
   returns: v.null(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const cliqueId = user.cliqueId;
 
-    if (!cliqueId) {
-      throw new ConvexError("Not in a clique");
+    if (!user.cliqueId) {
+      throw new Error("Not in a clique");
     }
 
-    const clique = await ctx.db.get(cliqueId);
+    const clique = await ctx.db.get(user.cliqueId);
     if (!clique) {
       // Repair stale membership references idempotently.
       await ctx.db.patch(user._id, {
@@ -428,13 +438,10 @@ export const leaveClique = mutation({
       return null;
     }
 
-    let deletedClique = false;
-
     // Leaders/founders can't leave if they're the only one
     if (user.cliqueRole === "founder" || user.cliqueRole === "leader") {
       if (clique.memberCount <= 1) {
-        await ctx.db.delete(cliqueId);
-        deletedClique = true;
+        await ctx.db.delete(user.cliqueId);
       } else {
         throw new ConvexError("Transfer leadership before leaving");
       }
@@ -462,7 +469,7 @@ export const seedCliques = internalMutation({
   handler: async (ctx) => {
     // Check if already seeded
     const existing = await ctx.db.query("cliques").first();
-    if (existing) return null;
+    if (existing) return;
 
     for (const data of CLIQUE_DATA) {
       await ctx.db.insert("cliques", {

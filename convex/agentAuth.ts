@@ -14,11 +14,6 @@ import {
 
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
-const vBattleStartResult = v.object({
-  matchId: v.string(),
-  chapterId: v.string(),
-  stageNumber: v.number(),
-});
 
 const buildDeterministicSeed = (seedInput: string): number => {
   let hash = 2166136261;
@@ -259,40 +254,39 @@ export const agentJoinMatch = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.agentUserId);
-    if (!user) throw new ConvexError("Agent user not found");
+    if (!user) throw new Error("Agent user not found");
+    const agentUserId = String(args.agentUserId);
 
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-    if (!meta) throw new ConvexError("Match not found");
+    if (!meta) throw new Error("Match not found");
 
     if ((meta as any).isAIOpponent) {
-      throw new ConvexError("Cannot join a match configured for built-in CPU opponent.");
+      throw new Error("Cannot join a match configured for built-in CPU opponent.");
     }
     if ((meta as any).status !== "waiting") {
-      throw new ConvexError(
-        `Match ${args.matchId} is not waiting (current status: ${(meta as any).status ?? "unknown"}).`,
-      );
+      throw new Error(`Match ${args.matchId} is not waiting (current status: ${(meta as any).status ?? "unknown"}).`);
     }
     if ((meta as any).awayId !== null) {
-      throw new ConvexError(`Match ${args.matchId} already has an away player.`);
+      throw new Error(`Match ${args.matchId} already has an away player.`);
     }
 
     const hostId = (meta as any).hostId;
     if (!hostId) {
-      throw new ConvexError("Match is missing a host player.");
+      throw new Error("Match is missing a host player.");
     }
-    if (hostId === args.agentUserId) {
-      throw new ConvexError("Cannot join your own match as away player.");
+    if (hostId === agentUserId) {
+      throw new Error("Cannot join your own match as away player.");
     }
 
     const hostDeck = (meta as any).hostDeck;
     if (!Array.isArray(hostDeck) || hostDeck.length < 30) {
-      throw new ConvexError("Host deck is invalid or too small.");
+      throw new Error("Host deck is invalid or too small.");
     }
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
     const awayDeck = getDeckCardIdsFromDeckData(deckData);
     if (!Array.isArray(awayDeck) || awayDeck.length < 30) {
-      throw new ConvexError("Your deck must have at least 30 cards.");
+      throw new Error("Your deck must have at least 30 cards.");
     }
 
     const allCards = await cards.cards.getAllCards(ctx);
@@ -302,7 +296,7 @@ export const agentJoinMatch = mutation({
     const seed = buildMatchSeed([
       "agentJoinMatch",
       hostId,
-      args.agentUserId,
+      agentUserId,
       firstPlayer,
       hostDeck.length,
       awayDeck.length,
@@ -314,7 +308,7 @@ export const agentJoinMatch = mutation({
       cardLookup,
       DEFAULT_CONFIG,
       hostId,
-      args.agentUserId,
+      agentUserId,
       hostDeck,
       awayDeck,
       firstPlayer,
@@ -323,7 +317,7 @@ export const agentJoinMatch = mutation({
 
     await match.joinMatch(ctx, {
       matchId: args.matchId,
-      awayId: args.agentUserId,
+      awayId: agentUserId,
       awayDeck,
     });
 
