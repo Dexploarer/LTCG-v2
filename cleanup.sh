@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # LTCG-v2 Post-Codex Cleanup Script
 # Run this from the project root: bash cleanup.sh
 #
@@ -11,7 +11,12 @@
 # All GOOD changes from Codex have already been re-applied to the working tree.
 # This script handles the deletions that couldn't be done from the sandbox.
 
-set -e
+set -euo pipefail
+
+if [ ! -f "package.json" ] || [ ! -d ".git" ]; then
+  echo "Run this script from the repository root."
+  exit 1
+fi
 
 echo "=== LTCG-v2 Codex Cleanup ==="
 echo ""
@@ -27,8 +32,12 @@ fi
 # Step 2: Delete junk directories
 echo ""
 echo "--- Removing junk directories ---"
-rm -rf video/
-echo "✓ Removed video/"
+if [ -d "video" ]; then
+  rm -rf -- "video"
+  echo "✓ Removed video/"
+else
+  echo "✓ No video/ directory found"
+fi
 
 # Step 3: Delete junk files
 echo ""
@@ -46,7 +55,7 @@ JUNK_FILES=(
 
 for f in "${JUNK_FILES[@]}"; do
   if [ -f "$f" ]; then
-    rm -f "$f"
+    rm -f -- "$f"
     echo "✓ Removed $f"
   fi
 done
@@ -62,18 +71,31 @@ echo "--- Relocating API handlers ---"
 # These should stay in api/ for Vercel deployment but the duplicate
 # in apps/web/api/ needs to go
 if [ -d "apps/web/api" ]; then
-  rm -rf apps/web/api/
-  echo "✓ Removed duplicate apps/web/api/"
+  removed_any="false"
+  for handler in apps/web/api/*.ts; do
+    [ -e "$handler" ] || continue
+    filename="$(basename "$handler")"
+    if [ -f "api/$filename" ]; then
+      rm -f -- "$handler"
+      echo "✓ Removed duplicate apps/web/api/$filename"
+      removed_any="true"
+    fi
+  done
+  if [ "$removed_any" = "false" ]; then
+    echo "✓ No duplicate handlers found under apps/web/api/"
+  fi
+  rmdir apps/web/api 2>/dev/null || true
+else
+  echo "✓ No apps/web/api directory found"
 fi
 
-# Keep root api/ handlers - they're in the correct Vercel convention location
+# Keep root api/ handlers - they're in the correct Vercel convention location.
 echo "✓ Root api/ handlers preserved (correct Vercel serverless location)"
 
-# Step 5: Delete this script
+# Step 5: Final notes
 echo ""
 echo "--- Cleaning up ---"
-rm -f cleanup.sh
-echo "✓ Removed cleanup.sh"
+echo "✓ cleanup.sh kept for repeatable use"
 
 echo ""
 echo "=== Cleanup complete ==="
