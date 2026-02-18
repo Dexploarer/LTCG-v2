@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import type { MouseEvent } from "react";
 import { useStory, type Stage } from "./StoryProvider";
 
 import {
@@ -39,10 +40,14 @@ export function StagePanel({
   isStarting,
   onFight,
   chapterId,
+  locked = false,
+  onHostAgentFight,
 }: {
   stage: Stage;
   isStarting: boolean;
   onFight: () => void;
+  onHostAgentFight?: () => void;
+  locked?: boolean;
   chapterId?: string;
 }) {
   const { isStageComplete, getStageStars, chapters } = useStory();
@@ -56,17 +61,26 @@ export function StagePanel({
     ? `${chapter.actNumber}-${chapter.chapterNumber}-${stage.stageNumber}`
     : null;
   const bannerImage = bannerKey ? STAGE_BANNERS[bannerKey] : null;
+  const disabled = isStarting || locked;
+  const handleFight = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    if (onHostAgentFight && (event.metaKey || event.shiftKey)) {
+      onHostAgentFight();
+      return;
+    }
+    onFight();
+  };
 
   return (
     <motion.button
       type="button"
-      onClick={onFight}
-      disabled={isStarting}
+      onClick={handleFight}
+      disabled={disabled}
       className={`comic-panel relative overflow-hidden text-left group w-full h-full ${
         completed ? "opacity-75" : ""
-      } ${isStarting ? "cursor-wait" : "cursor-pointer"}`}
+      } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       variants={panelVariant}
-      whileHover={{ scale: 1.02, zIndex: 10 }}
+      whileHover={disabled ? undefined : { scale: 1.02, zIndex: 10 }}
       whileTap={{ scale: 0.97 }}
     >
       {/* Panel image */}
@@ -166,7 +180,17 @@ export function StagePanel({
           <span
             className="text-[10px] text-[#ffcc00] font-bold uppercase tracking-wider mt-2 animate-pulse"
           >
-            {isStarting ? "Loading..." : "Click to fight"}
+            {isStarting ? "Loading..." : locked ? "Locked" : "Click to fight"}
+          </span>
+        )}
+
+        {/* Optional locked overlay */}
+        {locked && !completed && (
+          <span
+            className="absolute top-3 left-3 text-[9px] tracking-wider font-black uppercase text-white/80 bg-black/70 border border-white/40 px-2 py-1 z-20"
+            style={{ fontFamily: "Special Elite, cursive" }}
+          >
+            Unavailable
           </span>
         )}
       </div>
