@@ -2,18 +2,19 @@
   "name": "ltcg-v2",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "packageManager": "bun@1.3.5",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "build": "cd apps/web && bun run build",
+    "lint": "cd packages/engine && bun run type-check && cd ../../apps/web && bun run type-check",
     "dev": "concurrently -n convex,web -c blue,magenta \"bun run dev:convex\" \"bun run dev:web\"",
     "dev:convex": "convex dev",
     "dev:web": "cd apps/web && bun run dev",
-    "test": "vitest",
-    "test:once": "vitest run"
+    "test": "bun test ./scripts/trust-scoring.bun_test.js && vitest",
+    "test:once": "bun test ./scripts/trust-scoring.bun_test.js && vitest run"
   },
   "dependencies": {
     "@lunchtable-tcg/cards": "workspace:*",
@@ -21,16 +22,16 @@
     "@lunchtable-tcg/guilds": "workspace:*",
     "@lunchtable-tcg/match": "workspace:*",
     "@lunchtable-tcg/story": "workspace:*",
-    "@sentry/node": "^10.38.0",
-    "convex": "^1.31.6",
+    "convex": "^1.31.7",
     "posthog-node": "^5.24.15"
   },
   "devDependencies": {
+    "@esbuild/darwin-arm64": "^0.27.3",
+    "@types/bun": "latest",
     "@vercel/blob": "^2.2.0",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.27.3",
     "typescript": "^5.8.0",
-    "vitest": "^4.0.18",
-    "@types/bun": "latest"
-  },
-  "module": "index.ts"
+    "vitest": "^4.0.18"
+  }
 }
