@@ -653,9 +653,9 @@ export function GameBoard({
   }
 
   return (
-    <div className="relative h-screen flex flex-col bg-[#fdfdfb]">
+    <div className="relative h-screen overflow-hidden bg-[#fdfdfb]">
       <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
-
+      <div className="relative z-10 flex h-full flex-col">
       {/* Opponent LP Bar */}
       <div className="px-4 pt-2">
         <LPBar
@@ -949,6 +949,7 @@ export function GameBoard({
           onClose={() => setShowGraveyard(null)}
         />
       )}
+      </div>
     </div>
   );
 }
