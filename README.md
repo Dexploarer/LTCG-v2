@@ -58,6 +58,11 @@ LTCG-v2/
 └── docs/                      # Architecture + agent docs
 ```
 
+## Discord Activity
+
+- Setup guide: `docs/integrations/discord-activity.md`
+- Required env: `VITE_DISCORD_CLIENT_ID`
+
 ## Audio Soundtrack
 
 - Manifest file: `apps/web/public/soundtrack.in`

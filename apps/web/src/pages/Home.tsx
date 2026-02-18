@@ -156,12 +156,12 @@ export function Home() {
         </Panel>
 
         <Panel
-          title="Watch Live"
-          subtitle="Agents streaming on retake.tv"
+          title="Duel Lobby"
+          subtitle="Play Web vs Telegram vs Discord"
           bgImage={WATCH_BG}
-          onClick={() => goTo("/watch", false)}
+          onClick={() => goTo("/duel", true)}
         >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
         </Panel>
       </div>
 

@@ -12,19 +12,34 @@ import {
 } from "@/components/story";
 import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
+import { formatPlatformTag, detectClientPlatform, describeClientPlatform } from "@/lib/clientPlatform";
 import { normalizeMatchId } from "@/lib/matchIds";
+import { useMatchPresence } from "@/hooks/useMatchPresence";
 
 type MatchMeta = {
-  status: string;
+  status: "waiting" | "active" | "ended";
   hostId: string;
-  awayId: string;
-  mode: string;
+  awayId: string | null;
+  mode: "pvp" | "story";
   isAIOpponent?: boolean;
   winner?: string;
 };
 
 type CurrentUser = {
   _id: string;
+};
+
+type MatchPlatformTags = {
+  host: {
+    userId: string;
+    username: string;
+    platform: string;
+  };
+  away: {
+    userId: string;
+    username: string;
+    platform: string;
+  } | null;
 };
 
 type StoryCompletion = {
@@ -77,6 +92,10 @@ type ParsedEvent = {
 export function Play() {
   const { matchId } = useParams<{ matchId: string }>();
   const activeMatchId = normalizeMatchId(matchId);
+  const joinPvPMatch = useConvexMutation(apiAny.game.joinPvPMatch);
+  const [joiningLobby, setJoiningLobby] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const attemptedAutoJoinRef = useRef<string | null>(null);
 
   const meta = useConvexQuery(
     apiAny.game.getMatchMeta,
@@ -95,6 +114,39 @@ export function Play() {
     {},
   ) as CurrentUser | null | undefined;
 
+  const platformTags = useConvexQuery(
+    apiAny.game.getMatchPlatformTags,
+    activeMatchId ? { matchId: activeMatchId } : "skip",
+  ) as MatchPlatformTags | null | undefined;
+
+  useMatchPresence(activeMatchId);
+
+  useEffect(() => {
+    if (!activeMatchId || !meta || !currentUser) return;
+    if (meta.mode !== "pvp" || meta.status !== "waiting") return;
+    if (meta.awayId !== null) return;
+    if (meta.hostId === currentUser._id) return;
+    if (joiningLobby) return;
+    if (attemptedAutoJoinRef.current === activeMatchId) return;
+
+    attemptedAutoJoinRef.current = activeMatchId;
+    setJoiningLobby(true);
+    setJoinError("");
+
+    void joinPvPMatch({
+      matchId: activeMatchId,
+      platform: detectClientPlatform(),
+      source: describeClientPlatform(),
+    })
+      .catch((err: any) => {
+        Sentry.captureException(err);
+        setJoinError(err?.message ?? "Failed to join this lobby.");
+      })
+      .finally(() => {
+        setJoiningLobby(false);
+      });
+  }, [activeMatchId, meta, currentUser, joiningLobby, joinPvPMatch]);
+
   const playerSeat = resolvePlayerSeat(currentUser ?? null, meta, isStory);
 
   // Loading
@@ -103,6 +155,24 @@ export function Play() {
   if (meta === null) return <CenterMessage>Match not found.</CenterMessage>;
   if (currentUser === undefined) return <Loading />;
   if (currentUser === null) return <CenterMessage>Unable to load player.</CenterMessage>;
+  if (joiningLobby) return <CenterMessage>Joining lobby...</CenterMessage>;
+  if (joinError) return <CenterMessage>{joinError}</CenterMessage>;
+
+  if (meta.status === "waiting" && meta.mode === "pvp") {
+    return (
+      <PvPWaitingLobby
+        matchId={activeMatchId}
+        currentUserId={currentUser._id}
+        meta={meta}
+        platformTags={platformTags ?? null}
+      />
+    );
+  }
+
+  if (meta.status === "waiting") {
+    return <CenterMessage>Waiting for opponent...</CenterMessage>;
+  }
+
   if (!playerSeat) return <CenterMessage>You are not a player in this match.</CenterMessage>;
 
   if (!isStory) {
@@ -534,6 +604,80 @@ function resolvePlayerSeat(
   if (isStory && meta.isAIOpponent && meta.awayId === "cpu") return "host";
   if (isStory && meta.isAIOpponent && meta.hostId === "cpu") return "away";
   return null;
+}
+
+function PvPWaitingLobby({
+  matchId,
+  currentUserId,
+  meta,
+  platformTags,
+}: {
+  matchId: string;
+  currentUserId: string;
+  meta: MatchMeta;
+  platformTags: MatchPlatformTags | null;
+}) {
+  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
+  const isHost = meta.hostId === currentUserId;
+
+  const hostTag = formatPlatformTag(platformTags?.host.platform);
+  const awayTag = formatPlatformTag(platformTags?.away?.platform);
+
+  const copyMatchId = async () => {
+    await navigator.clipboard.writeText(matchId);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#fdfdfb] flex items-center justify-center px-4">
+      <div className="paper-panel w-full max-w-lg p-6 border-2 border-[#121212]">
+        <p className="text-xs uppercase tracking-wider font-bold text-[#666]">PvP Lobby</p>
+        <h1
+          className="text-3xl font-black uppercase tracking-tighter text-[#121212]"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {isHost ? "Waiting For Opponent" : "Joining Match"}
+        </h1>
+
+        <div className="mt-4 border-2 border-[#121212] bg-white px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider font-bold text-[#666]">Match ID</p>
+          <p className="font-mono text-xs break-all text-[#121212] mt-1">{matchId}</p>
+        </div>
+
+        <div className="mt-4 space-y-1 text-xs text-[#121212]">
+          <p>
+            Host: {platformTags?.host.username ?? "Host"}
+            {hostTag ? ` (${hostTag})` : ""}
+          </p>
+          <p>
+            Away: {platformTags?.away?.username ?? "Pending"}
+            {awayTag ? ` (${awayTag})` : ""}
+          </p>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {isHost && (
+            <button
+              type="button"
+              onClick={copyMatchId}
+              className="tcg-button px-3 py-2 text-xs"
+            >
+              {copied ? "Copied" : "Copy Match ID"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate("/duel")}
+            className="tcg-button-primary px-3 py-2 text-xs"
+          >
+            Back To Duel Lobby
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
