@@ -56,6 +56,7 @@ declare global {
 interface GameBoardProps {
   matchId: string;
   seat: Seat;
+  actorUserId?: string;
   playerPlatformTag?: string;
   opponentPlatformTag?: string;
   onMatchEnd?: (result: {
@@ -69,6 +70,7 @@ interface GameBoardProps {
 export function GameBoard({
   matchId,
   seat,
+  actorUserId,
   playerPlatformTag,
   opponentPlatformTag,
   onMatchEnd,
@@ -87,7 +89,7 @@ export function GameBoard({
     notFound,
     openPrompt,
     latestSnapshotVersion,
-  } = useGameState(matchId, seat);
+  } = useGameState(matchId, seat, actorUserId);
   const actions = useGameActions(matchId, seat, latestSnapshotVersion);
   const endSfxPlayedRef = useRef(false);
   const matchEndNotifiedRef = useRef(false);
