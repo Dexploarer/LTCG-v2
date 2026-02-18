@@ -19,7 +19,7 @@ Artifacts are written to `artifacts/live-gameplay/<runId>/`.
 
 ## Environment Variables
 
-- `LTCG_API_URL` (required): Convex site URL (example: `https://<deployment>.convex.site`)
+- `LTCG_API_URL` (recommended): Convex site URL (example: `https://<deployment>.convex.site`)
 - `LTCG_WEB_URL` (optional): web app URL for spectator mode (example: `http://localhost:3334`)
 - `VITE_CONVEX_URL` (optional): Convex cloud URL (example: `https://<deployment>.convex.cloud`)
   - If omitted, the harness derives it from `LTCG_API_URL`.
@@ -27,6 +27,8 @@ Artifacts are written to `artifacts/live-gameplay/<runId>/`.
 - `LTCG_NO_BROWSER=1` (optional): run API-only (skips Playwright spectator observer).
 - `LTCG_FULL_STAGES` (optional): stages to run in `full`/`soak` suites (default `3`).
 - `LTCG_SOAK_STAGES` (optional): stages to run in `soak` suite (default `10`).
+- `LTCG_LIVE_REQUIRED=1` (optional): fail the run if no API URL is configured (default is skip).
+  - The suite also skips by default if the API URL is configured but not reachable.
 
 ## Local Validation
 

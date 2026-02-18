@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { decide, evolve } from "@lunchtable-tcg/engine";
-import type { GameState, Command, Seat, EngineEvent } from "@lunchtable-tcg/engine";
+import { DEFAULT_CONFIG } from "@lunchtable-tcg/engine";
+import type { GameState, Command, Seat, EngineEvent, EngineConfig } from "@lunchtable-tcg/engine";
 
 // ---------------------------------------------------------------------------
 // Shared validators
@@ -9,6 +10,31 @@ import type { GameState, Command, Seat, EngineEvent } from "@lunchtable-tcg/engi
 
 const seatValidator = v.union(v.literal("host"), v.literal("away"));
 const END_TURN_MACRO_STEP_LIMIT = 10;
+
+function assertConfigIsDefault(config: unknown) {
+  const c = config as EngineConfig | null;
+  if (!c || typeof c !== "object") {
+    throw new Error("initialState.config is required");
+  }
+
+  // We currently only support server-default rules. If this changes, plumb an
+  // explicit allowlist into startMatch rather than trusting client input.
+  const expected = DEFAULT_CONFIG;
+  const mismatch =
+    c.startingLP !== expected.startingLP ||
+    c.maxHandSize !== expected.maxHandSize ||
+    c.startingHandSize !== expected.startingHandSize ||
+    c.maxBoardSlots !== expected.maxBoardSlots ||
+    c.maxSpellTrapSlots !== expected.maxSpellTrapSlots ||
+    c.breakdownThreshold !== expected.breakdownThreshold ||
+    c.maxBreakdownsToWin !== expected.maxBreakdownsToWin ||
+    c.deckSize?.min !== expected.deckSize.min ||
+    c.deckSize?.max !== expected.deckSize.max;
+
+  if (mismatch) {
+    throw new Error("initialState.config does not match server defaults");
+  }
+}
 
 function runCommand(
   state: GameState,
@@ -162,6 +188,8 @@ export function assertInitialStateIntegrity(
   },
   state: GameState
 ) {
+  assertConfigIsDefault((state as any).config);
+
   if (state.hostId !== match.hostId) {
     throw new Error("initialState hostId does not match match.hostId");
   }
@@ -174,12 +202,33 @@ export function assertInitialStateIntegrity(
     state.awayBoard.length > 0 ||
     state.hostSpellTrapZone.length > 0 ||
     state.awaySpellTrapZone.length > 0 ||
+    state.hostFieldSpell !== null ||
+    state.awayFieldSpell !== null ||
     state.hostGraveyard.length > 0 ||
     state.awayGraveyard.length > 0 ||
     state.hostBanished.length > 0 ||
     state.awayBanished.length > 0
   ) {
     throw new Error("initialState must start with empty board and discard zones");
+  }
+
+  if (state.currentChain.length > 0) {
+    throw new Error("initialState must start with no active chain");
+  }
+  if (state.currentPriorityPlayer !== null || state.currentChainPasser !== null) {
+    throw new Error("initialState must start with no chain priority state");
+  }
+  if (state.pendingAction !== null) {
+    throw new Error("initialState must start with no pending action");
+  }
+  if (state.temporaryModifiers.length > 0 || state.lingeringEffects.length > 0) {
+    throw new Error("initialState must start with no modifiers or lingering effects");
+  }
+  if (state.hostNormalSummonedThisTurn || state.awayNormalSummonedThisTurn) {
+    throw new Error("initialState must start with no normal summon used");
+  }
+  if (state.gameOver || state.winner !== null || state.winReason !== null) {
+    throw new Error("initialState must not be game over");
   }
 
   const expectedHostDeck = match.hostDeck ?? [];

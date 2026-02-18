@@ -66,10 +66,16 @@
 
 @layer utilities {
   .zine-border {
-    border: 3px solid transparent;
-    border-image: url("/lunchtable/ink-frame.png") 30 stretch;
-    /* Prevent css minifiers from generating `30//5px` shorthand (parsed as `//` comment). */
-    border-image-width: 1;
+    border-style: solid;
+    border-width: 3px;
+    border-color: transparent;
+
+    /* Avoid `border-image: ... 30//5px` shorthand which some minifiers emit (parsed as `//` comment). */
+    border-image-source: url("/lunchtable/ink-frame.png");
+    border-image-slice: 30;
+    border-image-repeat: stretch;
+    /* Use an explicit length so minifiers don't drop it and emit `30//5px` shorthand. */
+    border-image-width: 3px;
     border-image-outset: 5px;
   }
 

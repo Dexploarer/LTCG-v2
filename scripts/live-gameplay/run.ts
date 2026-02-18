@@ -46,6 +46,30 @@ function deriveConvexSiteUrlFromCloudUrl(cloudUrl: string | null | undefined) {
   return null;
 }
 
+async function probeUrlReachable(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  // Use Promise.race to guarantee we don't hang even if lower-level DNS/TLS work
+  // fails to respect AbortController in some environments.
+  const timeout = new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      controller.abort();
+      resolve(false);
+    }, timeoutMs);
+  });
+
+  const attempt = (async () => {
+    try {
+      // Any HTTP response (including 404) is fine; we only care about connectivity.
+      await fetch(url, { method: "GET", signal: controller.signal });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  return await Promise.race([attempt, timeout]);
+}
+
 async function withRetries<T>(args: {
   label: string;
   retries: number;
@@ -138,6 +162,33 @@ async function main() {
     process.env.LTCG_CONVEX_SITE_URL ??
     deriveConvexSiteUrlFromCloudUrl(process.env.VITE_CONVEX_URL) ??
     null;
+
+  // Explicit environment gate:
+  // - If no API URL is configured, skip by default (exit 0) so local/CI runs
+  //   don't fail due to external connectivity.
+  // - If you want this to be required, set `LTCG_LIVE_REQUIRED=1`.
+  if (!apiUrl) {
+    const required = process.env.LTCG_LIVE_REQUIRED === "1";
+    const message =
+      "live gameplay suite skipped: no api url configured. " +
+      "Set LTCG_API_URL or pass --api-url=... to run.";
+    if (required) {
+      throw new Error(message);
+    }
+    console.warn(`[live-gameplay] ${message}`);
+    return;
+  }
+
+  const required = process.env.LTCG_LIVE_REQUIRED === "1";
+  const reachable = await probeUrlReachable(apiUrl, Math.min(3000, timeoutMs));
+  if (!reachable) {
+    const message = `live gameplay suite skipped: api url is not reachable (${apiUrl}).`;
+    if (required) {
+      throw new Error(message);
+    }
+    console.warn(`[live-gameplay] ${message}`);
+    return;
+  }
 
   if (!apiUrl) {
     console.error("Missing API url. Provide --api-url or set LTCG_API_URL (a .convex.site URL).");

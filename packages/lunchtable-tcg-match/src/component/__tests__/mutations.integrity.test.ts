@@ -4,16 +4,11 @@ import {
   assertInitialStateIntegrity,
   haveSameCardCounts,
 } from "../mutations";
+import { DEFAULT_CONFIG } from "@lunchtable-tcg/engine";
 
 function makeInitialState(overrides: Partial<GameState> = {}): GameState {
   const base = {
-    config: {
-      startingHandSize: 5,
-      startingLifePoints: 8000,
-      maxHandSize: 7,
-      maxViceCounters: 3,
-      breakdownDamage: 2000,
-    },
+    config: DEFAULT_CONFIG,
     cardLookup: {
       h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
       h2: { id: "h2", name: "Host Deck 1", type: "stereotype", attack: 1200, defense: 1000, level: 4 },
@@ -89,6 +84,15 @@ describe("assertInitialStateIntegrity", () => {
     expect(() => assertInitialStateIntegrity(match, makeInitialState())).not.toThrow();
   });
 
+  it("rejects config tampering", () => {
+    const state = makeInitialState({
+      config: { ...DEFAULT_CONFIG, maxBoardSlots: DEFAULT_CONFIG.maxBoardSlots + 1 },
+    });
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
+      "initialState.config does not match server defaults",
+    );
+  });
+
   it("rejects host identity mismatch", () => {
     const state = makeInitialState({ hostId: "different-host" });
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
@@ -116,7 +120,7 @@ describe("assertInitialStateIntegrity", () => {
 
   it("rejects non-empty current chain as invalid initial state", () => {
     const state = makeInitialState({
-      currentChain: [{ id: "1" } as any],
+      currentChain: [{ cardId: "trap", effectIndex: 0, activatingPlayer: "host", targets: [] } as any],
     } as unknown as Partial<GameState>);
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
       "initialState must start with no active chain",
@@ -135,7 +139,7 @@ describe("assertInitialStateIntegrity", () => {
   it("rejects missing card definitions", () => {
     const state = makeInitialState({
       cardLookup: {
-        h1: { id: "h1", name: "Host Hand", type: "stereotype" },
+        h1: { id: "h1", name: "Host Hand", type: "stereotype", attack: 1000, defense: 1000, level: 4 },
       },
     } as unknown as Partial<GameState>);
     expect(() => assertInitialStateIntegrity(match, state)).toThrow(
@@ -154,9 +158,7 @@ describe("assertInitialStateIntegrity", () => {
         a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
       },
     } as unknown as Partial<GameState>);
-    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
-      "initialState.cardLookup[h2] stereotype must have numeric attack",
-    );
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(/initialState\.cardLookup has invalid definition/);
   });
 
   it("rejects malformed spell/trap definitions", () => {
@@ -170,8 +172,6 @@ describe("assertInitialStateIntegrity", () => {
         a3: { id: "a3", name: "Away Deck 2", type: "stereotype", attack: 700, defense: 900, level: 3 },
       },
     } as unknown as Partial<GameState>);
-    expect(() => assertInitialStateIntegrity(match, state)).toThrow(
-      "initialState.cardLookup[h2] spell must have spellType",
-    );
+    expect(() => assertInitialStateIntegrity(match, state)).toThrow(/initialState\.cardLookup has invalid definition/);
   });
 });

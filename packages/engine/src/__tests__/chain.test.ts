@@ -133,6 +133,42 @@ describe("chain system", () => {
     expect(state.currentPriorityPlayer).toBeNull();
   });
 
+  it("resolves multi-link chains LIFO with correct damage attribution", () => {
+    let state = makeState({
+      currentPhase: "main",
+      currentTurnPlayer: "host",
+      hostLifePoints: 8000,
+      awayLifePoints: 8000,
+    });
+
+    // Host sets + activates trap2 (500 damage to opponent).
+    state = setTrapInZone(state, "host", "trap2", "trap2");
+    // Away sets a response trap (also trap2, but attributed to away seat in chain resolution).
+    state = setTrapInZone(state, "away", "trap2", "trap2");
+
+    const hostActivate = decide(state, { type: "ACTIVATE_TRAP", cardId: "trap2", targets: [] }, "host");
+    state = evolve(state, hostActivate);
+    expect(state.currentPriorityPlayer).toBe("away");
+
+    const awayRespond = decide(
+      state,
+      { type: "CHAIN_RESPONSE", pass: false, cardId: "trap2" },
+      "away",
+    );
+    state = evolve(state, awayRespond);
+    expect(state.currentChain.length).toBe(2);
+
+    // Pass-pass resolves.
+    state = evolve(state, decide(state, { type: "CHAIN_RESPONSE", pass: true }, "host"));
+    state = evolve(state, decide(state, { type: "CHAIN_RESPONSE", pass: true }, "away"));
+
+    // Away's link resolves first (LIFO): away trap deals 500 to host.
+    // Then host's link resolves: host trap deals 500 to away.
+    expect(state.hostLifePoints).toBe(7500);
+    expect(state.awayLifePoints).toBe(7500);
+    expect(state.currentChain).toHaveLength(0);
+  });
+
   it("CHAIN_RESPONSE with pass emits CHAIN_PASSED", () => {
     let state = makeState({
       currentPhase: "main",

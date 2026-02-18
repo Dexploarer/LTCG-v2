@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createInitialState } from "../engine.js";
+import { createInitialState, evolve } from "../engine.js";
 import { checkStateBasedActions, drawCard } from "../rules/stateBasedActions.js";
 import { defineCards } from "../cards.js";
 import { DEFAULT_CONFIG } from "../types/config.js";
@@ -253,6 +253,50 @@ describe("checkStateBasedActions", () => {
 
     const events = checkStateBasedActions(state);
     expect(events).toHaveLength(0);
+  });
+
+  it("Breakdown check phase triggers breakdown and can end the game", () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      breakdownThreshold: 1,
+      maxBreakdownsToWin: 1,
+    };
+
+    const state = createInitialState(
+      cardLookup,
+      config,
+      "player1",
+      "player2",
+      createTestDeck(40),
+      createTestDeck(40),
+      "host"
+    );
+
+    state.currentPhase = "breakdown_check";
+    // Force an away monster to be at/above threshold so host earns the breakdown win.
+    state.awayBoard = [
+      {
+        cardId: "warrior-1",
+        definitionId: "warrior-1",
+        position: "attack",
+        faceDown: false,
+        canAttack: false,
+        hasAttackedThisTurn: false,
+        changedPositionThisTurn: false,
+        viceCounters: 1,
+        temporaryBoosts: { attack: 0, defense: 0 },
+        equippedCards: [],
+        turnSummoned: state.turnNumber,
+      },
+    ];
+
+    const breakdownEvents = checkStateBasedActions(state);
+    expect(breakdownEvents.some((e) => e.type === "BREAKDOWN_TRIGGERED")).toBe(true);
+
+    const next = evolve(state, breakdownEvents);
+    expect(next.gameOver).toBe(true);
+    expect(next.winner).toBe("host");
+    expect(next.winReason).toBe("breakdown");
   });
 });
 
