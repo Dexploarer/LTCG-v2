@@ -12,7 +12,6 @@ if (process.env.POSTHOG_KEY) {
 }
 
 let warnedMissingPosthogKey = false;
-let warnedMissingSentryDsn = false;
 
 /**
  * Validates environment variables are set for analytics.

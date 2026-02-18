@@ -16,6 +16,12 @@ import {
 const cards = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match = new LTCGMatch(components.lunchtable_tcg_match as any);
 
+const vBattleStartResult = v.object({
+  matchId: v.string(),
+  chapterId: v.string(),
+  stageNumber: v.number(),
+});
+
 // ── Agent Queries ─────────────────────────────────────────────────
 
 export const getAgentByKeyHash = query({
