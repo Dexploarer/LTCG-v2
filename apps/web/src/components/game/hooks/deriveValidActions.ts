@@ -14,6 +14,7 @@ const toFiniteNumber = (value: unknown): number | undefined => {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return value;
 };
+const TRIBUTE_LEVEL = 7;
 
 export function deriveValidActions(params: {
   view: PlayerView | null;
@@ -58,7 +59,7 @@ export function deriveValidActions(params: {
         if (!card) continue;
         if (card.cardType === "stereotype" || card.type === "stereotype") {
           const level = card.level ?? 0;
-          const needsTribute = level >= 7;
+          const needsTribute = level >= TRIBUTE_LEVEL;
 
           if (needsTribute) {
             if (hasTributeCandidates) {
