@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import {
   internalMutation,
@@ -18,6 +18,24 @@ import { DECK_RECIPES, STARTER_DECKS } from "./cardData";
 const cards: any = new LTCGCards(components.lunchtable_tcg_cards as any);
 const match: any = new LTCGMatch(components.lunchtable_tcg_match as any);
 const story: any = new LTCGStory(components.lunchtable_tcg_story as any);
+const vStarterDeckSelectionResult = v.object({
+  deckId: v.string(),
+  cardCount: v.number(),
+});
+const vStoryBattleResult = v.object({
+  matchId: v.string(),
+  chapterId: v.string(),
+  stageNumber: v.number(),
+});
+const vCompleteStoryStageResult = v.object({
+  outcome: v.union(v.literal("won"), v.literal("lost"), v.literal("abandoned")),
+  starsEarned: v.number(),
+  rewards: v.object({
+    gold: v.number(),
+    xp: v.number(),
+    firstClearBonus: v.number(),
+  }),
+});
 
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
@@ -158,7 +176,7 @@ export async function resolveActiveDeckForStory(
   user: { _id: string; activeDeckId?: string },
 ) {
   const deckId = await resolveActiveDeckIdForUser(ctx, user);
-  if (!deckId) throw new Error("No active deck set");
+  if (!deckId) throw new ConvexError("No active deck set");
 
   const deckData = await cards.decks.getDeckWithCards(ctx, deckId);
   if (!deckData) {
@@ -168,11 +186,11 @@ export async function resolveActiveDeckForStory(
       activeDeckId: undefined,
     });
     if (!fallbackDeckId) {
-      throw new Error("Active deck not found");
+      throw new ConvexError("Active deck not found");
     }
     const fallbackDeckData = await cards.decks.getDeckWithCards(ctx, fallbackDeckId);
     if (!fallbackDeckData) {
-      throw new Error("Deck not found");
+      throw new ConvexError("Deck not found");
     }
     return { deckId: fallbackDeckId, deckData: fallbackDeckData };
   }
@@ -184,16 +202,19 @@ export async function resolveActiveDeckForStory(
 
 export const getAllCards = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => cards.cards.getAllCards(ctx),
 });
 
 export const getStarterDecks = query({
   args: {},
+  returns: v.any(),
   handler: async () => STARTER_DECKS,
 });
 
 export const getUserCards = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return cards.cards.getUserCards(ctx, user._id);
@@ -202,6 +223,7 @@ export const getUserCards = query({
 
 export const getUserDecks = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return cards.decks.getUserDecks(ctx, user._id);
@@ -210,6 +232,7 @@ export const getUserDecks = query({
 
 export const getDeckWithCards = query({
   args: { deckId: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     const deckId = normalizeDeckId(args.deckId);
     if (!deckId) return null;
@@ -221,11 +244,12 @@ export const getDeckWithCards = query({
 
 export const createDeck = mutation({
   args: { name: v.string() },
+  returns: v.string(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const activeDeckId = await resolveActiveDeckIdForUser(ctx, user);
     if (!activeDeckId) {
-      throw new Error("Select a starter deck before creating a custom deck.");
+      throw new ConvexError("Select a starter deck before creating a custom deck.");
     }
 
     const deckId = await cards.decks.createDeck(ctx, user._id, args.name);
@@ -240,19 +264,22 @@ export const saveDeck = mutation({
     deckId: v.string(),
     cards: v.array(v.object({ cardDefinitionId: v.string(), quantity: v.number() })),
   },
+  returns: v.any(),
   handler: async (ctx, args) => cards.decks.saveDeck(ctx, args.deckId, args.cards),
 });
 
 export const setActiveDeck = mutation({
   args: { deckId: v.string() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const deckId = normalizeDeckId(args.deckId);
     if (!deckId) {
-      throw new Error("Invalid deck id");
+      throw new ConvexError("Invalid deck id");
     }
     await cards.decks.setActiveDeck(ctx, user._id, deckId);
     await ctx.db.patch(user._id, { activeDeckId: deckId });
+    return null;
   },
 });
 
@@ -264,6 +291,7 @@ export const setActiveDeck = mutation({
 
 export const selectStarterDeck = mutation({
   args: { deckCode: v.string() },
+  returns: vStarterDeckSelectionResult,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const requestedArchetype = args.deckCode.replace("_starter", "");
@@ -299,13 +327,13 @@ export const selectStarterDeck = mutation({
     // Look up the recipe
     const recipe = DECK_RECIPES[args.deckCode];
     if (!recipe) {
-      throw new Error(`Unknown deck code: ${args.deckCode}`);
+      throw new ConvexError(`Unknown deck code: ${args.deckCode}`);
     }
 
     const allCards = await cards.cards.getAllCards(ctx);
     const resolvedCards = resolveDeckCards(allCards ?? [], recipe);
     if (resolvedCards.length === 0) {
-      throw new Error("No cards available to build starter deck.");
+      throw new ConvexError("No cards available to build starter deck.");
     }
 
     // Grant cards to inventory (so saveDeck's ownership check passes)
@@ -340,16 +368,19 @@ export const selectStarterDeck = mutation({
 
 export const getChapters = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => story.chapters.getChapters(ctx, { status: "published" }),
 });
 
 export const getChapterStages = query({
   args: { chapterId: v.string() },
+  returns: v.any(),
   handler: async (ctx, args) => story.stages.getStages(ctx, args.chapterId),
 });
 
 export const getStoryProgress = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return story.progress.getProgress(ctx, user._id);
@@ -358,6 +389,7 @@ export const getStoryProgress = query({
 
 export const getStageProgress = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return story.progress.getStageProgress(ctx, user._id);
@@ -366,6 +398,7 @@ export const getStageProgress = query({
 
 export const getStageWithNarrative = query({
   args: { chapterId: v.string(), stageNumber: v.number() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     const stages = await story.stages.getStages(ctx, args.chapterId);
     const stage = (stages as any[])?.find(
@@ -385,6 +418,12 @@ export const getStageWithNarrative = query({
 
 export const getFullStoryProgress = query({
   args: {},
+  returns: v.object({
+    chapters: v.any(),
+    chapterProgress: v.any(),
+    stageProgress: v.any(),
+    totalStars: v.number(),
+  }),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     const allChapters = await story.chapters.getChapters(ctx, { status: "published" });
@@ -473,20 +512,20 @@ export async function assertStoryStageUnlocked(
 ) {
   const chapter = await story.chapters.getChapter(ctx, chapterId as any);
   if (!chapter) {
-    throw new Error("Chapter not found");
+    throw new ConvexError("Chapter not found");
   }
 
   const stages = await story.stages.getStages(ctx, chapterId);
   const stage = findStageByNumber(stages, stageNumber);
   if (!stage) {
-    throw new Error(`Stage ${stageNumber} not found in chapter`);
+    throw new ConvexError(`Stage ${stageNumber} not found in chapter`);
   }
 
   const allChapters = await story.chapters.getChapters(ctx, { status: "published" });
   const sortedChapters = [...(allChapters ?? [])].sort(compareStoryChaptersByOrder);
   const chapterIndex = sortedChapters.findIndex((item: any) => item?._id === chapterId);
   if (chapterIndex === -1) {
-    throw new Error("Chapter is not available");
+    throw new ConvexError("Chapter is not available");
   }
 
   const unlockRequirements = chapter.unlockRequirements ?? {};
@@ -494,7 +533,7 @@ export async function assertStoryStageUnlocked(
     const progress = await story.progress.getProgress(ctx, userId);
     const playerLevel = resolveStoryLevelFromProgress(progress ?? []);
     if (playerLevel < unlockRequirements.minimumLevel) {
-      throw new Error(
+      throw new ConvexError(
         `Minimum level ${unlockRequirements.minimumLevel} is required to access this chapter.`,
       );
     }
@@ -508,7 +547,7 @@ export async function assertStoryStageUnlocked(
     if (requiredChapterId) {
       const requiredChapter = await story.chapters.getChapter(ctx, requiredChapterId);
       if (!requiredChapter) {
-        throw new Error("Required chapter not found");
+        throw new ConvexError("Required chapter not found");
       }
 
       const requiredChapterProgress = await story.progress.getChapterProgress(
@@ -518,7 +557,7 @@ export async function assertStoryStageUnlocked(
         requiredChapter.chapterNumber ?? 0,
       );
       if (!isChapterProgressCompleted(requiredChapterProgress)) {
-        throw new Error("Previous chapter must be completed first");
+        throw new ConvexError("Previous chapter must be completed first");
       }
     }
   }
@@ -526,7 +565,7 @@ export async function assertStoryStageUnlocked(
   if (stageNumber > 1) {
     const previousStage = findStageByNumber(stages, stageNumber - 1);
     if (!previousStage) {
-      throw new Error(`Previous stage ${stageNumber - 1} not found in chapter`);
+      throw new ConvexError(`Previous stage ${stageNumber - 1} not found in chapter`);
     }
 
     const previousProgress = await story.progress.getStageProgress(
@@ -535,7 +574,7 @@ export async function assertStoryStageUnlocked(
       previousStage._id,
     );
     if (!isStageProgressCompleted(previousProgress)) {
-      throw new Error(`Stage ${stageNumber - 1} must be cleared first`);
+      throw new ConvexError(`Stage ${stageNumber - 1} must be cleared first`);
     }
   }
 
@@ -629,6 +668,7 @@ export const startStoryBattle = mutation({
     chapterId: v.string(),
     stageNumber: v.optional(v.number()),
   },
+  returns: vStoryBattleResult,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const stageNum = args.stageNumber ?? 1;
@@ -642,7 +682,7 @@ export const startStoryBattle = mutation({
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
 
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
-    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+    if (playerDeck.length < 30) throw new ConvexError("Deck must have at least 30 cards");
 
     const allCards = await cards.cards.getAllCards(ctx);
     const aiDeck = buildAIDeck(allCards);
@@ -720,12 +760,12 @@ export const startStoryBattleForAgent = mutation({
 
     const existingLobby = await match.getOpenLobbyByHost(ctx, { hostId: user._id });
     if (existingLobby) {
-      throw new Error("You already have an open waiting match. Finish or cancel it first.");
+      throw new ConvexError("You already have an open waiting match. Finish or cancel it first.");
     }
 
     const { deckData } = await resolveActiveDeckForStory(ctx, user);
     const playerDeck = getDeckCardIdsFromDeckData(deckData);
-    if (playerDeck.length < 30) throw new Error("Deck must have at least 30 cards");
+    if (playerDeck.length < 30) throw new ConvexError("Deck must have at least 30 cards");
 
     const matchId = await match.createMatch(ctx, {
       hostId: user._id,
@@ -760,19 +800,19 @@ export const cancelWaitingStoryMatch = mutation({
 
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     if (!meta) {
-      throw new Error("Match not found.");
+      throw new ConvexError("Match not found.");
     }
 
     if (meta.hostId !== user._id) {
-      throw new Error("You are not the host of this match.");
+      throw new ConvexError("You are not the host of this match.");
     }
 
     if ((meta as any).status !== "waiting") {
-      throw new Error(`Match is not cancellable (status: ${(meta as any).status}).`);
+      throw new ConvexError(`Match is not cancellable (status: ${(meta as any).status}).`);
     }
 
     if ((meta as any).awayId !== null) {
-      throw new Error("Cannot cancel match after an away player has joined.");
+      throw new ConvexError("Cannot cancel match after an away player has joined.");
     }
 
     await (ctx.db.patch as any)((meta as any)._id, {
@@ -912,6 +952,7 @@ export const submitAction = mutation({
     seat: v.union(v.literal("host"), v.literal("away")),
     expectedVersion: v.optional(v.number()),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return submitActionForActor(ctx, {
@@ -1123,13 +1164,14 @@ function pickAICommand(
 
 export const executeAITurn = internalMutation({
   args: { matchId: v.string() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     // Guard: check it's still AI's turn before acting.
     // This prevents duplicate AI turns if the scheduler fires twice
     // (e.g., from rapid player actions or network retries).
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
     const aiSeat = resolveAICupSeat(meta);
-    if ((meta as any)?.status !== "active" || !aiSeat) return;
+    if ((meta as any)?.status !== "active" || !aiSeat) return null;
 
     // Get all cards for card lookup
     const allCards = await cards.cards.getAllCards(ctx);
@@ -1138,18 +1180,18 @@ export const executeAITurn = internalMutation({
       cardLookup[card._id] = card;
     }
 
-  // Loop up to 20 actions
-  for (let i = 0; i < 20; i++) {
+    // Loop up to 20 actions
+    for (let i = 0; i < 20; i++) {
       const viewJson = await match.getPlayerView(ctx, {
         matchId: args.matchId,
         seat: aiSeat,
       });
-      if (!viewJson) return;
+      if (!viewJson) return null;
 
       const view = JSON.parse(viewJson);
 
       // Stop if game is over or no longer AI's turn
-      if (view.gameOver || view.currentTurnPlayer !== aiSeat) return;
+      if (view.gameOver || view.currentTurnPlayer !== aiSeat) return null;
 
       if (Array.isArray(view.currentChain) && view.currentChain.length > 0) {
         try {
@@ -1159,7 +1201,7 @@ export const executeAITurn = internalMutation({
             seat: aiSeat,
           });
         } catch {
-          return;
+          return null;
         }
         continue;
       }
@@ -1175,12 +1217,13 @@ export const executeAITurn = internalMutation({
         });
       } catch {
         // Game ended or state changed between check and submit — safe to ignore
-        return;
+        return null;
       }
 
       // If command was END_TURN, stop
-      if (command.type === "END_TURN") return;
+      if (command.type === "END_TURN") return null;
     }
+    return null;
   },
 });
 
@@ -1191,6 +1234,7 @@ export const getPlayerView = query({
     matchId: v.string(),
     seat: v.union(v.literal("host"), v.literal("away")),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     await requireSeatOwnership(ctx, args.matchId, args.seat, user._id);
@@ -1204,6 +1248,7 @@ export const getPlayerViewAsActor = internalQuery({
     seat: v.union(v.literal("host"), v.literal("away")),
     actorUserId: v.id("users"),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     await requireSeatOwnership(ctx, args.matchId, args.seat, args.actorUserId);
     return match.getPlayerView(ctx, {
@@ -1218,6 +1263,7 @@ export const getOpenPrompt = query({
     matchId: v.string(),
     seat: v.union(v.literal("host"), v.literal("away")),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     await requireSeatOwnership(ctx, args.matchId, args.seat, user._id);
@@ -1231,6 +1277,7 @@ export const getOpenPromptAsActor = internalQuery({
     seat: v.union(v.literal("host"), v.literal("away")),
     actorUserId: v.id("users"),
   },
+  returns: v.any(),
   handler: async (ctx, args) => {
     await requireSeatOwnership(ctx, args.matchId, args.seat, args.actorUserId);
     return match.getOpenPrompt(ctx, {
@@ -1242,21 +1289,25 @@ export const getOpenPromptAsActor = internalQuery({
 
 export const getMatchMeta = query({
   args: { matchId: v.string() },
+  returns: v.any(),
   handler: async (ctx, args) => match.getMatchMeta(ctx, args),
 });
 
 export const getRecentEvents = query({
   args: { matchId: v.string(), sinceVersion: v.number() },
+  returns: v.any(),
   handler: async (ctx, args) => match.getRecentEvents(ctx, args),
 });
 
 export const getLatestSnapshotVersion = query({
   args: { matchId: v.string() },
+  returns: v.any(),
   handler: async (ctx, args) => match.getLatestSnapshotVersion(ctx, args),
 });
 
 export const getActiveMatchByHost = query({
   args: { hostId: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => match.getActiveMatchByHost(ctx, args),
 });
 
@@ -1264,6 +1315,7 @@ export const getActiveMatchByHost = query({
 
 export const getStoryMatchContext = query({
   args: { matchId: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     const doc = await ctx.db
       .query("storyMatches")
@@ -1314,13 +1366,14 @@ export const completeStoryStage = mutation({
     matchId: v.string(),
     actorUserId: v.optional(v.id("users")),
   },
+  returns: vCompleteStoryStageResult,
   handler: async (ctx, args) => {
     const requester = args.actorUserId
       ? await ctx.db.get(args.actorUserId)
       : await requireUser(ctx);
 
     if (!requester) {
-      throw new Error("User not found.");
+      throw new ConvexError("User not found.");
     }
 
     // Look up story context
@@ -1328,13 +1381,13 @@ export const completeStoryStage = mutation({
       .query("storyMatches")
       .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
       .first();
-    if (!storyMatch) throw new Error("Not a story match");
+    if (!storyMatch) throw new ConvexError("Not a story match");
 
     const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
-    if (!meta) throw new Error("Match metadata not found");
+    if (!meta) throw new ConvexError("Match metadata not found");
     const requesterSeat = resolveSeatForUser(meta, requester._id);
     if (storyMatch.userId !== requester._id && !requesterSeat) {
-      throw new Error("Not your match");
+      throw new ConvexError("Not your match");
     }
 
     const progressOwnerId = storyMatch.userId;
@@ -1354,7 +1407,7 @@ export const completeStoryStage = mutation({
 
     // Verify match is ended
     if ((meta as any)?.status !== "ended") {
-      throw new Error("Match is not ended yet");
+      throw new ConvexError("Match is not ended yet");
     }
 
     const winnerSeat = (meta as any)?.winner as "host" | "away" | null;
@@ -1383,7 +1436,7 @@ export const completeStoryStage = mutation({
         won = (myLife ?? 0) > (oppLife ?? 0);
       }
     }
-    const outcome = won ? "won" : "lost";
+    const outcome: "won" | "lost" = won ? "won" : "lost";
 
     // Get final LP for star calculation
     const viewJson = await match.getPlayerView(ctx, {
@@ -1406,7 +1459,7 @@ export const completeStoryStage = mutation({
     const stages = await story.stages.getStages(ctx, storyMatch.chapterId);
     const stage = findStageByNumber(stages, storyMatch.stageNumber);
     if (!stage) {
-      throw new Error("Stage not found");
+      throw new ConvexError("Stage not found");
     }
 
     const rewardGold = won ? (stage.rewardGold ?? 0) : 0;
@@ -1414,7 +1467,7 @@ export const completeStoryStage = mutation({
 
     const chapter = await story.chapters.getChapter(ctx, storyMatch.chapterId as any);
     if (!chapter) {
-      throw new Error("Chapter not found");
+      throw new ConvexError("Chapter not found");
     }
 
     const chapterProgress = await story.progress.getChapterProgress(
@@ -1438,7 +1491,7 @@ export const completeStoryStage = mutation({
         lastAttemptedAt: Date.now(),
       }));
     if (!chapterProgressId) {
-      throw new Error("Unable to create chapter progress");
+      throw new ConvexError("Unable to create chapter progress");
     }
 
     if (won) {
