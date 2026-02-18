@@ -97,21 +97,38 @@ function executeDestroy(
 
   if (action.target === "all_opponent_monsters") {
     const opponentBoard = activatingPlayer === "host" ? state.awayBoard : state.hostBoard;
+    const targetSeat = opponentSeat(activatingPlayer);
     for (const card of opponentBoard) {
       events.push({ type: "CARD_DESTROYED", cardId: card.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "board" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: card.cardId,
+        from: "board",
+        sourceSeat: targetSeat,
+      });
     }
   } else if (action.target === "all_spells_traps") {
     const opponentZone = activatingPlayer === "host" ? state.awaySpellTrapZone : state.hostSpellTrapZone;
     const opponentField = activatingPlayer === "host" ? state.awayFieldSpell : state.hostFieldSpell;
+    const targetSeat = opponentSeat(activatingPlayer);
 
     for (const card of opponentZone) {
       events.push({ type: "CARD_DESTROYED", cardId: card.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: card.cardId, from: "spell_trap_zone" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: card.cardId,
+        from: "spell_trap_zone",
+        sourceSeat: targetSeat,
+      });
     }
     if (opponentField) {
       events.push({ type: "CARD_DESTROYED", cardId: opponentField.cardId, reason: "effect" });
-      events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: opponentField.cardId, from: "field" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: opponentField.cardId,
+        from: "field",
+        sourceSeat: targetSeat,
+      });
     }
   } else if (action.target === "selected") {
     // Destroy specific targets
@@ -121,10 +138,20 @@ function executeDestroy(
 
       if (boardCard) {
         events.push({ type: "CARD_DESTROYED", cardId: targetId, reason: "effect" });
-        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "board" });
+        events.push({
+          type: "CARD_SENT_TO_GRAVEYARD",
+          cardId: targetId,
+          from: "board",
+          sourceSeat: boardCard.seat,
+        });
       } else if (spellTrap) {
         events.push({ type: "CARD_DESTROYED", cardId: targetId, reason: "effect" });
-        events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId: targetId, from: "spell_trap_zone" });
+        events.push({
+          type: "CARD_SENT_TO_GRAVEYARD",
+          cardId: targetId,
+          from: "spell_trap_zone",
+          sourceSeat: spellTrap.seat,
+        });
       }
     }
   }
@@ -275,9 +302,12 @@ function executeBanish(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const from = detectCardZone(state, targetId);
-    if (!from) continue;
-    events.push({ type: "CARD_BANISHED", cardId: targetId, from });
+    const boardCard = findBoardCard(state, targetId);
+    const sourceSeat =
+      boardCard?.seat ??
+      (state.hostHand.includes(targetId) ? "host" : state.awayHand.includes(targetId) ? "away" : undefined);
+    const from = boardCard ? "board" : "hand"; // simplified
+    events.push({ type: "CARD_BANISHED", cardId: targetId, from, sourceSeat });
   }
 
   return events;
@@ -291,9 +321,13 @@ function executeReturnToHand(
   const events: EngineEvent[] = [];
 
   for (const targetId of targets) {
-    const from = detectCardZone(state, targetId);
-    if (!from) continue;
-    events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from });
+    const boardCard = findBoardCard(state, targetId);
+    const spellTrap = boardCard ? null : findSpellTrapCard(state, targetId);
+    const graveyardSeat =
+      state.hostGraveyard.includes(targetId) ? "host" : state.awayGraveyard.includes(targetId) ? "away" : undefined;
+    const sourceSeat = boardCard?.seat ?? spellTrap?.seat ?? graveyardSeat;
+    const from = boardCard ? "board" : spellTrap ? "spell_trap_zone" : "graveyard";
+    events.push({ type: "CARD_RETURNED_TO_HAND", cardId: targetId, from, sourceSeat });
   }
 
   return events;
@@ -316,7 +350,12 @@ function executeDiscard(
       hand[handIndex],
       `effects.operations.executeDiscard missing hand card at index ${handIndex}`
     );
-    events.push({ type: "CARD_SENT_TO_GRAVEYARD", cardId, from: "hand" });
+    events.push({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId,
+      from: "hand",
+      sourceSeat: targetSeat,
+    });
   }
 
   return events;

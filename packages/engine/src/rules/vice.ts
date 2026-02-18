@@ -68,6 +68,7 @@ export function checkBreakdowns(state: GameState): EngineEvent[] {
         type: "CARD_SENT_TO_GRAVEYARD",
         cardId: card.cardId,
         from: "board",
+        sourceSeat: "host",
       });
     }
   }
@@ -89,6 +90,7 @@ export function checkBreakdowns(state: GameState): EngineEvent[] {
         type: "CARD_SENT_TO_GRAVEYARD",
         cardId: card.cardId,
         from: "board",
+        sourceSeat: "away",
       });
     }
   }
@@ -107,10 +109,13 @@ export function evolveVice(state: GameState, event: EngineEvent): GameState {
       const hostIndex = newState.hostBoard.findIndex((c) => c.cardId === cardId);
       if (hostIndex > -1) {
         newState.hostBoard = [...newState.hostBoard];
-        const hostCard = newState.hostBoard[hostIndex];
-        if (!hostCard) break;
+        const card = expectDefined(
+          newState.hostBoard[hostIndex],
+          `rules.vice.evolveVice missing host card at index ${hostIndex}`
+        );
+
         newState.hostBoard[hostIndex] = {
-          ...hostCard,
+          ...card,
           viceCounters: newCount,
         };
       } else {
@@ -118,10 +123,13 @@ export function evolveVice(state: GameState, event: EngineEvent): GameState {
         const awayIndex = newState.awayBoard.findIndex((c) => c.cardId === cardId);
         if (awayIndex > -1) {
           newState.awayBoard = [...newState.awayBoard];
-          const awayCard = newState.awayBoard[awayIndex];
-          if (!awayCard) break;
+          const card = expectDefined(
+            newState.awayBoard[awayIndex],
+            `rules.vice.evolveVice missing away card at index ${awayIndex}`
+          );
+
           newState.awayBoard[awayIndex] = {
-            ...awayCard,
+            ...card,
             viceCounters: newCount,
           };
         }
@@ -136,10 +144,13 @@ export function evolveVice(state: GameState, event: EngineEvent): GameState {
       const hostIndex = newState.hostBoard.findIndex((c) => c.cardId === cardId);
       if (hostIndex > -1) {
         newState.hostBoard = [...newState.hostBoard];
-        const hostCard = newState.hostBoard[hostIndex];
-        if (!hostCard) break;
+        const card = expectDefined(
+          newState.hostBoard[hostIndex],
+          `rules.vice.evolveVice missing host card at index ${hostIndex}`
+        );
+
         newState.hostBoard[hostIndex] = {
-          ...hostCard,
+          ...card,
           viceCounters: newCount,
         };
       } else {
@@ -147,10 +158,13 @@ export function evolveVice(state: GameState, event: EngineEvent): GameState {
         const awayIndex = newState.awayBoard.findIndex((c) => c.cardId === cardId);
         if (awayIndex > -1) {
           newState.awayBoard = [...newState.awayBoard];
-          const awayCard = newState.awayBoard[awayIndex];
-          if (!awayCard) break;
+          const card = expectDefined(
+            newState.awayBoard[awayIndex],
+            `rules.vice.evolveVice missing away card at index ${awayIndex}`
+          );
+
           newState.awayBoard[awayIndex] = {
-            ...awayCard,
+            ...card,
             viceCounters: newCount,
           };
         }

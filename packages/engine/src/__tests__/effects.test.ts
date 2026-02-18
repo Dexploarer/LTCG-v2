@@ -85,7 +85,12 @@ describe("executeAction", () => {
 
     expect(events).toHaveLength(2);
     expect(events[0]).toEqual({ type: "CARD_DESTROYED", cardId: "monster_1", reason: "effect" });
-    expect(events[1]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "monster_1", from: "board" });
+    expect(events[1]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "monster_1",
+      from: "board",
+      sourceSeat: "host",
+    });
   });
 
   it("DESTROY all_opponent_monsters generates events for each monster", () => {
@@ -98,9 +103,19 @@ describe("executeAction", () => {
 
     expect(events).toHaveLength(4);
     expect(events[0]).toEqual({ type: "CARD_DESTROYED", cardId: "monster_1", reason: "effect" });
-    expect(events[1]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "monster_1", from: "board" });
+    expect(events[1]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "monster_1",
+      from: "board",
+      sourceSeat: "away",
+    });
     expect(events[2]).toEqual({ type: "CARD_DESTROYED", cardId: "monster_2", reason: "effect" });
-    expect(events[3]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "monster_2", from: "board" });
+    expect(events[3]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "monster_2",
+      from: "board",
+      sourceSeat: "away",
+    });
   });
 
   it("DRAW generates correct number of CARD_DRAWN events", () => {
@@ -213,7 +228,12 @@ describe("executeAction", () => {
     const events = executeAction(state, action, "host", "source_card", ["monster_1"]);
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "CARD_BANISHED", cardId: "monster_1", from: "board" });
+    expect(events[0]).toEqual({
+      type: "CARD_BANISHED",
+      cardId: "monster_1",
+      from: "board",
+      sourceSeat: "host",
+    });
   });
 
   it("BANISH detects spell/trap zone source", () => {
@@ -244,7 +264,12 @@ describe("executeAction", () => {
     const events = executeAction(state, action, "host", "source_card", ["monster_1"]);
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: "CARD_RETURNED_TO_HAND", cardId: "monster_1", from: "board" });
+    expect(events[0]).toEqual({
+      type: "CARD_RETURNED_TO_HAND",
+      cardId: "monster_1",
+      from: "board",
+      sourceSeat: "host",
+    });
   });
 
   it("RETURN_TO_HAND detects banished source", () => {
@@ -479,8 +504,18 @@ describe("executeAction - newly implemented actions", () => {
     const events = executeAction(state, action, "host", "source_card", []);
 
     expect(events).toHaveLength(2);
-    expect(events[0]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "card_c", from: "hand" });
-    expect(events[1]).toEqual({ type: "CARD_SENT_TO_GRAVEYARD", cardId: "card_b", from: "hand" });
+    expect(events[0]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "card_c",
+      from: "hand",
+      sourceSeat: "away",
+    });
+    expect(events[1]).toEqual({
+      type: "CARD_SENT_TO_GRAVEYARD",
+      cardId: "card_b",
+      from: "hand",
+      sourceSeat: "away",
+    });
   });
 
   it("DISCARD respects hand size", () => {
