@@ -1,10 +1,11 @@
 import { httpRouter } from "convex/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { buildApiKeyPrefix, isSupportedAgentApiKey } from "./agentApiKey";
 import { isPlainObject, normalizeGameCommand } from "./agentRouteHelpers";
 
 const http = httpRouter();
+const internalApi = internal as any;
 
 // CORS configuration
 const ALLOWED_HEADERS = ["Content-Type", "Authorization"];
@@ -500,21 +501,37 @@ corsRoute({
 // ── Agent Story Endpoints ──────────────────────────────────────
 
 corsRoute({
-	path: "/api/agent/story/progress",
-	method: "GET",
-	handler: async (ctx, request) => {
-		const agent = await authenticateAgent(ctx, request);
-		if (!agent) return errorResponse("Unauthorized", 401);
+  path: "/api/agent/story/progress",
+  method: "GET",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
 
-		const result = await ctx.runQuery(api.game.getFullStoryProgress, {});
-		return jsonResponse(result);
-	},
+    const result = await ctx.runQuery(internalApi.game.getFullStoryProgressForUser, {
+      userId: agent.userId,
+    });
+    return jsonResponse(result);
+  },
 });
 
 corsRoute({
-	path: "/api/agent/story/stage",
-	method: "GET",
-	handler: async (ctx, request) => {
+  path: "/api/agent/story/next-stage",
+  method: "GET",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
+
+    const result = await ctx.runQuery(internalApi.game.getNextStoryStageForUser, {
+      userId: agent.userId,
+    });
+    return jsonResponse(result);
+  },
+});
+
+corsRoute({
+  path: "/api/agent/story/stage",
+  method: "GET",
+  handler: async (ctx, request) => {
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
@@ -1259,9 +1276,9 @@ corsRoute({
 });
 
 corsRoute({
-	path: "/api/rpg/moderation/review",
-	method: "POST",
-	handler: async (ctx, request) => {
+		path: "/api/rpg/moderation/review",
+		method: "POST",
+		handler: async (ctx, request) => {
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 		const body = await parseRequestJson(request);
@@ -1279,14 +1296,247 @@ corsRoute({
 			resolution: body?.resolution,
 		});
 
-		return jsonResponse(result);
-	},
-});
+			return jsonResponse(result);
+		},
+	});
 
-async function handleTelegramStartMessage(
-  ctx: { runMutation: any },
-  message: TelegramMessage,
+// ── Telegram Bot Helpers ────────────────────────────────────────────
+
+type TelegramChat = {
+  id?: number;
+  type?: string;
+};
+
+type TelegramUser = {
+  id?: number;
+  username?: string;
+  first_name?: string;
+};
+
+type TelegramMessage = {
+  message_id?: number;
+  chat?: TelegramChat;
+  from?: TelegramUser;
+  text?: string;
+};
+
+type TelegramInlineKeyboardButton = {
+  text: string;
+  url?: string;
+  callback_data?: string;
+};
+
+type TelegramInlineKeyboardMarkup = {
+  inline_keyboard: TelegramInlineKeyboardButton[][];
+};
+
+type TelegramInlineQuery = {
+  id: string;
+  query?: string;
+};
+
+type TelegramCallbackQuery = {
+  id: string;
+  data?: string;
+  from?: TelegramUser;
+  message?: TelegramMessage;
+};
+
+type TelegramUpdate = {
+  update_id?: number;
+  message?: TelegramMessage;
+  inline_query?: TelegramInlineQuery;
+  callback_query?: TelegramCallbackQuery;
+};
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function escapeTelegramHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseTelegramMatchIdToken(raw: string): string | null {
+  const token = raw.trim();
+  if (!token) return null;
+  if (!/^[A-Za-z0-9_-]{10,}$/.test(token)) return null;
+  return token;
+}
+
+function getTelegramDeepLink(matchId?: string): string {
+  const botUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "")
+    .trim()
+    .replace(/^@/, "");
+  if (!botUsername) return "https://telegram.org";
+  const payload = matchId ? `m_${matchId}` : "";
+  const qs = payload ? `?startapp=${encodeURIComponent(payload)}` : "";
+  return `https://t.me/${botUsername}${qs}`;
+}
+
+async function telegramApi(method: string, payload: Record<string, unknown>) {
+  const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN not configured.");
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Telegram API error (${method}): ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+async function telegramSendMessage(
+  chatId: number,
+  text: string,
+  replyMarkup?: TelegramInlineKeyboardMarkup,
 ) {
+  try {
+    await telegramApi("sendMessage", {
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup,
+      disable_web_page_preview: true,
+    });
+  } catch (error) {
+    console.warn("telegramSendMessage failed", error);
+  }
+}
+
+async function telegramAnswerInlineQuery(inlineQueryId: string, results: unknown[]) {
+  try {
+    await telegramApi("answerInlineQuery", {
+      inline_query_id: inlineQueryId,
+      results,
+      cache_time: 0,
+    });
+  } catch (error) {
+    console.warn("telegramAnswerInlineQuery failed", error);
+  }
+}
+
+async function telegramAnswerCallbackQuery(
+  callbackQueryId: string,
+  text: string,
+  showAlert = false,
+) {
+  try {
+    await telegramApi("answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      text,
+      show_alert: showAlert,
+    });
+  } catch (error) {
+    console.warn("telegramAnswerCallbackQuery failed", error);
+  }
+}
+
+async function telegramEditCallbackMessage(
+  callbackQuery: TelegramCallbackQuery,
+  text: string,
+  replyMarkup?: TelegramInlineKeyboardMarkup,
+) {
+  const messageId = callbackQuery.message?.message_id;
+  const chatId = callbackQuery.message?.chat?.id;
+  if (!messageId || !chatId) return;
+
+  try {
+    await telegramApi("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup,
+      disable_web_page_preview: true,
+    });
+  } catch (error) {
+    console.warn("telegramEditCallbackMessage failed", error);
+  }
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function parseRefreshPayload(raw: string): { matchId: string | null; page: number } {
+  const [matchIdRaw, pageRaw] = raw.split(":", 2);
+  const matchId = matchIdRaw ? parseTelegramMatchIdToken(matchIdRaw) : null;
+  const page = Number(pageRaw ?? 0);
+  return { matchId, page: Number.isFinite(page) ? page : 0 };
+}
+
+async function buildTelegramMatchSummary(
+  ctx: { runQuery: any },
+  args: { matchId: string; userId: string; page?: number },
+): Promise<{ text: string; replyMarkup: TelegramInlineKeyboardMarkup }> {
+  const meta = await ctx.runQuery(api.game.getMatchMeta, { matchId: args.matchId });
+  const status = String((meta as any)?.status ?? "unknown").toUpperCase();
+  const mode = String((meta as any)?.mode ?? "unknown").toUpperCase();
+  const winner = (meta as any)?.winner ? String((meta as any).winner).toUpperCase() : null;
+
+  const lines = [
+    "<b>LunchTable Lobby</b>",
+    `Match <code>${escapeTelegramHtml(args.matchId)}</code>`,
+    `Mode: <b>${escapeTelegramHtml(mode)}</b>`,
+    `Status: <b>${escapeTelegramHtml(status)}</b>`,
+    winner ? `Winner: <b>${escapeTelegramHtml(winner)}</b>` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const replyMarkup: TelegramInlineKeyboardMarkup = {
+    inline_keyboard: [
+      [{ text: "Open Mini App", url: getTelegramDeepLink(args.matchId) }],
+      [{ text: "Refresh", callback_data: `refresh:${args.matchId}:${args.page ?? 0}` }],
+    ],
+  };
+
+  return { text: lines, replyMarkup };
+}
+
+async function requireLinkedTelegramUser(
+  ctx: { runQuery: any },
+  callbackQuery: TelegramCallbackQuery,
+) {
+  const telegramUserId = callbackQuery.from?.id ? String(callbackQuery.from.id) : null;
+  if (!telegramUserId) {
+    throw new Error("Missing Telegram identity.");
+  }
+
+  const userId = await ctx.runQuery(internalApi.telegram.findLinkedUserByTelegramId, {
+    telegramUserId,
+  });
+  if (!userId) {
+    throw new Error("Telegram account not linked. Open the Mini App to link your account first.");
+  }
+
+  return { userId: String(userId) };
+}
+
+	async function handleTelegramStartMessage(
+	  ctx: { runMutation: any },
+	  message: TelegramMessage,
+	) {
   const chatId = message.chat?.id;
   if (!chatId) return;
   const text = (message.text ?? "").trim();
@@ -1406,9 +1656,10 @@ async function handleTelegramCallbackQuery(
   if (data === "create_lobby") {
     try {
       const { userId } = await requireLinkedTelegramUser(ctx, callbackQuery);
-      const result = await ctx.runMutation(internal.game.createPvpLobbyForUser, {
+      const result = await ctx.runMutation(internalApi.game.createPvpLobbyForUser, {
         userId,
-        client: "telegram_inline",
+        client: "telegram",
+        source: "telegram-inline",
       });
       const summary = await buildTelegramMatchSummary(ctx, { matchId: result.matchId, userId });
       await telegramEditCallbackMessage(callbackQuery, summary.text, summary.replyMarkup);
@@ -1424,10 +1675,11 @@ async function handleTelegramCallbackQuery(
       const { userId } = await requireLinkedTelegramUser(ctx, callbackQuery);
       const matchId = parseTelegramMatchIdToken(data.slice("join_lobby:".length));
       if (!matchId) throw new Error("Invalid match id.");
-      await ctx.runMutation(internal.game.joinPvpLobbyForUser, {
+      await ctx.runMutation(internalApi.game.joinPvpLobbyForUser, {
         userId,
         matchId,
-        client: "telegram_inline",
+        client: "telegram",
+        source: "telegram-inline",
       });
       const summary = await buildTelegramMatchSummary(ctx, { matchId, userId });
       await telegramEditCallbackMessage(callbackQuery, summary.text, summary.replyMarkup);
@@ -1465,13 +1717,13 @@ async function handleTelegramCallbackQuery(
       const command = parseJsonObject(tokenPayload.commandJson);
       if (!command) throw new Error("Action payload is invalid.");
 
-      await ctx.runMutation(internal.game.submitActionWithClientForUser, {
+      await ctx.runMutation(internalApi.game.submitActionWithClientForUser, {
         userId,
         matchId: tokenPayload.matchId,
         command: JSON.stringify(command),
         seat: tokenPayload.seat,
         expectedVersion: tokenPayload.expectedVersion ?? undefined,
-        client: "telegram_inline",
+        client: "telegram",
       });
       await ctx.runMutation(internalApi.telegram.deleteTelegramActionToken, { token });
 

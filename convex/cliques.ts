@@ -333,23 +333,16 @@ export const getCliqueDashboard = query({
     const myClique = user.cliqueId ? await ctx.db.get(user.cliqueId) : null;
     const myArchetype = myClique?.archetype ?? (await resolveUserStarterArchetype(ctx, user));
 
-    const rosterPreview = user.cliqueId
-      ? (
-          await ctx.db
-            .query("users")
-            .withIndex("by_clique_and_username", (q) => q.eq("cliqueId", user.cliqueId))
-            .take(12)
-        ).map((member) => ({
-          _id: member._id,
-          _creationTime: member._creationTime,
-          username: member.username,
-          name: member.name,
-          cliqueRole: member.cliqueRole,
-          createdAt: member.createdAt,
-        }))
+    const members = user.cliqueId
+      ? await ctx.db
+          .query("users")
+          .withIndex("by_clique", (q) => q.eq("cliqueId", user.cliqueId))
+          .collect()
       : [];
 
-    members.sort((a, b) => (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""));
+    members.sort((a, b) =>
+      (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""),
+    );
 
     const rosterPreview = members.slice(0, 12).map((member) => ({
       _id: member._id,
@@ -383,8 +376,11 @@ export const getCliqueMembers = query({
   handler: async (ctx, args) => {
     const members = await ctx.db
       .query("users")
-      .withIndex("by_clique_and_username", (q) => q.eq("cliqueId", args.cliqueId))
+      .withIndex("by_clique", (q) => q.eq("cliqueId", args.cliqueId))
       .collect();
+    members.sort((a, b) =>
+      (a.username ?? a.name ?? "").localeCompare(b.username ?? b.name ?? ""),
+    );
     return members.map((m) => ({
       _id: m._id,
       _creationTime: m._creationTime,
@@ -428,7 +424,8 @@ export const leaveClique = mutation({
       throw new Error("Not in a clique");
     }
 
-    const clique = await ctx.db.get(user.cliqueId);
+    const cliqueId = user.cliqueId;
+    const clique = await ctx.db.get(cliqueId);
     if (!clique) {
       // Repair stale membership references idempotently.
       await ctx.db.patch(user._id, {
@@ -438,10 +435,13 @@ export const leaveClique = mutation({
       return null;
     }
 
+    let deletedClique = false;
+
     // Leaders/founders can't leave if they're the only one
     if (user.cliqueRole === "founder" || user.cliqueRole === "leader") {
       if (clique.memberCount <= 1) {
-        await ctx.db.delete(user.cliqueId);
+        await ctx.db.delete(cliqueId);
+        deletedClique = true;
       } else {
         throw new ConvexError("Transfer leadership before leaving");
       }

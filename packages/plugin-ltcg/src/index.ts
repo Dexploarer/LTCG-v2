@@ -44,7 +44,6 @@ import { surrenderAction } from "./actions/surrender.js";
 import { playStoryAction } from "./actions/playStory.js";
 import { joinMatchAction } from "./actions/joinMatch.js";
 import { getSoundtrackAction } from "./actions/getSoundtrack.js";
-import { joinMatchAction } from "./actions/joinMatch.js";
 import { statusRoute, statusRouteLegacy } from "./routes/status.js";
 import { ltcgEvents } from "./events.js";
 import { getEnvValue } from "./env.js";
@@ -110,7 +109,6 @@ const plugin: Plugin = {
     playTurnAction,
     playStoryAction,
     getStatusAction,
-    joinMatchAction,
     surrenderAction,
     getSoundtrackAction,
   ],
@@ -133,7 +131,6 @@ export { joinMatchAction } from "./actions/joinMatch.js";
 export { getStatusAction } from "./actions/getStatus.js";
 export { surrenderAction } from "./actions/surrender.js";
 export { playStoryAction } from "./actions/playStory.js";
-export { joinMatchAction } from "./actions/joinMatch.js";
 export { getSoundtrackAction } from "./actions/getSoundtrack.js";
 export { statusRoute, statusRouteLegacy } from "./routes/status.js";
 export { ltcgEvents } from "./events.js";
