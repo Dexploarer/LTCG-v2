@@ -73,7 +73,13 @@ Reference docs:
 
 ## Embedding policy
 
-`apps/web/vercel.json` now uses `Content-Security-Policy` `frame-ancestors` to allow:
+The Vercel deployment must allow Discord to embed the Activity iframe. This repo includes matching
+`Content-Security-Policy` `frame-ancestors` headers in both:
+
+- `vercel.json` (when Vercel Root Directory is set to `.`)
+- `apps/web/vercel.json` (when Vercel Root Directory is set to `apps/web`)
+
+The policy allows:
 
 - `discord.com`, `ptb.discord.com`, `canary.discord.com`
 - Existing milaidy hosts
