@@ -1,4 +1,5 @@
 export type Seat = "host" | "away";
+export type ClientPlatform = "web" | "telegram_inline" | "telegram_miniapp" | "agent" | "cpu";
 
 export type MatchMode = "pvp" | "story";
 export type MatchStatus = "waiting" | "active" | "ended";
@@ -28,6 +29,20 @@ export type MatchMeta = {
   createdAt: number;
   startedAt?: number;
   endedAt?: number;
+};
+
+export type MatchParticipantPlatformTag = {
+  userId: string;
+  username: string;
+  platform: ClientPlatform;
+  source: string | null;
+  lastSeenAt: number | null;
+};
+
+export type MatchPlatformTags = {
+  matchId: string;
+  host: MatchParticipantPlatformTag;
+  away: MatchParticipantPlatformTag | null;
 };
 
 export type StoryMatchContext = {
@@ -133,9 +148,6 @@ export type PlayerView = {
   mySeat: Seat;
   currentPhase: "draw" | "standby" | "breakdown_check" | "main" | "main2" | "combat" | "end";
   currentPriorityPlayer: Seat | null;
-  normalSummonedThisTurn: boolean;
-  maxBoardSlots: number;
-  maxSpellTrapSlots: number;
   gameOver: boolean;
   turnNumber: number;
   board: GameCardInstance[];

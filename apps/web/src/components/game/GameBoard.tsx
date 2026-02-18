@@ -16,6 +16,7 @@ import { GameOverOverlay } from "./GameOverOverlay";
 import { GameMotionOverlay } from "./GameMotionOverlay";
 import { AnimatePresence } from "framer-motion";
 import type { Phase } from "./types";
+import { formatPlatformTag } from "@/lib/clientPlatform";
 
 const MAX_BOARD_SLOTS = 3;
 const MAX_SPELL_TRAP_SLOTS = 3;
@@ -56,6 +57,8 @@ declare global {
 interface GameBoardProps {
   matchId: string;
   seat: Seat;
+  playerPlatformTag?: string;
+  opponentPlatformTag?: string;
   onMatchEnd?: (result: {
     result: "win" | "loss" | "draw";
     winner?: string | null;
@@ -64,7 +67,13 @@ interface GameBoardProps {
   }) => void;
 }
 
-export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
+export function GameBoard({
+  matchId,
+  seat,
+  playerPlatformTag,
+  opponentPlatformTag,
+  onMatchEnd,
+}: GameBoardProps) {
   const navigate = useNavigate();
   const { playSfx } = useAudio();
   const {
@@ -79,6 +88,7 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
     notFound,
     openPrompt,
     latestSnapshotVersion,
+    platformTags,
   } = useGameState(matchId, seat);
   const actions = useGameActions(matchId, seat, latestSnapshotVersion);
   const endSfxPlayedRef = useRef(false);
@@ -212,6 +222,12 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
       })
       .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
   })();
+
+  const myParticipant = seat === "host" ? platformTags?.host : platformTags?.away;
+  const opponentParticipant = seat === "host" ? platformTags?.away : platformTags?.host;
+  const myPlatformTag = formatPlatformTag(myParticipant?.platform);
+  const opponentPlatformTag = formatPlatformTag(opponentParticipant?.platform);
+  const opponentLabel = opponentParticipant?.username ?? "Opponent";
 
   // Selection state
   const [selectedHandCard, setSelectedHandCard] = useState<string | null>(null);
@@ -637,12 +653,17 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
   }
 
   return (
-    <div className="relative h-screen flex flex-col bg-[#fdfdfb]">
+    <div className="relative h-screen overflow-hidden bg-[#fdfdfb]">
       <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
-
+      <div className="relative z-10 flex h-full flex-col">
       {/* Opponent LP Bar */}
       <div className="px-4 pt-2">
-        <LPBar lp={view.opponentLifePoints ?? 8000} maxLp={8000} label="Opponent" side="opponent" />
+        <LPBar
+          lp={view.opponentLifePoints ?? 8000}
+          maxLp={8000}
+          label={opponentPlatformTag ? `Opponent · ${opponentPlatformTag}` : "Opponent"}
+          side="opponent"
+        />
       </div>
 
       {/* Opponent Field */}
@@ -715,7 +736,12 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
 
       {/* Player LP Bar */}
       <div className="px-4 pb-1">
-        <LPBar lp={view.lifePoints ?? 8000} maxLp={8000} label="You" side="player" />
+        <LPBar
+          lp={view.lifePoints ?? 8000}
+          maxLp={8000}
+          label={playerPlatformTag ? `You · ${playerPlatformTag}` : "You"}
+          side="player"
+        />
       </div>
 
       {/* Player Hand */}
@@ -923,6 +949,7 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
           onClose={() => setShowGraveyard(null)}
         />
       )}
+      </div>
     </div>
   );
 }

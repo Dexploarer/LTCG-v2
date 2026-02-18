@@ -3,58 +3,35 @@ import { query } from "./_generated/server";
 import { mask } from "@lunchtable-tcg/engine";
 import type { GameState, Seat } from "@lunchtable-tcg/engine";
 
-const vSeat = v.union(v.literal("host"), v.literal("away"));
-const vMatchStatus = v.union(
-  v.literal("waiting"),
-  v.literal("active"),
-  v.literal("ended"),
-);
-const vMatchMode = v.union(v.literal("pvp"), v.literal("story"));
-const vMatchWinner = v.union(v.literal("host"), v.literal("away"));
+export function applySinceVersionIndex<TQueryBuilder, TResult>(
+  q: TQueryBuilder & {
+    eq: (field: "matchId", value: string) => {
+      gt: (field: "version", value: number) => TResult;
+    };
+  },
+  matchId: string,
+  sinceVersion: number
+): TResult {
+  return q.eq("matchId", matchId).gt("version", sinceVersion);
+}
 
-const vMatch = v.object({
-  _id: v.id("matches"),
-  _creationTime: v.number(),
-  hostId: v.string(),
-  awayId: v.union(v.string(), v.null()),
-  mode: vMatchMode,
-  status: vMatchStatus,
-  winner: v.optional(vMatchWinner),
-  endReason: v.optional(v.string()),
-  hostDeck: v.array(v.string()),
-  awayDeck: v.union(v.array(v.string()), v.null()),
-  isAIOpponent: v.boolean(),
-  createdAt: v.number(),
-  startedAt: v.optional(v.number()),
-  endedAt: v.optional(v.number()),
-});
-
-const vMatchEventBatch = v.object({
-  _id: v.id("matchEvents"),
-  _creationTime: v.number(),
-  version: v.number(),
-  events: v.string(),
-  command: v.string(),
-  seat: vSeat,
-  createdAt: v.number(),
-});
-
-const vOpenPrompt = v.object({
-  _id: v.id("matchPrompts"),
-  _creationTime: v.number(),
-  matchId: v.id("matches"),
-  seat: vSeat,
-  promptType: v.union(
-    v.literal("chain_response"),
-    v.literal("optional_trigger"),
-    v.literal("replay_decision"),
-    v.literal("discard"),
-  ),
-  data: v.optional(v.string()),
-  resolved: v.boolean(),
-  createdAt: v.number(),
-  resolvedAt: v.optional(v.number()),
-});
+export function mapRecentEventsRows(
+  rows: Array<{
+    version: number;
+    events: string;
+    command: string;
+    seat: string;
+    createdAt: number;
+  }>
+) {
+  return rows.map((row) => ({
+    version: row.version,
+    events: row.events,
+    command: row.command,
+    seat: row.seat,
+    createdAt: row.createdAt,
+  }));
+}
 
 // ============================================================================
 // QUERIES
@@ -112,23 +89,13 @@ export const getRecentEvents = query({
   },
   returns: v.array(vMatchEventBatch),
   handler: async (ctx, args) => {
-    const allEvents = await ctx.db
+    const recentEvents = await ctx.db
       .query("matchEvents")
-      .withIndex("by_match_version", (q) => q.eq("matchId", args.matchId))
+      .withIndex("by_match_version", (q) => applySinceVersionIndex(q, args.matchId, args.sinceVersion))
       .order("asc")
       .collect();
 
-    return allEvents
-      .filter((e) => e.version > args.sinceVersion)
-      .map((e) => ({
-        _id: e._id,
-        _creationTime: e._creationTime,
-        version: e.version,
-        events: e.events,
-        command: e.command,
-        seat: e.seat,
-        createdAt: e.createdAt,
-      }));
+    return mapRecentEventsRows(recentEvents);
   },
 });
 

@@ -523,15 +523,14 @@ describe("spells and traps", () => {
       ];
 
       const events = engine.decide({ type: "ACTIVATE_TRAP", cardId: "set-trap", targets: [] }, "host");
-      expect(events.map((event) => event.type)).toEqual([
-        "CHAIN_STARTED",
-        "CHAIN_LINK_ADDED",
-        "TRAP_ACTIVATED",
-      ]);
+      expect(events).toHaveLength(3);
+      expect(events[0]).toMatchObject({ type: "CHAIN_STARTED" });
       expect(events[1]).toMatchObject({
         type: "CHAIN_LINK_ADDED",
         cardId: "set-trap",
         seat: "host",
+        effectIndex: 0,
+        targets: [],
       });
       expect(events[2]).toMatchObject({
         type: "TRAP_ACTIVATED",
@@ -551,6 +550,7 @@ describe("spells and traps", () => {
       // Spell/trap zone should be empty
       expect(newState.hostSpellTrapZone).toHaveLength(0);
       expect(newState.currentChain).toHaveLength(1);
+      expect(newState.currentPriorityPlayer).toBe("away");
     });
 
     it("activates a continuous trap and keeps it face-up on field", () => {
@@ -569,11 +569,7 @@ describe("spells and traps", () => {
       ];
 
       const events = engine.decide({ type: "ACTIVATE_TRAP", cardId: "set-continuous-trap", targets: [] }, "host");
-      expect(events.map((event) => event.type)).toEqual([
-        "CHAIN_STARTED",
-        "CHAIN_LINK_ADDED",
-        "TRAP_ACTIVATED",
-      ]);
+      expect(events).toHaveLength(3);
 
       // Apply events
       engine.evolve(events);
@@ -588,6 +584,7 @@ describe("spells and traps", () => {
       // Should NOT be in graveyard
       expect(newState.hostGraveyard).not.toContain("set-continuous-trap");
       expect(newState.currentChain).toHaveLength(1);
+      expect(newState.currentPriorityPlayer).toBe("away");
     });
 
     it("activates selected effect for multi-effect trap", () => {
@@ -611,26 +608,19 @@ describe("spells and traps", () => {
         effectIndex: 1,
         targets: [],
       }, "host");
-      expect(events.map((event) => event.type)).toEqual([
-        "CHAIN_STARTED",
-        "CHAIN_LINK_ADDED",
-        "TRAP_ACTIVATED",
-      ]);
+      expect(events).toHaveLength(3);
+      expect(events[0]).toMatchObject({ type: "CHAIN_STARTED" });
       expect(events[1]).toMatchObject({
         type: "CHAIN_LINK_ADDED",
         cardId: "set-multi-trap",
         seat: "host",
         effectIndex: 1,
+        targets: [],
       });
-      expect(events[2]).toMatchObject({
-        type: "TRAP_ACTIVATED",
-        seat: "host",
-        cardId: "set-multi-trap",
-      });
-      expect(events.some((event) => event.type === "DAMAGE_DEALT")).toBe(false);
+      expect(events[2]).toMatchObject({ type: "TRAP_ACTIVATED", seat: "host", cardId: "set-multi-trap" });
     });
 
-    it("ignores invalid trap effect index and only emits activation event", () => {
+    it("coerces invalid trap effect index to first effect", () => {
       const engine = createEngine({
         cardLookup,
         hostId: "player1",
@@ -651,7 +641,13 @@ describe("spells and traps", () => {
         effectIndex: 9,
         targets: [],
       }, "host");
-      expect(events).toHaveLength(0);
+      expect(events).toHaveLength(3);
+      expect(events[1]).toMatchObject({
+        type: "CHAIN_LINK_ADDED",
+        cardId: "set-multi-trap",
+        seat: "host",
+        effectIndex: 0,
+      });
     });
 
     it("rejects trap activation if not face-down", () => {

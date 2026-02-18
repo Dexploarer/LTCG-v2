@@ -7,10 +7,7 @@ import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
  * Checks for Telegram WebApp object or URL hash params.
  */
 export function isTelegramMiniApp(): boolean {
-  if (typeof window === "undefined") return false;
-  // Telegram injects this on the window object inside mini apps
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return !!(window as any).Telegram?.WebApp?.initData;
+  return detectTelegramMiniApp();
 }
 
 /**
@@ -30,36 +27,50 @@ export function useTelegramAuth() {
   }
 
   const { authenticated, user, linkTelegram } = usePrivy();
+  const linkTelegramFromMiniApp = useConvexMutation(apiAny.telegram.linkTelegramFromMiniApp);
   const linked = useRef(false);
+  const linking = useRef(false);
+  const attempted = useRef(false);
   const isTelegram = isTelegramMiniApp();
 
   useEffect(() => {
-    if (!isTelegram || !authenticated || linked.current) return;
+    if (!authenticated) {
+      linked.current = false;
+      linking.current = false;
+      attempted.current = false;
+      return;
+    }
+    if (!isTelegram || linked.current || linking.current || attempted.current) return;
 
-    // Check if Telegram is already linked
     const hasTelegram = user?.linkedAccounts?.some(
       (a) => a.type === "telegram",
     );
-    if (hasTelegram) {
-      linked.current = true;
-      return;
-    }
 
-    // Link Telegram account using launch params
-    // Must happen within 5 minutes of app launch (Telegram security constraint)
     async function link() {
+      linking.current = true;
+      attempted.current = true;
       try {
         const { retrieveRawInitData } = await import("@telegram-apps/bridge");
         const initDataRaw = retrieveRawInitData() ?? "";
-        linkTelegram({ launchParams: { initDataRaw } });
+        if (!initDataRaw) return;
+
+        // Ensure Privy account link is established first.
+        if (!hasTelegram) {
+          await linkTelegram({ launchParams: { initDataRaw } });
+        }
+
+        // Mirror Telegram identity into Convex for inline-web cross-play.
+        await linkTelegramFromMiniApp({ initDataRaw });
         linked.current = true;
       } catch {
         // Linking may fail if already linked or params expired — safe to ignore
+      } finally {
+        linking.current = false;
       }
     }
 
     link();
-  }, [isTelegram, authenticated, user, linkTelegram]);
+  }, [isTelegram, authenticated, user, linkTelegram, linkTelegramFromMiniApp]);
 
   return { isTelegram };
 }

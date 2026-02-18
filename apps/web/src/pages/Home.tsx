@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIframeMode } from "@/hooks/useIframeMode";
@@ -85,6 +85,13 @@ export function Home() {
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
 
+  useEffect(() => {
+    if (!ready || !isDiscordActivity || authenticated) return;
+    if (discordLoginTriggeredRef.current) return;
+    discordLoginTriggeredRef.current = true;
+    login({ loginMethods: ["discord"] });
+  }, [ready, isDiscordActivity, authenticated, login]);
+
   const goTo = useCallback(
     (path: string, requiresAuth: boolean) => {
       if (requiresAuth && !authenticated) {
@@ -159,18 +166,35 @@ export function Home() {
         </Panel>
 
         <Panel
+          title="PvP Duel"
+          subtitle="Invite friends on web and Telegram"
+          bgImage={WATCH_BG}
+          onClick={() => goTo("/duel", true)}
+        >
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
+        </Panel>
+
+        <Panel
           title="Watch Live"
           subtitle="Agents streaming on retake.tv"
           bgImage={WATCH_BG}
-          onClick={() => goTo("/watch", false)}
+          onClick={() => goTo("/duel", true)}
         >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
         </Panel>
 
         <Panel
           title="LunchTable TTG"
           subtitle="Create worlds, agents, maps, and campaigns"
           onClick={() => goTo("/studio?tab=overview", false)}
+        >
+          <div className="text-4xl mb-3">&#9881;</div>
+        </Panel>
+
+        <Panel
+          title="LunchTable TTG"
+          subtitle="Create worlds, agents, maps, and campaigns"
+          onClick={() => goTo("/studio", false)}
         >
           <div className="text-4xl mb-3">&#9881;</div>
         </Panel>

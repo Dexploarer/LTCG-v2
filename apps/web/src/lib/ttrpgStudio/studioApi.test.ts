@@ -35,22 +35,14 @@ describe("studioApi", () => {
   });
 
   it("validates publish configuration", () => {
-    const firstWorld = playableWorlds[0];
-    if (!firstWorld) {
-      throw new Error("No playable worlds available for test setup.");
-    }
-    const draft = createDraftFromWorld(firstWorld.id);
+    const draft = createDraftFromWorld(playableWorlds[0].id);
     draft.publish.version = "not-semver";
     const issues = validateDraft(draft);
     expect(issues.some((issue) => issue.code === "package_version_invalid")).toBe(true);
   });
 
   it("supports draft JSON roundtrip", () => {
-    const roundtripWorld = playableWorlds[1] ?? playableWorlds[0];
-    if (!roundtripWorld) {
-      throw new Error("No playable worlds available for test setup.");
-    }
-    const draft = createDraftFromWorld(roundtripWorld.id);
+    const draft = createDraftFromWorld(playableWorlds[1].id);
     const serialized = serializeDraft(draft);
     const parsed = deserializeDraft(serialized);
     expect(parsed.world.id).toBe(draft.world.id);
