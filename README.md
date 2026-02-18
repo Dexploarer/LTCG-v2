@@ -41,6 +41,7 @@ bun run dev
 # Or run individually:
 bun run dev:convex  # Backend only
 bun run dev:web     # Frontend only (port 3334)
+bun run dev:rpg     # RPG frontend (port 3340)
 ```
 
 ## Telegram Cross-Play Setup
@@ -77,8 +78,14 @@ curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
 ```
 LTCG-v2/
 ├── convex/                    # Convex backend (host layer)
+├── apps/rpg-web/              # RPG creator + library + session UI
 ├── packages/
 │   ├── engine/                # Pure TS game engine
+│   ├── rpg-engine/            # Deterministic RPG engine + dice runtime
+│   ├── rpg-worlds/            # RPG world manifests + flagship world bundles
+│   ├── rpg-render/            # 2D renderer + optional 3D adapter contracts
+│   ├── rpg-agents/            # Agent seat policies and safety helpers
+│   ├── plugin-rpg/            # ElizaOS RPG plugin
 │   ├── plugin-ltcg/           # ElizaOS plugin
 │   ├── lunchtable-tcg-cards/  # Card inventory + decks
 │   ├── lunchtable-tcg-match/  # Event-sourced matches
