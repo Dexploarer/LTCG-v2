@@ -1,6 +1,6 @@
 import type { DiceRollResult } from "./types.js";
 
-const DICE_PATTERN = /^(\\d+)d(\\d+)([+-]\\d+)?$/;
+const DICE_PATTERN = /^(\d+)d(\d+)([+-]\d+)?$/;
 
 function hashSeed(input: string): number {
   let hash = 2166136261;
