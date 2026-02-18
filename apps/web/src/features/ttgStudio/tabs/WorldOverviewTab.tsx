@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { playableWorlds, validateDraft } from "@/lib/ttrpgStudio";
-import type { TTGProjectDraft } from "@/lib/ttrpgStudio";
 import { useActiveProjectDraft, useTTGStudioStore } from "../state/useTTGStudioStore";
 
 export function WorldOverviewTab() {
@@ -36,10 +35,7 @@ export function WorldOverviewTab() {
   }));
 
   const items = useMemo(
-    () =>
-      projectOrder
-        .map((id) => projects[id])
-        .filter((item): item is TTGProjectDraft => Boolean(item)),
+    () => projectOrder.map((id) => projects[id]).filter(Boolean),
     [projectOrder, projects],
   );
 

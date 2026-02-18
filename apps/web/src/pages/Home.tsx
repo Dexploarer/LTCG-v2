@@ -4,7 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { TrayNav } from "@/components/layout/TrayNav";
-import { isDiscordActivityFrame } from "@/lib/clientPlatform";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
   STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG,
@@ -78,9 +78,9 @@ function Panel({
 export function Home() {
   const { isEmbedded } = useIframeMode();
   const navigate = useNavigate();
-  const { ready, authenticated, login } = usePrivy();
-  const discordLoginTriggeredRef = useRef(false);
-  const isDiscordActivity = isDiscordActivityFrame();
+  const { authenticated, login } = PRIVY_ENABLED
+    ? usePrivy()
+    : { authenticated: false, login: () => {} };
 
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
@@ -137,7 +137,7 @@ export function Home() {
       </header>
 
       {/* Comic panels grid */}
-      <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 p-4 md:p-8 max-w-5xl w-full mx-auto">
+      <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4 md:p-8 max-w-6xl w-full mx-auto">
         <Panel
           title="Story Mode"
           subtitle="Fight your way through the halls"
@@ -187,6 +187,14 @@ export function Home() {
           title="LunchTable TTG"
           subtitle="Create worlds, agents, maps, and campaigns"
           onClick={() => goTo("/studio?tab=overview", false)}
+        >
+          <div className="text-4xl mb-3">&#9881;</div>
+        </Panel>
+
+        <Panel
+          title="LunchTable TTG"
+          subtitle="Create worlds, agents, maps, and campaigns"
+          onClick={() => goTo("/studio", false)}
         >
           <div className="text-4xl mb-3">&#9881;</div>
         </Panel>

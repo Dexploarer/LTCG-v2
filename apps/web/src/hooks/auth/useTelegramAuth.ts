@@ -1,6 +1,6 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useRef } from "react";
-import { apiAny, useConvexMutation } from "../../lib/convexHelpers";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 
 /**
  * Detect if running inside a Telegram mini app.
