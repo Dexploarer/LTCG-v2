@@ -1,12 +1,22 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createPublicKey, verify } from "node:crypto";
 
+// Discord signs requests with Ed25519. We must validate the signature against the *raw* body bytes.
+// Docs: https://discord.com/developers/docs/interactions/receiving-and-responding#security-and-authorization
+// Vercel's Node runtime may provide parsed JSON in `req.body`, so we prefer reading from the stream when possible.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 const DISCORD_PING_TYPE = 1;
 const DISCORD_PONG_RESPONSE_TYPE = 1;
 const DISCORD_APPLICATION_COMMAND_TYPE = 2;
 const DISCORD_CHANNEL_MESSAGE_WITH_SOURCE_TYPE = 4;
 const DISCORD_EPHEMERAL_MESSAGE_FLAG = 1 << 6;
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+const MAX_INTERACTION_AGE_SECONDS = 5 * 60;
 
 type DiscordInteractionPayload = {
   type?: unknown;
@@ -30,9 +40,6 @@ function getHeaderValue(headers: VercelRequest["headers"], key: string) {
 async function readRawRequestBody(request: VercelRequest) {
   if (typeof request.body === "string") return request.body;
   if (Buffer.isBuffer(request.body)) return request.body.toString("utf8");
-  if (request.body && typeof request.body === "object") {
-    return JSON.stringify(request.body);
-  }
 
   const chunks: Uint8Array[] = [];
   for await (const chunk of request) {
@@ -42,7 +49,19 @@ async function readRawRequestBody(request: VercelRequest) {
       chunks.push(chunk);
     }
   }
-  if (chunks.length === 0) return "";
+  if (chunks.length === 0) {
+    // Fallback: some runtimes may pre-parse JSON into `req.body` and consume the stream.
+    // This is not ideal for signature verification, but can still work if the original JSON
+    // payload is already canonical (Discord typically sends minified JSON).
+    if (request.body && typeof request.body === "object") {
+      try {
+        return JSON.stringify(request.body);
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  }
   return Buffer.concat(chunks).toString("utf8");
 }
 
@@ -118,6 +137,18 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const signatureHex = getHeaderValue(request.headers, "x-signature-ed25519").trim();
   const timestamp = getHeaderValue(request.headers, "x-signature-timestamp").trim();
   const rawBody = await readRawRequestBody(request);
+
+  const timestampSeconds = Number.parseInt(timestamp, 10);
+  if (!Number.isFinite(timestampSeconds)) {
+    response.status(401).json({ error: "Invalid request signature." });
+    return;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (nowSeconds - timestampSeconds > MAX_INTERACTION_AGE_SECONDS) {
+    response.status(401).json({ error: "Invalid request signature." });
+    return;
+  }
 
   const validSignature = verifyDiscordRequestSignature({
     publicKeyHex,
