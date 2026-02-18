@@ -129,7 +129,7 @@ async function parseRequestJson(request: Request) {
 
 type MatchSeat = "host" | "away";
 
-async function resolveMatchAndSeat(
+export async function resolveMatchAndSeat(
 	ctx: { runQuery: any },
 	agentUserId: string,
 	matchId: string,

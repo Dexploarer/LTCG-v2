@@ -67,28 +67,6 @@ const sampleCards: CardDefinition[] = [
     ],
   },
   {
-    id: "multi-effect-spell",
-    name: "Multi Effect Spell",
-    type: "spell",
-    description: "Spell with multiple selectable effects",
-    rarity: "common",
-    spellType: "normal",
-    effects: [
-      {
-        id: "multi-effect-spell-0",
-        type: "trigger",
-        description: "Deal 300 damage",
-        actions: [{ type: "damage", amount: 300, target: "opponent" }],
-      },
-      {
-        id: "multi-effect-spell-1",
-        type: "trigger",
-        description: "Heal 200",
-        actions: [{ type: "heal", amount: 200, target: "self" }],
-      },
-    ],
-  },
-  {
     id: "continuous-trap",
     name: "Continuous Trap",
     type: "trap",
@@ -101,28 +79,6 @@ const sampleCards: CardDefinition[] = [
         type: "trigger",
         description: "Deal 100 damage",
         actions: [{ type: "damage", amount: 100, target: "opponent" }],
-      },
-    ],
-  },
-  {
-    id: "multi-effect-trap",
-    name: "Multi Effect Trap",
-    type: "trap",
-    description: "Trap with multiple selectable effects",
-    rarity: "common",
-    trapType: "normal",
-    effects: [
-      {
-        id: "multi-effect-trap-0",
-        type: "trigger",
-        description: "Deal 100 damage",
-        actions: [{ type: "damage", amount: 100, target: "opponent" }],
-      },
-      {
-        id: "multi-effect-trap-1",
-        type: "trigger",
-        description: "Deal 200 damage",
-        actions: [{ type: "damage", amount: 200, target: "opponent" }],
       },
     ],
   },

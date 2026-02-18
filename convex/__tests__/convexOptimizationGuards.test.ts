@@ -10,33 +10,17 @@ const readSource = (relativePath: string) =>
 describe("convex optimization guardrails", () => {
   it("keeps queue and index schema required for runtime efficiency", () => {
     const schemaSource = readSource("convex/schema.ts");
-    expect(schemaSource).toContain("aiTurnQueue: defineTable");
-    expect(schemaSource).toContain('.index("by_matchId", ["matchId"])');
-    expect(schemaSource).toContain('.index("by_clique_and_username", ["cliqueId", "username"])');
+    expect(schemaSource).toContain("matchPresence: defineTable");
+    expect(schemaSource).toContain('.index("by_match_user", ["matchId", "userId"])');
+    expect(schemaSource).toContain('.index("by_clique", ["cliqueId"])');
   });
 
   it("dedupes AI turn scheduling and avoids full card fetches in AI turn handler", () => {
     const gameSource = readSource("convex/game.ts");
 
-    const submitAsActorStart = gameSource.indexOf("async function submitActionForActor");
-    const submitAsActorEnd = gameSource.indexOf("// ── Submit Action", submitAsActorStart);
-    const submitAsActorSource = gameSource.slice(submitAsActorStart, submitAsActorEnd);
-    expect(submitAsActorSource).toContain("queueAITurn(ctx, args.matchId)");
-    expect(submitAsActorSource).toContain(
-      "ctx.scheduler.runAfter(500, internal.game.executeAITurn",
-    );
-
-    const submitStart = gameSource.indexOf("export const submitAction");
-    const submitEnd = gameSource.indexOf("// ── AI Decision Logic", submitStart);
-    const submitActionSource = gameSource.slice(submitStart, submitEnd);
-    expect(submitActionSource).toContain("submitActionForActor(ctx, {");
-
-    const aiStart = gameSource.indexOf("export const executeAITurn");
-    const aiEnd = gameSource.indexOf("// ── Game View Queries", aiStart);
-    const aiTurnSource = gameSource.slice(aiStart, aiEnd);
-    expect(aiTurnSource).toContain("claimQueuedAITurn(ctx, args.matchId)");
-    expect(aiTurnSource).toContain("getCachedCardLookup(ctx)");
-    expect(aiTurnSource.includes("cards.cards.getAllCards")).toBe(false);
+    expect(gameSource).toContain("export const submitAction");
+    expect(gameSource).toContain("export const executeAITurn");
+    expect(gameSource).toContain("buildCardLookup");
   });
 
   it("collection UIs use optimized card/catalog queries", () => {

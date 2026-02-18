@@ -19,7 +19,6 @@ describe("resolveMatchAndSeat", () => {
     expect(runQuery).toHaveBeenCalledTimes(1);
     expect(runQuery.mock.calls[0][1]).toEqual({
       matchId: "match_1",
-      actorUserId: "host_user",
     });
   });
 
@@ -58,7 +57,7 @@ describe("resolveMatchAndSeat", () => {
 
     await expect(
       resolveMatchAndSeat({ runQuery }, "host_user", "match_1", "away"),
-    ).rejects.toThrow("Seat does not match the authenticated player.");
+    ).rejects.toThrow("You are not the away player in this match.");
   });
 
   it("throws when authenticated user is not in the match", async () => {

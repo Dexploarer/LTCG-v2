@@ -28,6 +28,17 @@ const clientPlatformValidator = v.union(
   v.literal("cpu"),
 );
 
+const vStarterDeckSelectionResult = v.object({
+  deckId: v.string(),
+  cardCount: v.number(),
+});
+
+const vStoryBattleResult = v.object({
+  matchId: v.string(),
+  chapterId: v.string(),
+  stageNumber: v.number(),
+});
+
 type ClientPlatform = "web" | "telegram_inline" | "telegram_miniapp" | "agent" | "cpu";
 
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
@@ -49,21 +60,6 @@ const buildDeterministicSeed = (seedInput: string): number => {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
-};
-
-const makeRng = (seed: number) => {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-const buildMatchSeed = (parts: Array<string | number | null | undefined>): number => {
-  const values = parts.map((value) => String(value ?? "")).join("|");
-  return buildDeterministicSeed(values);
 };
 
 const makeRng = (seed: number) => {
