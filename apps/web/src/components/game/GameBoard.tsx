@@ -13,6 +13,7 @@ import { TributeSelector } from "./TributeSelector";
 import { AttackTargetSelector } from "./AttackTargetSelector";
 import { GraveyardBrowser } from "./GraveyardBrowser";
 import { GameOverOverlay } from "./GameOverOverlay";
+import { GameMotionOverlay } from "./GameMotionOverlay";
 import { AnimatePresence } from "framer-motion";
 import type { Phase } from "@lunchtable-tcg/engine";
 
@@ -401,7 +402,9 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
   const opponentBanished = view.opponentBanished ?? [];
 
   return (
-    <div className="h-screen flex flex-col bg-[#fdfdfb]">
+    <div className="relative h-screen overflow-hidden bg-[#fdfdfb]">
+      <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
+      <div className="relative z-10 flex h-full flex-col">
       {/* Opponent LP Bar */}
       <div className="px-4 pt-2">
         <LPBar lp={view.opponentLifePoints ?? 8000} maxLp={8000} label="Opponent" side="opponent" />
@@ -674,6 +677,7 @@ export function GameBoard({ matchId, seat, onMatchEnd }: GameBoardProps) {
           onClose={() => setShowGraveyard(null)}
         />
       )}
+      </div>
     </div>
   );
 }
