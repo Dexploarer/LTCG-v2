@@ -2,12 +2,13 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	resolve: {
-		// Our workspace packages use conditional exports to point at TS sources in dev/test.
-		conditions: ["@convex-dev/component-source"],
+		// Convex components expose source entrypoints under this export condition,
+		// avoiding a dist build requirement for tests.
+		conditions: ["@convex-dev/component-source", "import", "module", "default"],
 	},
 	ssr: {
 		resolve: {
-			conditions: ["@convex-dev/component-source"],
+			conditions: ["@convex-dev/component-source", "import", "module", "default"],
 		},
 	},
 	test: {
