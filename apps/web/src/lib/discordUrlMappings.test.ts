@@ -24,6 +24,7 @@ afterEach(() => {
 describe("discordUrlMappings", () => {
   it("derives default convex and convex-site mappings", () => {
     expect(deriveDefaultDiscordUrlMappings("https://foo.convex.cloud")).toEqual([
+      { prefix: "/privy", target: "auth.privy.io" },
       { prefix: "/convex", target: "foo.convex.cloud" },
       { prefix: "/convex-site", target: "foo.convex.site" },
     ]);

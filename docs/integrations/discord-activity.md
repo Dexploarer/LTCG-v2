@@ -33,7 +33,7 @@ Client env (`apps/web`):
 VITE_DISCORD_CLIENT_ID=your_discord_application_client_id
 # Optional. Use when you need extra mapped hosts beyond Convex defaults.
 # Note: Discord removed the need for `/.proxy/` in activity proxy paths (July 30, 2025).
-VITE_DISCORD_URL_MAPPINGS='[{"prefix":"/convex","target":"your-deployment.convex.cloud"},{"prefix":"/convex-site","target":"your-deployment.convex.site"}]'
+VITE_DISCORD_URL_MAPPINGS='[{"prefix":"/privy","target":"auth.privy.io"},{"prefix":"/convex","target":"your-deployment.convex.cloud"},{"prefix":"/convex-site","target":"your-deployment.convex.site"}]'
 ```
 
 Server env (Vercel/API functions):
@@ -58,6 +58,7 @@ Keep existing Privy env vars configured for app session auth.
    - `rpc.activities.write`
    - `shareLink` is used for invites and does not require additional scopes.
 6. Configure URL mappings for external domains used inside Activity iframe:
+   - `/privy` -> `auth.privy.io`
    - `/convex` -> `<your convex cloud host>`
    - `/convex-site` -> `<your convex site host>`
    - Any extra hosts can be added via `VITE_DISCORD_URL_MAPPINGS` JSON.

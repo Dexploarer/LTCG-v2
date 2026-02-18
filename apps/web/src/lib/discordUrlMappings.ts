@@ -11,6 +11,8 @@ export type DiscordUrlMapping = {
 // compatibility with older configs.
 const DEFAULT_CONVEX_MAPPING_PREFIX = "/convex";
 const DEFAULT_CONVEX_SITE_MAPPING_PREFIX = "/convex-site";
+const DEFAULT_PRIVY_MAPPING_PREFIX = "/privy";
+const DEFAULT_PRIVY_TARGET_HOST = "auth.privy.io";
 
 function normalizeTargetHost(value: string): string | null {
   const trimmed = value.trim();
@@ -40,14 +42,17 @@ function normalizePrefix(value: string): string | null {
 }
 
 export function deriveDefaultDiscordUrlMappings(convexUrl: string | undefined): DiscordUrlMapping[] {
-  if (!convexUrl) return [];
+  const mappings: DiscordUrlMapping[] = [
+    // Privy auth calls must be proxied through the Discord Activity origin.
+    { prefix: DEFAULT_PRIVY_MAPPING_PREFIX, target: DEFAULT_PRIVY_TARGET_HOST },
+  ];
+
+  if (!convexUrl) return mappings;
 
   const convexHost = normalizeTargetHost(convexUrl);
-  if (!convexHost) return [];
+  if (!convexHost) return mappings;
 
-  const mappings: DiscordUrlMapping[] = [
-    { prefix: DEFAULT_CONVEX_MAPPING_PREFIX, target: convexHost },
-  ];
+  mappings.push({ prefix: DEFAULT_CONVEX_MAPPING_PREFIX, target: convexHost });
 
   if (convexHost.endsWith(".convex.cloud")) {
     const convexSiteHost = convexHost.replace(".convex.cloud", ".convex.site");
