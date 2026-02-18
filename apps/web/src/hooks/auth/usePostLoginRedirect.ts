@@ -20,14 +20,13 @@ export function usePostLoginRedirect() {
 
   const consumeAndRedirect = useCallback(() => {
     if (fired.current) return;
-    
-    const path = sessionStorage.getItem(REDIRECT_KEY);
+
+    const path = peekRedirect();
     if (path && path !== currentPathname(location)) {
       fired.current = true;
-      sessionStorage.removeItem(REDIRECT_KEY);
       navigate(path);
     } else if (path === currentPathname(location)) {
-      sessionStorage.removeItem(REDIRECT_KEY);
+      clearRedirect();
     }
   }, [navigate, location]);
 
@@ -47,10 +46,20 @@ export function storeRedirect(path: string) {
   sessionStorage.setItem(REDIRECT_KEY, path);
 }
 
+/** Read redirect path without removing it. */
+export function peekRedirect() {
+  return sessionStorage.getItem(REDIRECT_KEY);
+}
+
+/** Remove stored redirect path. */
+export function clearRedirect() {
+  sessionStorage.removeItem(REDIRECT_KEY);
+}
+
 /** Read and remove the redirect path (call at the end of a flow). */
 export function consumeRedirect() {
-  const path = sessionStorage.getItem(REDIRECT_KEY);
-  if (path) sessionStorage.removeItem(REDIRECT_KEY);
+  const path = peekRedirect();
+  if (path) clearRedirect();
   return path;
 }
 

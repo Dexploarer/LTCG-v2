@@ -123,7 +123,7 @@ export function Play() {
     apiAny.game.getMatchPlatformTags,
     activeMatchId ? { matchId: activeMatchId } : "skip",
   ) as MatchPlatformTags | null | undefined;
-  const { isDiscordActivity, sdkReady } = useDiscordActivity();
+  const { isDiscordActivity, sdkReady, sdkError } = useDiscordActivity();
 
   useMatchPresence(activeMatchId);
 
@@ -189,6 +189,7 @@ export function Play() {
         platformTags={platformTags ?? null}
         discordEnabled={isDiscordActivity}
         discordReady={sdkReady}
+        discordSdkError={sdkError}
       />
     );
   }
@@ -637,6 +638,7 @@ function PvPWaitingLobby({
   platformTags,
   discordEnabled,
   discordReady,
+  discordSdkError,
 }: {
   matchId: string;
   currentUserId: string;
@@ -644,6 +646,7 @@ function PvPWaitingLobby({
   platformTags: MatchPlatformTags | null;
   discordEnabled: boolean;
   discordReady: boolean;
+  discordSdkError: string | null;
 }) {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
@@ -742,6 +745,9 @@ function PvPWaitingLobby({
         </div>
         {inviteStatus ? (
           <p className="mt-2 text-[11px] text-[#666]">{inviteStatus}</p>
+        ) : null}
+        {discordSdkError ? (
+          <p className="mt-2 text-[11px] text-red-700">{discordSdkError}</p>
         ) : null}
       </div>
     </div>

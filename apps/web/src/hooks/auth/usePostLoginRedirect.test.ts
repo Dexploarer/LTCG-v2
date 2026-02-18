@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { consumeRedirect, currentPathname, storeRedirect } from "./usePostLoginRedirect";
+import {
+  clearRedirect,
+  consumeRedirect,
+  currentPathname,
+  peekRedirect,
+  storeRedirect,
+} from "./usePostLoginRedirect";
 
 function createSessionStorageMock() {
   const data = new Map<string, string>();
@@ -33,8 +39,17 @@ describe("usePostLoginRedirect helpers", () => {
   it("persists redirect until consumed", () => {
     storeRedirect("/duel?join=abc123");
 
+    expect(peekRedirect()).toBe("/duel?join=abc123");
     expect(consumeRedirect()).toBe("/duel?join=abc123");
     expect(consumeRedirect()).toBeNull();
+  });
+
+  it("supports explicit clear without consuming", () => {
+    storeRedirect("/play/match-1");
+    expect(peekRedirect()).toBe("/play/match-1");
+
+    clearRedirect();
+    expect(peekRedirect()).toBeNull();
   });
 
   it("builds canonical current path with search/hash", () => {

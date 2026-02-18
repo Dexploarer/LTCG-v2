@@ -6,6 +6,13 @@ import { normalizeMatchId } from "../lib/matchIds";
 
 const DISCORD_CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID as string | undefined;
 const DISCORD_JOIN_SECRET_PREFIX = "ltcg:match:";
+const DISCORD_TOKEN_EXCHANGE_PATH = "/api/discord-token";
+const DISCORD_AUTHORIZE_STATE = "ltcg-discord-activity";
+const DISCORD_COMMAND_SCOPES: Array<"identify" | "rpc.activities.write" | "activities.invites.write"> = [
+  "identify",
+  "rpc.activities.write",
+  "activities.invites.write",
+];
 
 type DiscordSDKInstance = import("@discord/embedded-app-sdk").DiscordSDK;
 
@@ -22,6 +29,9 @@ type DiscordActivitySnapshot = DiscordActivityState & {
 
 let discordSdk: DiscordSDKInstance | null = null;
 let initPromise: Promise<void> | null = null;
+let commandScopeStatus: "unknown" | "authorized" | "failed" = "unknown";
+let commandScopeAuthPromise: Promise<boolean> | null = null;
+let commandScopeAuthMode: "silent" | "interactive" | null = null;
 let activityState: DiscordActivityState = {
   isDiscordActivity: false,
   sdkReady: false,
@@ -58,6 +68,138 @@ export function encodeDiscordJoinSecret(matchId: string) {
   return `${DISCORD_JOIN_SECRET_PREFIX}${matchId}`;
 }
 
+function formatErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return fallback;
+}
+
+function parseResponseErrorMessage(payload: unknown): string | null {
+  if (typeof payload === "string" && payload.trim()) return payload;
+  if (!payload || typeof payload !== "object") return null;
+
+  const withError = payload as { error?: unknown; message?: unknown };
+  if (typeof withError.error === "string" && withError.error.trim()) {
+    return withError.error;
+  }
+  if (typeof withError.message === "string" && withError.message.trim()) {
+    return withError.message;
+  }
+
+  return null;
+}
+
+async function readResponsePayload(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+export function parseDiscordTokenAccessToken(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const token = (payload as { access_token?: unknown }).access_token;
+  return typeof token === "string" && token.trim() ? token : null;
+}
+
+export function getDiscordScopeErrorMessage(error: unknown, interactive: boolean) {
+  if (!interactive) {
+    return `Discord invite/presence permissions unavailable: ${formatErrorMessage(
+      error,
+      "Authorization was not granted.",
+    )}`;
+  }
+  return `Discord permission request failed: ${formatErrorMessage(
+    error,
+    "Unable to request Discord permissions.",
+  )}`;
+}
+
+async function exchangeDiscordAccessToken(code: string) {
+  const response = await fetch(DISCORD_TOKEN_EXCHANGE_PATH, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  const payload = await readResponsePayload(response);
+  if (!response.ok) {
+    throw new Error(parseResponseErrorMessage(payload) ?? `Token exchange failed (${response.status})`);
+  }
+
+  const accessToken = parseDiscordTokenAccessToken(payload);
+  if (!accessToken) {
+    throw new Error("Token exchange succeeded but no access token was returned.");
+  }
+
+  return accessToken;
+}
+
+async function authorizeDiscordCommandScopes(interactive: boolean) {
+  const sdk = discordSdk;
+  if (!sdk || !activityState.sdkReady || !DISCORD_CLIENT_ID) return false;
+  // SDK OAuthScopes type omits `activities.invites.write` in v2.4.0.
+  const scope = DISCORD_COMMAND_SCOPES as unknown as Parameters<
+    DiscordSDKInstance["commands"]["authorize"]
+  >[0]["scope"];
+
+  const { code } = await sdk.commands.authorize({
+    client_id: DISCORD_CLIENT_ID,
+    response_type: "code",
+    scope,
+    state: DISCORD_AUTHORIZE_STATE,
+    prompt: interactive ? undefined : "none",
+  });
+
+  const accessToken = await exchangeDiscordAccessToken(code);
+  await sdk.commands.authenticate({ access_token: accessToken });
+  return true;
+}
+
+async function ensureDiscordCommandScopes({ interactive }: { interactive: boolean }) {
+  if (!activityState.sdkReady || !discordSdk || !DISCORD_CLIENT_ID) return false;
+  if (commandScopeStatus === "authorized") return true;
+  if (commandScopeStatus === "failed" && !interactive) return false;
+
+  if (commandScopeAuthPromise) {
+    if (!interactive || commandScopeAuthMode === "interactive") {
+      return commandScopeAuthPromise;
+    }
+
+    const completed = await commandScopeAuthPromise;
+    if (completed) return true;
+  }
+
+  commandScopeAuthMode = interactive ? "interactive" : "silent";
+  commandScopeAuthPromise = (async () => {
+    try {
+      const success = await authorizeDiscordCommandScopes(interactive);
+      commandScopeStatus = success ? "authorized" : "failed";
+      if (success) {
+        setState({ sdkError: null });
+      }
+      return success;
+    } catch (error) {
+      commandScopeStatus = "failed";
+      Sentry.captureException(error);
+      setState({
+        sdkError: getDiscordScopeErrorMessage(error, interactive),
+      });
+      return false;
+    } finally {
+      commandScopeAuthPromise = null;
+      commandScopeAuthMode = null;
+    }
+  })();
+
+  return commandScopeAuthPromise;
+}
+
 function captureSdkError(error: unknown) {
   Sentry.captureException(error);
   setState({
@@ -85,6 +227,9 @@ async function initializeDiscordActivityIfNeeded() {
       const { DiscordSDK } = await import("@discord/embedded-app-sdk");
       const sdk = new DiscordSDK(clientId);
       discordSdk = sdk;
+      commandScopeStatus = "unknown";
+      commandScopeAuthPromise = null;
+      commandScopeAuthMode = null;
 
       await sdk.ready();
 
@@ -98,6 +243,9 @@ async function initializeDiscordActivityIfNeeded() {
         if (!matchId) return;
         setState({ pendingJoinMatchId: matchId });
       });
+
+      // Non-interactive bootstrap; failures are surfaced as status only.
+      void ensureDiscordCommandScopes({ interactive: false });
     } catch (error) {
       captureSdkError(error);
     }
@@ -127,6 +275,7 @@ export async function setDiscordActivityMatchContext(
 ) {
   const sdk = discordSdk;
   if (!sdk || !activityState.sdkReady) return false;
+  if (!(await ensureDiscordCommandScopes({ interactive: false }))) return false;
 
   try {
     await sdk.commands.setActivity({
@@ -155,6 +304,7 @@ export async function setDiscordActivityMatchContext(
 export async function shareDiscordMatchInvite(matchId: string, message?: string) {
   const sdk = discordSdk;
   if (!sdk || !activityState.sdkReady) return null;
+  if (!(await ensureDiscordCommandScopes({ interactive: true }))) return null;
 
   try {
     return await sdk.commands.shareLink({

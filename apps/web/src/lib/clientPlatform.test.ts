@@ -59,6 +59,17 @@ describe("clientPlatform", () => {
     expect(describeClientPlatform()).toBe("discord-activity");
   });
 
+  it("detects Discord activity when only channel query params are present", () => {
+    setMockWindow({
+      location: { search: "?channel_id=789" },
+      self: {},
+      top: {},
+    } as unknown as Window);
+
+    expect(isDiscordActivityFrame()).toBe(true);
+    expect(detectClientPlatform()).toBe("discord");
+  });
+
   it("formats known platform tags and ignores unknown values", () => {
     expect(formatPlatformTag("discord")).toBe("Discord");
     expect(formatPlatformTag("telegram")).toBe("Telegram");

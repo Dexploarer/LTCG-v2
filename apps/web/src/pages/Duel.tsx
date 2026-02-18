@@ -28,7 +28,7 @@ type MatchMeta = {
 export function Duel() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isDiscordActivity, sdkReady, pendingJoinMatchId } = useDiscordActivity();
+  const { isDiscordActivity, sdkReady, pendingJoinMatchId, sdkError } = useDiscordActivity();
   const currentUser = useConvexQuery(apiAny.auth.currentUser, {}) as CurrentUser | null | undefined;
   const activeMatch = useConvexQuery(
     apiAny.game.getActiveMatchByHost,
@@ -307,6 +307,9 @@ export function Duel() {
             </button>
             {discordInviteStatus && (
               <p className="text-[11px] text-[#666] mt-2">{discordInviteStatus}</p>
+            )}
+            {sdkError && (
+              <p className="text-[11px] text-red-700 mt-2">{sdkError}</p>
             )}
           </section>
         )}

@@ -2,10 +2,12 @@
 
 This repo now supports running LTCG as a Discord Activity with shared cross-play against web and Telegram clients.
 
-## What was integrated
+## What is integrated
 
 - Discord Activity runtime detection in web client.
 - Discord Embedded App SDK initialization (`@discord/embedded-app-sdk`).
+- Discord OAuth scope bootstrap for Activity commands:
+  - `authorize` -> `/api/discord-token` -> `authenticate`.
 - Discord-native invite flow (`shareLink`) from PvP lobby screens.
 - Discord rich presence updates (`setActivity`) with join secrets per match.
 - Auto-routing for invite launches via `custom_id` / `ACTIVITY_JOIN` secret.
@@ -15,22 +17,43 @@ This repo now supports running LTCG as a Discord Activity with shared cross-play
 - Match presence tracking with platform tags (`web`, `telegram`, `discord`, etc).
 - In-game platform badges shown for both players.
 
+## Auth model
+
+App auth remains **Privy-first**. Discord OAuth in this integration is used only to enable SDK command scopes (`setActivity`, `shareLink`) inside Activity runtime.
+
 ## Required environment
 
-Set in the web app environment:
+Client env (`apps/web`):
 
 ```bash
 VITE_DISCORD_CLIENT_ID=your_discord_application_client_id
+VITE_DISCORD_URL_MAPPINGS='[{"prefix":"/.proxy/convex","target":"your-deployment.convex.cloud"},{"prefix":"/.proxy/convex-site","target":"your-deployment.convex.site"}]'
 ```
 
-Existing auth still uses Privy; keep your current Privy env vars configured.
+Server env (Vercel/API functions):
+
+```bash
+DISCORD_CLIENT_SECRET=your_discord_oauth_client_secret
+# Optional fallback (client id also read from VITE_DISCORD_CLIENT_ID)
+DISCORD_CLIENT_ID=your_discord_application_client_id
+```
+
+Keep existing Privy env vars configured for app session auth.
 
 ## Discord developer setup
 
 1. Create/select your Discord application in the Developer Portal.
 2. Enable Activities / Embedded App support for that application.
 3. Add your deployed game URL as an allowed Activity URL.
-4. Ensure your OAuth2 settings include the same client id used by `VITE_DISCORD_CLIENT_ID`.
+4. Ensure OAuth2 client id matches `VITE_DISCORD_CLIENT_ID`.
+5. Ensure the Activity can request these scopes:
+   - `identify`
+   - `rpc.activities.write`
+   - `activities.invites.write`
+6. Configure URL mappings for external domains used inside Activity iframe:
+   - `/.proxy/convex` -> `<your convex cloud host>`
+   - `/.proxy/convex-site` -> `<your convex site host>`
+   - Any extra hosts can be added via `VITE_DISCORD_URL_MAPPINGS` JSON.
 
 Reference docs:
 - [Discord Social SDK overview](https://docs.discord.com/developers/discord-social-sdk/overview)
@@ -44,3 +67,9 @@ Reference docs:
 - Existing milaidy hosts
 
 Do not re-add `X-Frame-Options: DENY` or Discord Activity embedding will fail.
+
+## Failure behavior
+
+- If Discord scope auth fails, gameplay still works (Privy + Convex unaffected).
+- Discord invite and rich-presence commands are disabled until scope auth succeeds.
+- UI surfaces status/error text in Activity lobby screens with retry on interactive actions.

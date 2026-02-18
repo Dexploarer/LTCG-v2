@@ -61,7 +61,9 @@ LTCG-v2/
 ## Discord Activity
 
 - Setup guide: `docs/integrations/discord-activity.md`
-- Required env: `VITE_DISCORD_CLIENT_ID`
+- Required client env: `VITE_DISCORD_CLIENT_ID`
+- Required server env for OAuth code exchange: `DISCORD_CLIENT_SECRET`
+- Optional client env for URL mappings: `VITE_DISCORD_URL_MAPPINGS`
 
 ## Audio Soundtrack
 

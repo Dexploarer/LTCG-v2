@@ -1,8 +1,8 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate, useLocation } from "react-router";
 import { useUserSync } from "@/hooks/auth/useUserSync";
-import { storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
-import { buildAuthRedirectTarget } from "@/hooks/auth/redirectTargets";
+import { clearRedirect, peekRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
+import { buildAuthRedirectTarget, shouldClearStoredRedirect } from "@/hooks/auth/redirectTargets";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 
@@ -26,17 +26,30 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     if (!ready) return;
+    const currentTarget = buildAuthRedirectTarget(location);
 
     if (!authenticated) {
-      storeRedirect(buildAuthRedirectTarget(location));
+      storeRedirect(currentTarget);
       navigate("/", { replace: true });
       return;
     }
 
     if (needsOnboarding && location.pathname !== "/onboarding") {
       navigate("/onboarding", { replace: true });
+      return;
     }
-  }, [ready, authenticated, needsOnboarding, navigate, location.pathname]);
+
+    const storedRedirect = peekRedirect();
+    if (
+      shouldClearStoredRedirect({
+        storedRedirect,
+        currentTarget,
+        needsOnboarding,
+      })
+    ) {
+      clearRedirect();
+    }
+  }, [ready, authenticated, needsOnboarding, navigate, location]);
 
   if (!ready) {
     return <AuthLoadingScreen message="Checking sign-in..." />;

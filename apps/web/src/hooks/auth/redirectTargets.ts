@@ -5,3 +5,15 @@ export function buildAuthRedirectTarget(location: {
 }) {
   return `${location.pathname}${location.search ?? ""}${location.hash ?? ""}`;
 }
+
+export function shouldClearStoredRedirect({
+  storedRedirect,
+  currentTarget,
+  needsOnboarding,
+}: {
+  storedRedirect: string | null;
+  currentTarget: string;
+  needsOnboarding: boolean;
+}) {
+  return Boolean(storedRedirect && storedRedirect === currentTarget && !needsOnboarding);
+}
