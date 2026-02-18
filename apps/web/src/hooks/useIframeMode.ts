@@ -1,6 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { signalReady, onHostMessage, type HostToGame } from "../lib/iframe";
-import { isDiscordActivityFrame } from "../lib/clientPlatform";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  signalReady,
+  onHostMessage,
+  type HostToGame,
+  type IframeChatMessage,
+  type StartMatchPayload,
+} from "@/lib/iframe";
+
+export type IframeChatState = {
+  enabled: boolean;
+  readOnly: boolean;
+  messages: IframeChatMessage[];
+  reason?: string;
+};
 
 /**
  * Detect if the app is running inside an iframe (milaidy) or with
@@ -10,53 +22,22 @@ import { isDiscordActivityFrame } from "../lib/clientPlatform";
  * - JWT (3 dot-separated base64 segments) → used for Convex real-time auth
  * - ltcg_ API key → used for HTTP API spectator mode
  */
-export function deriveIframeEmbedFlags({
-  isInIframe,
-  hasEmbedParam,
-  isDiscordActivity,
-}: {
-  isInIframe: boolean;
-  hasEmbedParam: boolean;
-  isDiscordActivity: boolean;
-}) {
-  // `isInIframe` is true for Discord Activities too, but the host-message handshake is
-  // only meant for the milaidy embed. Avoid spamming Discord's postMessage channel.
-  const isEmbedded = hasEmbedParam || (isInIframe && !isDiscordActivity);
-  return { isEmbedded };
-}
-
 export function useIframeMode() {
   const isInIframe =
     typeof window !== "undefined" && window.self !== window.top;
   const hasEmbedParam =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("embedded") === "true";
-  const isDiscordActivity = typeof window !== "undefined" && isDiscordActivityFrame();
-  const { isEmbedded } = deriveIframeEmbedFlags({
-    isInIframe,
-    hasEmbedParam,
-    isDiscordActivity,
-  });
+  const isEmbedded = isInIframe || hasEmbedParam;
 
-  const [authToken, setAuthToken] = useState<string | null>(() =>
-    readDebugAuthTokenFromQuery(),
-  );
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
-  const [hostControl, setHostControl] = useState<{
-    requestedMode: "story" | "pvp" | null;
-    lastCommand:
-      | "START_MATCH"
-      | "PAUSE_AUTONOMY"
-      | "RESUME_AUTONOMY"
-      | "STOP_MATCH"
-      | null;
-    lastCommandAt: number | null;
-  }>({
-    requestedMode: null,
-    lastCommand: null,
-    lastCommandAt: null,
-  });
+  const [startMatchCommand, setStartMatchCommand] = useState<StartMatchPayload | null>(null);
+  const [skipCutsceneVersion, setSkipCutsceneVersion] = useState(0);
+  const [chatState, setChatState] = useState<IframeChatState | null>(null);
+  const [chatEvent, setChatEvent] = useState<IframeChatMessage | null>(null);
   const signaled = useRef(false);
+  const clearStartMatchCommand = useCallback(() => setStartMatchCommand(null), []);
 
   useEffect(() => {
     if (!isEmbedded) return;
@@ -69,27 +50,39 @@ export function useIframeMode() {
 
     // Listen for auth from host
     return onHostMessage((msg: HostToGame) => {
-      if (msg.type === "LTCG_AUTH" || msg.type === "AUTH_TOKEN") {
+      if (msg.type === "LTCG_AUTH") {
         setAuthToken(msg.authToken);
         if (msg.agentId) setAgentId(msg.agentId);
+        return;
       }
-      if (msg.type === "START_MATCH") {
-        setHostControl({
-          requestedMode: msg.mode,
-          lastCommand: "START_MATCH",
-          lastCommandAt: Date.now(),
+
+      if (msg.type === "START_MATCH" || msg.type === "LTCG_START_MATCH") {
+        setStartMatchCommand({
+          mode: msg.mode === "pvp" ? "pvp" : "story",
+          matchId: typeof msg.matchId === "string" ? msg.matchId : undefined,
+          chapterId: typeof msg.chapterId === "string" ? msg.chapterId : undefined,
+          stageNumber: typeof msg.stageNumber === "number" ? msg.stageNumber : undefined,
         });
+        return;
       }
-      if (
-        msg.type === "PAUSE_AUTONOMY" ||
-        msg.type === "RESUME_AUTONOMY" ||
-        msg.type === "STOP_MATCH"
-      ) {
-        setHostControl((prev) => ({
-          ...prev,
-          lastCommand: msg.type,
-          lastCommandAt: Date.now(),
-        }));
+
+      if (msg.type === "SKIP_CUTSCENE" || msg.type === "LTCG_SKIP_CUTSCENE") {
+        setSkipCutsceneVersion((current) => current + 1);
+        return;
+      }
+
+      if (msg.type === "LTCG_CHAT_STATE") {
+        setChatState({
+          enabled: msg.enabled !== false,
+          readOnly: msg.readOnly === true,
+          messages: Array.isArray(msg.messages) ? msg.messages : [],
+          reason: typeof msg.reason === "string" ? msg.reason : undefined,
+        });
+        return;
+      }
+
+      if (msg.type === "LTCG_CHAT_EVENT") {
+        setChatEvent(msg.message);
       }
     });
   }, [isEmbedded, isInIframe]);
@@ -102,7 +95,11 @@ export function useIframeMode() {
     isEmbedded,
     authToken,
     agentId,
-    hostControl,
+    startMatchCommand,
+    clearStartMatchCommand,
+    skipCutsceneVersion,
+    chatState,
+    chatEvent,
     /** True when the token is an ltcg_ API key (spectator mode) */
     isApiKey,
     /** True when the token is a Privy JWT (full Convex auth) */
@@ -116,19 +113,4 @@ function looksLikeJWT(token: string): boolean {
   if (parts.length !== 3) return false;
   const base64urlPattern = /^[A-Za-z0-9_-]+$/;
   return parts.every((part) => base64urlPattern.test(part));
-}
-
-function readDebugAuthTokenFromQuery(): string | null {
-  if (typeof window === "undefined") return null;
-  const token = new URLSearchParams(window.location.search).get("authToken");
-  if (!token) return null;
-  const trimmed = token.trim();
-  if (!trimmed) return null;
-
-  // Only allow query-param auth tokens in dev/local contexts.
-  if (import.meta.env.DEV || window.location.hostname === "localhost") {
-    return trimmed;
-  }
-
-  return null;
 }

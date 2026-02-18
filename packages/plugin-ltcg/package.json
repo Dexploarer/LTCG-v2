@@ -8,7 +8,7 @@
   "packageType": "plugin",
   "platform": "node",
   "keywords": ["plugin", "elizaos", "game", "tcg"],
-  "homepage": "http://localhost:3334",
+  "homepage": "https://lunchtable.app",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -48,6 +48,28 @@
         "type": "string",
         "description": "Optional web endpoint that serves soundtrack JSON (e.g. https://app.example.com/api/soundtrack)",
         "required": false
+      }
+    }
+  },
+  "elizaos": {
+    "kind": "app",
+    "app": {
+      "displayName": "LunchTable: School of Hard Knocks",
+      "category": "game",
+      "launchType": "connect",
+      "launchUrl": "https://lunchtable.app",
+      "icon": null,
+      "capabilities": ["observe", "control", "story-mode", "pvp", "spectate", "chat"],
+      "minPlayers": 1,
+      "maxPlayers": 2,
+      "viewer": {
+        "url": "https://lunchtable.app",
+        "embedParams": {
+          "embedded": "true",
+          "mode": "play"
+        },
+        "postMessageAuth": true,
+        "sandbox": "allow-scripts allow-same-origin allow-popups allow-forms"
       }
     }
   }

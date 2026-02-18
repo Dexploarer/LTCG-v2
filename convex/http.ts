@@ -448,6 +448,100 @@ corsRoute({
 	},
 });
 
+corsRoute({
+  path: "/api/agent/game/public-view",
+  method: "GET",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
+
+    const url = new URL(request.url);
+    const matchId = url.searchParams.get("matchId");
+    const requestedSeat = url.searchParams.get("seat") ?? undefined;
+
+    if (!matchId) {
+      return errorResponse("matchId query parameter is required.");
+    }
+
+    let seat: MatchSeat;
+    try {
+      ({ seat } = await resolveMatchAndSeat(
+        ctx,
+        agent.userId,
+        matchId,
+        requestedSeat,
+      ));
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+
+    try {
+      const view = await ctx.runQuery(internal.game.getPublicPlayerViewAsActor, {
+        matchId,
+        seat,
+        actorUserId: agent.userId,
+      });
+      if (!view) return errorResponse("Match state not found", 404);
+      return jsonResponse(view);
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+  },
+});
+
+corsRoute({
+  path: "/api/agent/game/public-events",
+  method: "GET",
+  handler: async (ctx, request) => {
+    const agent = await authenticateAgent(ctx, request);
+    if (!agent) return errorResponse("Unauthorized", 401);
+
+    const url = new URL(request.url);
+    const matchId = url.searchParams.get("matchId");
+    const requestedSeat = url.searchParams.get("seat") ?? undefined;
+    const sinceVersionRaw = url.searchParams.get("sinceVersion");
+
+    if (!matchId) {
+      return errorResponse("matchId query parameter is required.");
+    }
+
+    let seat: MatchSeat;
+    try {
+      ({ seat } = await resolveMatchAndSeat(
+        ctx,
+        agent.userId,
+        matchId,
+        requestedSeat,
+      ));
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+
+    const parsedSinceVersion =
+      typeof sinceVersionRaw === "string" && sinceVersionRaw.length > 0
+        ? Number.parseInt(sinceVersionRaw, 10)
+        : undefined;
+    if (
+      parsedSinceVersion !== undefined &&
+      (!Number.isFinite(parsedSinceVersion) || parsedSinceVersion < 0)
+    ) {
+      return errorResponse("sinceVersion must be a non-negative integer.");
+    }
+
+    try {
+      const events = await ctx.runQuery(internal.game.getPublicEventsAsActor, {
+        matchId,
+        seat,
+        actorUserId: agent.userId,
+        sinceVersion: parsedSinceVersion,
+      });
+      return jsonResponse(events);
+    } catch (e: any) {
+      return errorResponse(e.message, 422);
+    }
+  },
+});
+
 // ── Agent Setup Routes ──────────────────────────────────────────
 
 corsRoute({

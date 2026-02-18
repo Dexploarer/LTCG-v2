@@ -2,100 +2,84 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 type Seat = "host" | "away";
 
-function clampSeat(value: unknown): Seat | null {
+export type PublicSpectatorSlot = {
+  lane: number;
+  occupied: boolean;
+  faceDown: boolean;
+  position: "attack" | "defense" | null;
+  name: string | null;
+  attack: number | null;
+  defense: number | null;
+  kind: "monster" | "spell" | "trap" | "card" | null;
+};
+
+export type PublicSpectatorView = {
+  matchId: string;
+  seat: Seat;
+  status: string | null;
+  mode: string | null;
+  phase: string;
+  turnNumber: number;
+  gameOver: boolean;
+  winner: Seat | null;
+  isAgentTurn: boolean;
+  chapterId: string | null;
+  stageNumber: number | null;
+  players: {
+    agent: {
+      lifePoints: number;
+      deckCount: number;
+      handCount: number;
+      graveyardCount: number;
+      banishedCount: number;
+    };
+    opponent: {
+      lifePoints: number;
+      deckCount: number;
+      handCount: number;
+      graveyardCount: number;
+      banishedCount: number;
+    };
+  };
+  fields: {
+    agent: {
+      monsters: PublicSpectatorSlot[];
+      spellTraps: PublicSpectatorSlot[];
+    };
+    opponent: {
+      monsters: PublicSpectatorSlot[];
+      spellTraps: PublicSpectatorSlot[];
+    };
+  };
+};
+
+export type PublicEventLogEntry = {
+  version: number;
+  createdAt: number | null;
+  actor: "agent" | "opponent" | "system";
+  eventType: string;
+  summary: string;
+  rationale: string;
+};
+
+type ActiveMatchResponse = {
+  matchId: string | null;
+  seat?: Seat | null;
+};
+
+export function clampSeat(value: unknown): Seat | null {
   return value === "host" || value === "away" ? value : null;
 }
 
-function resolvePhase(view: any) {
-  const phase = view?.currentPhase ?? view?.phase;
-  return typeof phase === "string" && phase.trim() ? phase : "unknown";
-}
+const POLL_INTERVAL_MS = 2000;
+const TIMELINE_LIMIT = 120;
 
-function resolveLifePoints(view: any) {
-  return {
-    myLP: typeof view?.lifePoints === "number" ? view.lifePoints : 0,
-    oppLP: typeof view?.opponentLifePoints === "number" ? view.opponentLifePoints : 0,
-  };
-}
-
-function mapHand(hand: unknown) {
-  const ids = Array.isArray(hand) ? (hand as unknown[]) : [];
-  return ids
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .map((cardId) => ({
-      instanceId: cardId,
-      cardId,
-      name: cardId,
-    }));
-}
-
-function mapBoard(board: unknown) {
-  const cards = Array.isArray(board) ? (board as unknown[]) : [];
-  return cards
-    .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object")
-    .map((raw) => {
-      const definitionId = typeof raw.definitionId === "string" ? raw.definitionId : "";
-      return {
-        ...raw,
-        name: definitionId || "Set",
-      };
-    });
-}
-
-/**
- * Spectator mode hook for watching an agent play via the HTTP API.
- *
- * When the LTCG frontend is embedded in milaidy, the host sends an
- * ltcg_ API key (not a Privy JWT). This key can't authenticate with
- * Convex real-time subscriptions, so we poll the HTTP API instead.
- *
- * Flow:
- * 1. GET /api/agent/me — verify key, get agent info
- * 2. GET /api/agent/game/match-status — find active match (poll)
- * 3. GET /api/agent/game/view — get board state (poll)
- */
-
-const BASE_POLL_INTERVAL_MS = 2000; // 2s for active matches
-const MAX_POLL_INTERVAL_MS = 30000;
-const FETCH_TIMEOUT_MS = 8000;
-
-type ApiFetchResult =
-  | { ok: true; data: any }
-  | { ok: false; status: number; message?: string };
-
-function jitter(ms: number) {
-  // +-10% jitter to avoid thundering herd.
-  const delta = Math.floor(ms * 0.1);
-  return ms + Math.floor(Math.random() * (delta * 2 + 1)) - delta;
-}
-
-async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-export interface SpectatorMatchState {
-  matchId: string;
-  phase: string;
-  gameOver: boolean;
-  isAgentTurn: boolean;
-  seat: Seat;
-  myLP: number;
-  oppLP: number;
-  hand: any[];
-  playerField: { monsters: any[]; spellTraps?: any[] };
-  opponentField: { monsters: any[]; spellTraps?: any[] };
-  // Match metadata
-  mode?: string;
-  winner?: string | null;
-  chapterId?: string | null;
-  stageNumber?: number | null;
+export function appendTimelineEntries(
+  previous: PublicEventLogEntry[],
+  incoming: PublicEventLogEntry[],
+  limit = TIMELINE_LIMIT,
+) {
+  return [...previous, ...incoming].slice(-limit);
 }
 
 export interface SpectatorAgent {
@@ -106,52 +90,37 @@ export interface SpectatorAgent {
 
 export function useAgentSpectator(apiKey: string | null, apiUrl: string | null) {
   const [agent, setAgent] = useState<SpectatorAgent | null>(null);
-  const [matchState, setMatchState] = useState<SpectatorMatchState | null>(null);
+  const [matchState, setMatchState] = useState<PublicSpectatorView | null>(null);
+  const [timeline, setTimeline] = useState<PublicEventLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
   const activeMatchId = useRef<string | null>(null);
   const activeMatchSeat = useRef<Seat | null>(null);
+  const eventCursor = useRef(0);
   const mountedRef = useRef(true);
-  const pollDelayMsRef = useRef(BASE_POLL_INTERVAL_MS);
-  const consecutiveFailuresRef = useRef(0);
 
   const apiFetch = useCallback(
-    async (path: string): Promise<ApiFetchResult> => {
-      if (!apiKey || !apiUrl) {
-        return { ok: false, status: 0, message: "Missing API key or URL" };
-      }
+    async (path: string) => {
+      if (!apiKey || !apiUrl) return null;
       const url = `${apiUrl.replace(/\/$/, "")}${path}`;
-      let res: Response;
-      try {
-        res = await fetchJsonWithTimeout(
-          url,
-          {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-          },
-          FETCH_TIMEOUT_MS,
-        );
-      } catch (err: any) {
-        const message = err?.name === "AbortError" ? "Request timed out" : "Network error";
-        return { ok: false, status: 0, message };
-      }
-
-      if (!res.ok) {
-        return { ok: false, status: res.status };
-      }
-
-      try {
-        return { ok: true, data: await res.json() };
-      } catch {
-        return { ok: false, status: res.status, message: "Invalid JSON response" };
-      }
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!response.ok) return null;
+      return response.json();
     },
     [apiKey, apiUrl],
   );
 
-  // Verify agent on mount
+  const resetTimeline = useCallback(() => {
+    eventCursor.current = 0;
+    setTimeline([]);
+  }, []);
+
   useEffect(() => {
     if (!apiKey || !apiUrl) {
       setLoading(false);
@@ -164,140 +133,132 @@ export function useAgentSpectator(apiKey: string | null, apiUrl: string | null) 
       try {
         const me = await apiFetch("/api/agent/me");
         if (cancelled) return;
-        if (!me.ok) {
+        if (!me) {
           setError("Invalid API key");
           setLoading(false);
           return;
         }
-        setAgent({ id: me.data.id, name: me.data.name, apiKeyPrefix: me.data.apiKeyPrefix });
+
+        setAgent({
+          id: String(me.id),
+          name: String(me.name ?? "Agent"),
+          apiKeyPrefix: String(me.apiKeyPrefix ?? ""),
+        });
         setError(null);
-        setLoading(false);
       } catch {
         if (!cancelled) {
           setError("Failed to connect");
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false);
         }
       }
     }
 
     verify();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [apiKey, apiUrl, apiFetch]);
 
-  // Poll for match state
   useEffect(() => {
-    if (!agent || !apiKey || !apiUrl) return;
+    if (!agent) return;
     mountedRef.current = true;
-    pollDelayMsRef.current = BASE_POLL_INTERVAL_MS;
-    consecutiveFailuresRef.current = 0;
-    let timeoutId: number | null = null;
 
     async function poll() {
       if (!mountedRef.current) return;
 
       try {
-        // If we have an active match, poll its view
         if (activeMatchId.current) {
-          const viewRes = await apiFetch(
-            `/api/agent/game/view?matchId=${encodeURIComponent(activeMatchId.current)}${activeMatchSeat.current ? `&seat=${activeMatchSeat.current}` : ""}`,
-          );
+          const query = new URLSearchParams({
+            matchId: activeMatchId.current,
+          });
+          if (activeMatchSeat.current) {
+            query.set("seat", activeMatchSeat.current);
+          }
 
+          const view = (await apiFetch(
+            `/api/agent/game/public-view?${query.toString()}`,
+          )) as PublicSpectatorView | null;
           if (!mountedRef.current) return;
 
-          if (viewRes.ok) {
-            const view = viewRes.data;
-            const mySeat = clampSeat(activeMatchSeat.current) ?? clampSeat(view.mySeat) ?? "host";
-            activeMatchSeat.current = mySeat;
-            const { myLP, oppLP } = resolveLifePoints(view);
-            setMatchState({
-              matchId: activeMatchId.current!,
-              phase: resolvePhase(view),
-              gameOver: Boolean(view.gameOver),
-              seat: mySeat,
-              isAgentTurn: view.currentTurnPlayer === mySeat,
-              myLP,
-              oppLP,
-              hand: mapHand(view.hand),
-              playerField: { monsters: mapBoard(view.board) },
-              opponentField: { monsters: mapBoard(view.opponentBoard) },
-            });
+          if (view) {
+            setMatchState(view);
+            activeMatchSeat.current = clampSeat(view.seat) ?? activeMatchSeat.current;
 
-            // If game is over, fetch match status for metadata then clear
-            if (view.gameOver) {
-              const statusRes = await apiFetch(
-                `/api/agent/game/match-status?matchId=${encodeURIComponent(activeMatchId.current!)}`,
-              );
-              if (mountedRef.current && statusRes.ok) {
-                setMatchState((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        mode: statusRes.data.mode,
-                        winner: statusRes.data.winner,
-                        chapterId: statusRes.data.chapterId,
-                        stageNumber: statusRes.data.stageNumber,
-                      }
-                    : prev,
-                );
-              }
-              // Keep showing final state, don't clear matchId immediately
+            const eventsQuery = new URLSearchParams({
+              matchId: activeMatchId.current,
+              sinceVersion: String(eventCursor.current),
+            });
+            if (activeMatchSeat.current) {
+              eventsQuery.set("seat", activeMatchSeat.current);
             }
-            setError(null);
-            consecutiveFailuresRef.current = 0;
-            pollDelayMsRef.current = BASE_POLL_INTERVAL_MS;
+
+            const events = (await apiFetch(
+              `/api/agent/game/public-events?${eventsQuery.toString()}`,
+            )) as PublicEventLogEntry[] | null;
+            if (!mountedRef.current) return;
+
+            if (Array.isArray(events) && events.length > 0) {
+              let maxVersion = eventCursor.current;
+              for (const entry of events) {
+                maxVersion = Math.max(maxVersion, Number(entry.version ?? 0));
+              }
+              eventCursor.current = maxVersion;
+              setTimeline((prev) => appendTimelineEntries(prev, events, TIMELINE_LIMIT));
+            }
+
             return;
           }
 
-          if (viewRes.status === 401 || viewRes.status === 403) {
-            setError("Unauthorized (invalid or expired API key)");
-          }
-          // View failed — match may have ended, clear it
           activeMatchId.current = null;
+          activeMatchSeat.current = null;
           setMatchState(null);
+          resetTimeline();
         }
 
-        // No active match — poll /api/agent/active-match to discover one
-        const activeMatchRes = await apiFetch("/api/agent/active-match");
-        if (mountedRef.current && activeMatchRes.ok && activeMatchRes.data?.matchId) {
-          activeMatchId.current = activeMatchRes.data.matchId;
-          activeMatchSeat.current = clampSeat(activeMatchRes.data.seat) ?? null;
-          // Next poll iteration will fetch the view
-        }
+        const activeMatch = (await apiFetch(
+          "/api/agent/active-match",
+        )) as ActiveMatchResponse | null;
+        if (!mountedRef.current || !activeMatch) return;
 
+        if (typeof activeMatch.matchId === "string" && activeMatch.matchId.trim()) {
+          if (activeMatchId.current !== activeMatch.matchId) {
+            resetTimeline();
+          }
+          activeMatchId.current = activeMatch.matchId;
+          activeMatchSeat.current = clampSeat(activeMatch.seat);
+        }
       } catch {
-        setError("Network error while polling");
-        consecutiveFailuresRef.current += 1;
-        const next = Math.min(
-          MAX_POLL_INTERVAL_MS,
-          BASE_POLL_INTERVAL_MS * Math.pow(2, Math.min(6, consecutiveFailuresRef.current)),
-        );
-        pollDelayMsRef.current = next;
+        // Keep polling on transient network failures.
       }
     }
 
-    function scheduleNext() {
-      if (!mountedRef.current) return;
-      const delay = jitter(pollDelayMsRef.current);
-      timeoutId = window.setTimeout(async () => {
-        await poll();
-        scheduleNext();
-      }, delay);
-    }
-
-    poll().finally(() => scheduleNext());
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       mountedRef.current = false;
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
+      clearInterval(interval);
     };
-  }, [agent, apiKey, apiUrl, apiFetch]);
+  }, [agent, apiFetch, resetTimeline]);
 
-  /** Manually set the match to watch (called when postMessage provides matchId) */
-  const watchMatch = useCallback((matchId: string, seat?: Seat) => {
-    activeMatchId.current = matchId;
-    activeMatchSeat.current = clampSeat(seat);
-  }, []);
+  const watchMatch = useCallback(
+    (matchId: string, seat?: Seat) => {
+      activeMatchId.current = matchId;
+      activeMatchSeat.current = clampSeat(seat);
+      setMatchState(null);
+      resetTimeline();
+    },
+    [resetTimeline],
+  );
 
-  return { agent, matchState, error, loading, watchMatch };
+  return {
+    agent,
+    matchState,
+    timeline,
+    error,
+    loading,
+    watchMatch,
+  };
 }

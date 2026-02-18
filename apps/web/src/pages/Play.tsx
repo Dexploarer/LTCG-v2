@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router";
+import { useParams, useNavigate } from "react-router";
 import * as Sentry from "@sentry/react";
 import { apiAny, useConvexQuery, useConvexMutation } from "@/lib/convexHelpers";
 import {
@@ -12,14 +12,13 @@ import {
 } from "@/components/story";
 import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
-import { detectClientPlatform, describeClientPlatform } from "@/lib/clientPlatform";
 import { normalizeMatchId } from "@/lib/matchIds";
-import { setDiscordActivityMatchContext, useDiscordActivity } from "@/hooks/useDiscordActivity";
+import { postToHost } from "@/lib/iframe";
 
 type MatchMeta = {
-  status: "waiting" | "active" | "ended";
+  status: string;
   hostId: string;
-  awayId: string | null;
+  awayId: string;
   mode: string;
   isAIOpponent?: boolean;
   winner?: string;
@@ -77,24 +76,14 @@ type ParsedEvent = {
 };
 
 export function Play() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { matchId } = useParams<{ matchId: string }>();
   const activeMatchId = normalizeMatchId(matchId);
-  const autojoin = searchParams.get("autojoin") === "1";
-  const joinPvPMatch = useConvexMutation(apiAny.game.joinPvPMatch);
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState("");
-  const autojoinAttemptedRef = useRef(false);
-
-  const currentUser = useConvexQuery(
-    apiAny.auth.currentUser,
-    {},
-  ) as CurrentUser | null | undefined;
+  const matchStartedNotifiedRef = useRef<string | null>(null);
+  const matchEndedNotifiedRef = useRef<string | null>(null);
 
   const meta = useConvexQuery(
     apiAny.game.getMatchMeta,
-    activeMatchId && currentUser ? { matchId: activeMatchId, actorUserId: currentUser._id } : "skip",
+    activeMatchId ? { matchId: activeMatchId } : "skip",
   ) as MatchMeta | null | undefined;
 
   // Story context — only loads for story mode matches
@@ -104,91 +93,46 @@ export function Play() {
     isStory && activeMatchId ? { matchId: activeMatchId } : "skip",
   ) as StoryContext | null | undefined;
 
-  const { isDiscordActivity, sdkReady } = useDiscordActivity();
-
-  useEffect(() => {
-    if (!activeMatchId || !meta || !isDiscordActivity || !sdkReady) return;
-    if (meta.mode !== "pvp") return;
-
-    const isActive = meta.status === "active";
-    const isWaiting = meta.status === "waiting";
-    if (!isActive && !isWaiting) return;
-
-    void setDiscordActivityMatchContext(activeMatchId, {
-      mode: isActive ? "duel" : "lobby",
-      currentPlayers: meta.awayId ? 2 : 1,
-      maxPlayers: 2,
-      state: isActive ? "Live Duel" : "Waiting for opponent",
-      });
-  }, [activeMatchId, meta, isDiscordActivity, sdkReady]);
+  const currentUser = useConvexQuery(
+    apiAny.auth.currentUser,
+    {},
+  ) as CurrentUser | null | undefined;
 
   const playerSeat = resolvePlayerSeat(currentUser ?? null, meta, isStory);
-
-  const canJoinMatch =
-    Boolean(activeMatchId) &&
-    Boolean(currentUser) &&
-    Boolean(meta) &&
-    !playerSeat &&
-    meta?.mode === "pvp" &&
-    meta?.status === "waiting" &&
-    meta?.awayId === null &&
-    meta?.hostId !== currentUser?._id;
-
-  const joinCurrentMatch = useCallback(async () => {
-    if (!activeMatchId || !canJoinMatch || joining) return;
-    setJoining(true);
-    setJoinError("");
-    try {
-      await joinPvPMatch({
-        matchId: activeMatchId,
-        platform: detectClientPlatform(),
-        source: describeClientPlatform(),
-      });
-      navigate(`/play/${activeMatchId}`);
-    } catch (err: any) {
-      Sentry.captureException(err);
-      setJoinError(err?.message ?? "Failed to join match.");
-    } finally {
-      setJoining(false);
-    }
-  }, [activeMatchId, canJoinMatch, joining, joinPvPMatch, navigate]);
+  const endResult = resolveMatchResult(meta, playerSeat);
 
   useEffect(() => {
-    autojoinAttemptedRef.current = false;
-  }, [activeMatchId]);
+    if (!activeMatchId || !meta) return;
+    if (meta.status !== "active" && meta.status !== "ended") return;
+    if (matchStartedNotifiedRef.current === activeMatchId) return;
+
+    postToHost({ type: "MATCH_STARTED", matchId: activeMatchId });
+    matchStartedNotifiedRef.current = activeMatchId;
+  }, [activeMatchId, meta]);
 
   useEffect(() => {
-    if (!autojoin || autojoinAttemptedRef.current || !canJoinMatch) return;
-    autojoinAttemptedRef.current = true;
-    void joinCurrentMatch();
-  }, [autojoin, canJoinMatch, joinCurrentMatch]);
+    if (!activeMatchId || !meta) return;
+    if (meta.status !== "ended") return;
+    if (matchEndedNotifiedRef.current === activeMatchId) return;
+
+    postToHost({
+      type: "MATCH_ENDED",
+      matchId: activeMatchId,
+      result: endResult,
+    });
+    matchEndedNotifiedRef.current = activeMatchId;
+  }, [activeMatchId, meta, endResult]);
 
   // Loading
   if (!activeMatchId) return <CenterMessage>Invalid match ID.</CenterMessage>;
-  if (currentUser === undefined) return <Loading />;
-  if (currentUser === null) return <CenterMessage>Unable to load player.</CenterMessage>;
   if (meta === undefined) return <Loading />;
   if (meta === null) return <CenterMessage>Match not found.</CenterMessage>;
-  if (!playerSeat && canJoinMatch) {
-    return (
-      <JoinMatchGate
-        matchId={activeMatchId}
-        joining={joining}
-        error={joinError}
-        onJoin={joinCurrentMatch}
-      />
-    );
-  }
+  if (currentUser === undefined) return <Loading />;
+  if (currentUser === null) return <CenterMessage>Unable to load player.</CenterMessage>;
   if (!playerSeat) return <CenterMessage>You are not a player in this match.</CenterMessage>;
 
   if (!isStory) {
-    return (
-      <GameBoard
-        matchId={activeMatchId}
-        seat={playerSeat}
-        actorUserId={currentUser._id}
-      />
-    );
+    return <GameBoard matchId={activeMatchId} seat={playerSeat} />;
   }
 
   return (
@@ -198,7 +142,6 @@ export function Play() {
         playerSeat={playerSeat}
         meta={meta}
         storyCtx={storyCtx}
-        actorUserId={currentUser._id}
       />
       <DialogueBox />
       <BattleTransition />
@@ -211,16 +154,9 @@ type StoryPlayFlowProps = {
   playerSeat: Seat;
   meta: MatchMeta;
   storyCtx: StoryContext | null | undefined;
-  actorUserId?: string;
 };
 
-function StoryPlayFlow({
-  matchId,
-  playerSeat,
-  meta,
-  storyCtx,
-  actorUserId,
-}: StoryPlayFlowProps) {
+function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowProps) {
   const navigate = useNavigate();
   const { pushEvents } = useStory();
   const completeStage = useConvexMutation(apiAny.game.completeStoryStage);
@@ -246,11 +182,7 @@ function StoryPlayFlow({
 
   const rawEvents = useConvexQuery(
     apiAny.game.getRecentEvents,
-    matchId
-      ? actorUserId
-        ? { matchId, sinceVersion: eventCursor, actorUserId }
-        : { matchId, sinceVersion: eventCursor }
-      : "skip",
+    matchId ? { matchId, sinceVersion: eventCursor } : "skip",
   ) as StoryLogBatch[] | undefined;
 
   const outcome = resolveStoryWon(meta?.winner, playerSeat);
@@ -529,12 +461,7 @@ function StoryPlayFlow({
 
   return (
     <div className="relative h-screen">
-      <GameBoard
-        matchId={matchId}
-        seat={playerSeat}
-        onMatchEnd={handleMatchEnd}
-        actorUserId={actorUserId}
-      />
+      <GameBoard matchId={matchId} seat={playerSeat} onMatchEnd={handleMatchEnd} />
       <StoryEventLog log={eventLog} />
     </div>
   );
@@ -622,6 +549,14 @@ function resolveStoryWon(winner: string | null | undefined, seat: Seat): boolean
   return winner === seat;
 }
 
+function resolveMatchResult(
+  meta: MatchMeta | null | undefined,
+  playerSeat: Seat | null,
+): "win" | "loss" | "draw" {
+  if (!meta?.winner || !playerSeat) return "draw";
+  return meta.winner === playerSeat ? "win" : "loss";
+}
+
 function resolvePlayerSeat(
   currentUser: CurrentUser | null,
   meta: MatchMeta | null | undefined,
@@ -633,52 +568,6 @@ function resolvePlayerSeat(
   if (isStory && meta.isAIOpponent && meta.awayId === "cpu") return "host";
   if (isStory && meta.isAIOpponent && meta.hostId === "cpu") return "away";
   return null;
-}
-
-function JoinMatchGate({
-  matchId,
-  joining,
-  error,
-  onJoin,
-}: {
-  matchId: string;
-  joining: boolean;
-  error: string;
-  onJoin: () => Promise<void>;
-}) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fdfdfb] px-4">
-      <div className="paper-panel w-full max-w-md p-6">
-        <h2
-          className="text-2xl font-black uppercase tracking-tight text-[#121212]"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Join Match
-        </h2>
-        <p
-          className="mt-2 text-xs text-[#121212]/70"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
-          Waiting PvP lobby detected: <code>{matchId}</code>
-        </p>
-        <button
-          type="button"
-          className="tcg-button-primary mt-4 w-full py-2 disabled:opacity-50"
-          disabled={joining}
-          onClick={() => {
-            void onJoin();
-          }}
-        >
-          {joining ? "Joining..." : "Join Match"}
-        </button>
-        {error ? (
-          <p className="mt-3 text-xs font-bold text-[#b91c1c]" style={{ fontFamily: "Outfit, sans-serif" }}>
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

@@ -1,17 +1,14 @@
-import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router";
 import { lazy, Suspense, useEffect } from "react";
 import * as Sentry from "@sentry/react";
 import { Toaster } from "sonner";
 import { useIframeMode } from "@/hooks/useIframeMode";
-import { useDiscordActivity } from "@/hooks/useDiscordActivity";
-import { useDiscordAuth } from "@/hooks/auth/useDiscordAuth";
 import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
-import { useTelegramStartParamRouting } from "@/hooks/auth/useTelegramStartParam";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
 import { AudioContextGate, AudioControlsDock, useAudio } from "@/components/audio/AudioProvider";
 import { getAudioContextFromPath } from "@/lib/audio/routeContext";
-import { resolveDiscordEntryRedirect } from "@/lib/discordEntry";
+import { sendChatToHost } from "@/lib/iframe";
 import { Home } from "@/pages/Home";
 
 const Onboarding = lazy(() => import("@/pages/Onboarding").then(m => ({ default: m.Onboarding })));
@@ -20,7 +17,6 @@ const Story = lazy(() => import("@/pages/Story").then(m => ({ default: m.Story }
 const StoryChapter = lazy(() => import("@/pages/StoryChapter").then(m => ({ default: m.StoryChapter })));
 const Decks = lazy(() => import("@/pages/Decks").then(m => ({ default: m.Decks })));
 const Play = lazy(() => import("@/pages/Play").then(m => ({ default: m.Play })));
-const Duel = lazy(() => import("@/pages/Duel").then(m => ({ default: m.Duel })));
 const Privacy = lazy(() => import("@/pages/Privacy").then(m => ({ default: m.Privacy })));
 const Terms = lazy(() => import("@/pages/Terms").then(m => ({ default: m.Terms })));
 const About = lazy(() => import("@/pages/About").then(m => ({ default: m.About })));
@@ -28,11 +24,12 @@ const Token = lazy(() => import("@/pages/Token").then(m => ({ default: m.Token }
 const AgentDev = lazy(() => import("@/pages/AgentDev").then(m => ({ default: m.AgentDev })));
 const Leaderboard = lazy(() => import("@/pages/Leaderboard").then(m => ({ default: m.Leaderboard })));
 const Watch = lazy(() => import("@/pages/Watch").then(m => ({ default: m.Watch })));
+const Studio = lazy(() => import("@/pages/Studio").then(m => ({ default: m.Studio })));
 const DeckBuilder = lazy(() => import("@/pages/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cliques })));
 const Profile = lazy(() => import("@/pages/Profile").then(m => ({ default: m.Profile })));
 const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.Settings })));
-const DiscordCallback = lazy(() => import("@/pages/DiscordCallback").then(m => ({ default: m.DiscordCallback })));
+const Pvp = lazy(() => import("@/pages/Pvp").then(m => ({ default: m.Pvp })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -82,8 +79,44 @@ function RouteAudioContextSync() {
   return null;
 }
 
-function TelegramMiniAppBootstrap() {
-  useTelegramStartParamRouting();
+function IframeCommandRouter({
+  command,
+  clearCommand,
+}: {
+  command: {
+    mode: "story" | "pvp";
+    matchId?: string;
+    chapterId?: string;
+  } | null;
+  clearCommand: () => void;
+}) {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!command) return;
+
+    if (command.matchId) {
+      navigate(`/play/${command.matchId}`);
+      clearCommand();
+      return;
+    }
+
+    if (command.mode === "pvp") {
+      navigate("/pvp");
+      clearCommand();
+      return;
+    }
+
+    if (command.chapterId) {
+      navigate(`/story/${command.chapterId}`);
+      clearCommand();
+      return;
+    }
+
+    navigate("/story");
+    clearCommand();
+  }, [command, clearCommand, navigate]);
+
   return null;
 }
 
@@ -107,27 +140,40 @@ function Public({ children }: { children: React.ReactNode }) {
   );
 }
 
-function HomeEntry() {
-  if (typeof window === "undefined") return <Home />;
-  const redirect = resolveDiscordEntryRedirect(window.location.pathname, window.location.search);
-  if (!redirect) return <Home />;
-  return <Navigate to={redirect} replace />;
-}
-
 const CONVEX_SITE_URL = (import.meta.env.VITE_CONVEX_URL ?? "")
   .replace(".convex.cloud", ".convex.site");
 
 export function App() {
-  const { isEmbedded, authToken, isApiKey } = useIframeMode();
+  const {
+    isEmbedded,
+    authToken,
+    agentId,
+    isApiKey,
+    startMatchCommand,
+    clearStartMatchCommand,
+    chatState,
+    chatEvent,
+  } = useIframeMode();
   useTelegramAuth();
-  useDiscordActivity();
-  useDiscordAuth();
 
   if (isApiKey && authToken) {
     return (
       <Sentry.ErrorBoundary fallback={PageErrorFallback}>
         <AudioContextGate context="play" />
-        <AgentSpectatorView apiKey={authToken} apiUrl={CONVEX_SITE_URL} />
+        <AgentSpectatorView
+          apiKey={authToken}
+          apiUrl={CONVEX_SITE_URL}
+          agentId={agentId}
+          hostChatState={chatState}
+          hostChatEvent={chatEvent}
+          onSendChat={(text, matchId) =>
+            sendChatToHost({
+              text,
+              matchId,
+              agentId: agentId ?? undefined,
+            })
+          }
+        />
         <AudioControlsDock />
       </Sentry.ErrorBoundary>
     );
@@ -135,17 +181,16 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <TelegramMiniAppBootstrap />
       <RouteAudioContextSync />
+      <IframeCommandRouter command={startMatchCommand} clearCommand={clearStartMatchCommand} />
       <SentryRoutes>
-        <Route path="/" element={<Public><HomeEntry /></Public>} />
-        <Route path="/_discord/join" element={<Public><HomeEntry /></Public>} />
-        <Route path="/_discord/callback" element={<Public><DiscordCallback /></Public>} />
+        <Route path="/" element={<Public><Home /></Public>} />
         <Route path="/privacy" element={<Public><Privacy /></Public>} />
         <Route path="/terms" element={<Public><Terms /></Public>} />
         <Route path="/about" element={<Public><About /></Public>} />
         <Route path="/token" element={<Public><Token /></Public>} />
         <Route path="/agent-dev" element={<Public><AgentDev /></Public>} />
+        <Route path="/studio" element={<Public><Studio /></Public>} />
         <Route path="/leaderboard" element={<Public><Leaderboard /></Public>} />
         <Route path="/watch" element={<Public><Watch /></Public>} />
 
@@ -153,8 +198,8 @@ export function App() {
         <Route path="/collection" element={<Guarded><Collection /></Guarded>} />
         <Route path="/story" element={<Guarded><Story /></Guarded>} />
         <Route path="/story/:chapterId" element={<Guarded><StoryChapter /></Guarded>} />
+        <Route path="/pvp" element={<Guarded><Pvp /></Guarded>} />
         <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
-        <Route path="/duel" element={<Guarded><Duel /></Guarded>} />
         <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
         <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
         <Route path="/profile" element={<Guarded><Profile /></Guarded>} />

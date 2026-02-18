@@ -309,6 +309,17 @@ export const agentJoinMatch = mutation({
       initialState: JSON.stringify(initialState),
     });
 
+    const lobby = await ctx.db
+      .query("pvpLobbies")
+      .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
+      .first();
+    if (lobby && lobby.status === "waiting") {
+      await ctx.db.patch(lobby._id, {
+        status: "active",
+        activatedAt: Date.now(),
+      });
+    }
+
     const mode = (meta as any).mode as "pvp" | "story";
     return {
       matchId: args.matchId,

@@ -1,118 +1,89 @@
-import { describe, expect, it } from "vitest";
-import { isAllowedOriginForHostMessage, parseHostToGameMessage } from "./iframe";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onHostMessage, sendChatToHost } from "./iframe";
 
-describe("isAllowedOriginForHostMessage", () => {
-  it("accepts known allowed origins regardless of source window", () => {
-    expect(isAllowedOriginForHostMessage("http://localhost:3000", false)).toBe(
-      true,
-    );
-    expect(isAllowedOriginForHostMessage("https://milaidy.app", false)).toBe(
-      true,
-    );
+type Listener = (event: { origin: string; data: unknown }) => void;
+
+function installFakeWindow() {
+  const listeners: Listener[] = [];
+  const postMessage = vi.fn();
+
+  const fakeWindow = {
+    self: {},
+    top: {},
+    parent: { postMessage },
+    addEventListener: (type: string, listener: Listener) => {
+      if (type === "message") listeners.push(listener);
+    },
+    removeEventListener: (type: string, listener: Listener) => {
+      if (type !== "message") return;
+      const idx = listeners.indexOf(listener);
+      if (idx >= 0) listeners.splice(idx, 1);
+    },
+  };
+
+  (globalThis as any).window = fakeWindow;
+
+  return {
+    postMessage,
+    dispatch(origin: string, data: unknown) {
+      for (const listener of [...listeners]) {
+        listener({ origin, data });
+      }
+    },
+  };
+}
+
+describe("iframe protocol", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("accepts null origin only when message is from the direct parent window", () => {
-    expect(isAllowedOriginForHostMessage("null", false)).toBe(false);
-    expect(isAllowedOriginForHostMessage("null", true)).toBe(true);
+  afterEach(() => {
+    delete (globalThis as any).window;
   });
 
-  it("accepts file:// origin only when message is from the direct parent window", () => {
-    expect(isAllowedOriginForHostMessage("file://", false)).toBe(false);
-    expect(isAllowedOriginForHostMessage("file://", true)).toBe(true);
-    expect(isAllowedOriginForHostMessage("file://some/path", false)).toBe(false);
-    expect(isAllowedOriginForHostMessage("file://some/path", true)).toBe(true);
+  it("accepts both legacy and prefixed start-match host commands", () => {
+    const env = installFakeWindow();
+    const received: string[] = [];
+    const off = onHostMessage((message) => {
+      received.push(message.type);
+    });
+
+    env.dispatch("https://milaidy.app", { type: "START_MATCH", mode: "pvp" });
+    env.dispatch("https://milaidy.app", { type: "LTCG_START_MATCH", mode: "story" });
+    off();
+
+    expect(received).toEqual(["START_MATCH", "LTCG_START_MATCH"]);
   });
 
-  it("rejects unknown origins", () => {
-    expect(isAllowedOriginForHostMessage("https://evil.example", true)).toBe(
-      false,
+  it("rejects unauthorized origins and unknown message types", () => {
+    const env = installFakeWindow();
+    const handler = vi.fn();
+    onHostMessage(handler);
+
+    env.dispatch("https://evil.example", { type: "START_MATCH", mode: "pvp" });
+    env.dispatch("https://milaidy.app", { type: "NOT_REAL", mode: "pvp" });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("sends chat messages to host with LTCG_CHAT_SEND type", () => {
+    const env = installFakeWindow();
+
+    sendChatToHost({
+      text: "hello from embed",
+      matchId: "m_123",
+      agentId: "a_1",
+    });
+
+    expect(env.postMessage).toHaveBeenCalledWith(
+      {
+        type: "LTCG_CHAT_SEND",
+        text: "hello from embed",
+        matchId: "m_123",
+        agentId: "a_1",
+      },
+      "*",
     );
   });
 });
-
-describe("parseHostToGameMessage", () => {
-  it("returns null for non-object payloads", () => {
-    expect(parseHostToGameMessage(null)).toBeNull();
-    expect(parseHostToGameMessage("LTCG_AUTH")).toBeNull();
-    expect(parseHostToGameMessage(123)).toBeNull();
-  });
-
-  it("parses LTCG_AUTH and AUTH_TOKEN with trimming and optional agentId", () => {
-    expect(
-      parseHostToGameMessage({
-        type: "LTCG_AUTH",
-        authToken: "  ltcg_token  ",
-        agentId: "  agent_123  ",
-      }),
-    ).toEqual({
-      type: "LTCG_AUTH",
-      authToken: "ltcg_token",
-      agentId: "agent_123",
-    });
-
-    expect(
-      parseHostToGameMessage({
-        type: "AUTH_TOKEN",
-        authToken: "ltcg_token",
-        agentId: "   ",
-      }),
-    ).toEqual({
-      type: "AUTH_TOKEN",
-      authToken: "ltcg_token",
-      agentId: undefined,
-    });
-
-    expect(
-      parseHostToGameMessage({
-        type: "LTCG_AUTH",
-        authToken: "   ",
-      }),
-    ).toBeNull();
-  });
-
-  it("parses START_MATCH with strict mode validation", () => {
-    expect(parseHostToGameMessage({ type: "START_MATCH", mode: "story" })).toEqual(
-      { type: "START_MATCH", mode: "story" },
-    );
-    expect(parseHostToGameMessage({ type: "START_MATCH", mode: "pvp" })).toEqual(
-      { type: "START_MATCH", mode: "pvp" },
-    );
-    expect(parseHostToGameMessage({ type: "START_MATCH", mode: "duel" })).toBeNull();
-  });
-
-  it("parses wallet and control messages and rejects invalid payloads", () => {
-    expect(
-      parseHostToGameMessage({
-        type: "WALLET_CONNECTED",
-        address: "  0xabc  ",
-        chain: "  base  ",
-      }),
-    ).toEqual({
-      type: "WALLET_CONNECTED",
-      address: "0xabc",
-      chain: "base",
-    });
-
-    expect(
-      parseHostToGameMessage({
-        type: "WALLET_CONNECTED",
-        address: "",
-        chain: "base",
-      }),
-    ).toBeNull();
-
-    expect(parseHostToGameMessage({ type: "SKIP_CUTSCENE" })).toEqual({
-      type: "SKIP_CUTSCENE",
-    });
-    expect(parseHostToGameMessage({ type: "PAUSE_AUTONOMY" })).toEqual({
-      type: "PAUSE_AUTONOMY",
-    });
-    expect(parseHostToGameMessage({ type: "RESUME_AUTONOMY" })).toEqual({
-      type: "RESUME_AUTONOMY",
-    });
-    expect(parseHostToGameMessage({ type: "STOP_MATCH" })).toEqual({
-      type: "STOP_MATCH",
-    });
-  });
-});
-

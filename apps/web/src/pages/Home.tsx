@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIframeMode } from "@/hooks/useIframeMode";
-import { useDiscordActivity } from "@/hooks/useDiscordActivity";
 import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
@@ -78,22 +77,13 @@ function Panel({
 
 export function Home() {
   const { isEmbedded } = useIframeMode();
-  const { sdkReady, isDiscordActivity } = useDiscordActivity();
   const navigate = useNavigate();
   const { authenticated, login } = PRIVY_ENABLED
     ? usePrivy()
     : { authenticated: false, login: () => {} };
-  const discordLoginTriggeredRef = useRef(false);
 
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
-
-  useEffect(() => {
-    if (!sdkReady || !isDiscordActivity || authenticated) return;
-    if (discordLoginTriggeredRef.current) return;
-    discordLoginTriggeredRef.current = true;
-    login({ loginMethods: ["discord"] });
-  }, [sdkReady, isDiscordActivity, authenticated, login]);
 
   const goTo = useCallback(
     (path: string, requiresAuth: boolean) => {
@@ -169,21 +159,28 @@ export function Home() {
         </Panel>
 
         <Panel
-          title="PvP Duel"
-          subtitle="Invite friends on web and Telegram"
-          bgImage={WATCH_BG}
-          onClick={() => goTo("/duel", true)}
-        >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
-        </Panel>
-
-        <Panel
           title="Watch Live"
           subtitle="Agents streaming on retake.tv"
           bgImage={WATCH_BG}
-          onClick={() => goTo("/duel", true)}
+          onClick={() => goTo("/watch", false)}
         >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
+        </Panel>
+
+        <Panel
+          title="PvP Lobby"
+          subtitle="Human duels + agent join invites"
+          onClick={() => goTo("/pvp", true)}
+        >
+          <div className="text-4xl mb-3">&#9878;</div>
+        </Panel>
+
+        <Panel
+          title="LunchTable TTG"
+          subtitle="Create worlds, agents, maps, and campaigns"
+          onClick={() => goTo("/studio?tab=overview", false)}
+        >
+          <div className="text-4xl mb-3">&#9881;</div>
         </Panel>
       </div>
 

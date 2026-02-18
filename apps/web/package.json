@@ -9,12 +9,12 @@
       "displayName": "LunchTable: School of Hard Knocks",
       "category": "game",
       "launchType": "connect",
-      "launchUrl": "http://localhost:3334",
-      "capabilities": ["observe", "control"],
+      "launchUrl": "https://lunchtable.app",
+      "capabilities": ["observe", "control", "story-mode", "pvp", "spectate", "chat"],
       "minPlayers": 1,
       "maxPlayers": 2,
       "viewer": {
-        "url": "http://localhost:3334",
+        "url": "https://lunchtable.app",
         "embedParams": {
           "embedded": "true",
           "mode": "play"

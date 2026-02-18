@@ -1,343 +1,282 @@
-/**
- * Agent Spectator View — watches an agent play via HTTP API polling.
- *
- * Used when the LTCG frontend is embedded in milaidy with an ltcg_ API key.
- * Since the API key can't authenticate with Convex real-time subscriptions,
- * this component polls the HTTP API for game state.
- */
-
-import { useAgentSpectator, type SpectatorMatchState } from "@/hooks/useAgentSpectator";
-import { postToHost } from "@/lib/iframe";
-import { useEffect, useRef } from "react";
-
-declare global {
-  interface Window {
-    render_spectator_to_text?: () => string;
-  }
-}
+import { useEffect, useMemo, useState } from "react";
+import {
+  useAgentSpectator,
+  type PublicEventLogEntry,
+  type PublicSpectatorSlot,
+  type PublicSpectatorView,
+} from "@/hooks/useAgentSpectator";
+import type { IframeChatState } from "@/hooks/useIframeMode";
+import type { IframeChatMessage } from "@/lib/iframe";
 
 interface Props {
   apiKey: string;
   apiUrl: string;
+  agentId?: string | null;
+  hostChatState?: IframeChatState | null;
+  hostChatEvent?: IframeChatMessage | null;
+  onSendChat?: (text: string, matchId?: string) => void;
 }
 
-export function AgentSpectatorView({ apiKey, apiUrl }: Props) {
-  const { agent, matchState, error, loading } = useAgentSpectator(apiKey, apiUrl);
-  const lastMatchStartedRef = useRef<string | null>(null);
-  const matchEndedRef = useRef(new Set<string>());
+const RETAKE_EMBED_BASE = (import.meta.env.VITE_RETAKE_EMBED_BASE_URL as string | undefined) ??
+  "https://retake.tv/embed";
+const RETAKE_CHANNEL_BASE = (import.meta.env.VITE_RETAKE_CHANNEL_BASE_URL as string | undefined) ??
+  "https://retake.tv";
+
+export function AgentSpectatorView({
+  apiKey,
+  apiUrl,
+  agentId,
+  hostChatState,
+  hostChatEvent,
+  onSendChat,
+}: Props) {
+  const { agent, matchState, timeline, error, loading } = useAgentSpectator(apiKey, apiUrl);
+  const [chatMessages, setChatMessages] = useState<IframeChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+
+  const isIframeHost = typeof window !== "undefined" && window.self !== window.top;
+  const chatEnabled = hostChatState?.enabled !== false;
+  const chatReadOnly = !isIframeHost || hostChatState?.readOnly === true || !onSendChat || !chatEnabled;
+
+  useEffect(() => {
+    if (!hostChatState?.messages) return;
+    setChatMessages(hostChatState.messages);
+  }, [hostChatState?.messages]);
+
+  useEffect(() => {
+    if (!hostChatEvent) return;
+    setChatMessages((current) => {
+      if (current.some((entry) => entry.id === hostChatEvent.id)) return current;
+      return [...current, hostChatEvent];
+    });
+  }, [hostChatEvent]);
+
+  const streamEmbedUrl = useMemo(() => {
+    if (!agent?.name) return null;
+    return `${RETAKE_EMBED_BASE.replace(/\/$/, "")}/${encodeURIComponent(agent.name)}`;
+  }, [agent?.name]);
+
+  const streamPageUrl = useMemo(() => {
+    if (!agent?.name) return RETAKE_CHANNEL_BASE;
+    return `${RETAKE_CHANNEL_BASE.replace(/\/$/, "")}/${encodeURIComponent(agent.name)}`;
+  }, [agent?.name]);
+
+  const sendMessage = () => {
+    const text = draft.trim();
+    if (!text || chatReadOnly || !onSendChat) return;
+
+    onSendChat(text, matchState?.matchId);
+    setChatMessages((current) => [
+      ...current,
+      {
+        id: `local-${Date.now()}`,
+        role: "user",
+        text,
+        createdAt: Date.now(),
+      },
+    ]);
+    setDraft("");
+  };
 
   if (loading) return <SpectatorLoading />;
   if (error) return <SpectatorError message={error} />;
   if (!agent) return <SpectatorError message="Could not connect to agent" />;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    // Expose a deterministic snapshot for browser automation.
-    // This is intentionally small and stable; consumers should treat it as read-only.
-    const renderSpectatorToText = () =>
-      JSON.stringify({
-        mode: "ltcg_spectator",
-        agent: {
-          id: agent.id,
-          name: agent.name,
-          apiKeyPrefix: agent.apiKeyPrefix,
-        },
-        match: matchState
-          ? {
-              matchId: matchState.matchId,
-              phase: matchState.phase,
-              gameOver: matchState.gameOver,
-              winner: matchState.winner ?? null,
-              myLP: matchState.myLP,
-              oppLP: matchState.oppLP,
-              seat: matchState.seat,
-              mode: matchState.mode ?? null,
-              chapterId: matchState.chapterId ?? null,
-              stageNumber: matchState.stageNumber ?? null,
-            }
-          : null,
-      });
-
-    window.render_spectator_to_text = renderSpectatorToText;
-
-    return () => {
-      if (window.render_spectator_to_text === renderSpectatorToText) {
-        delete window.render_spectator_to_text;
-      }
-    };
-  }, [agent, matchState]);
-
-  useEffect(() => {
-    // Emit lightweight status snapshots for the host UI (milaidy).
-    if (!matchState) {
-      lastMatchStartedRef.current = null;
-      postToHost({
-        type: "AUTONOMY_STATUS",
-        status: "idle",
-        matchId: null,
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
-    postToHost({
-      type: "AUTONOMY_STATUS",
-      status: matchState.gameOver ? "idle" : "running",
-      matchId: matchState.matchId,
-      phase: matchState.phase,
-      isAgentTurn: matchState.isAgentTurn,
-      gameOver: matchState.gameOver,
-      winner: matchState.winner ?? null,
-      chapterId: matchState.chapterId ?? null,
-      stageNumber: matchState.stageNumber ?? null,
-      timestamp: Date.now(),
-    });
-
-    if (lastMatchStartedRef.current !== matchState.matchId) {
-      lastMatchStartedRef.current = matchState.matchId;
-      postToHost({ type: "MATCH_STARTED", matchId: matchState.matchId });
-    }
-
-    if (matchState.gameOver && !matchEndedRef.current.has(matchState.matchId)) {
-      matchEndedRef.current.add(matchState.matchId);
-      postToHost({
-        type: "MATCH_ENDED",
-        matchId: matchState.matchId,
-        result: resolveMatchResult(matchState),
-      });
-    }
-  }, [matchState]);
-
   return (
-    <div className="min-h-screen bg-[#fdfdfb] flex flex-col">
-      {/* Agent header */}
-      <header className="border-b-2 border-[#121212] px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-[#fdfdfb] text-[#121212]">
+      <header className="border-b-2 border-[#121212] px-4 py-3 flex items-center justify-between bg-white/90">
         <div>
-          <p className="text-[10px] text-[#999] uppercase tracking-wider">
-            Spectating
-          </p>
-          <h1
-            className="text-lg leading-tight"
-            style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
-          >
+          <p className="text-[10px] text-[#999] uppercase tracking-wider">Embedded Broadcast</p>
+          <h1 className="text-lg leading-tight" style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}>
             {agent.name}
           </h1>
+          <p className="text-[10px] text-[#666] font-mono">{agent.apiKeyPrefix}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center gap-1.5 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-wider"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            Live
-          </span>
-        </div>
-      </header>
-
-      {/* Match content */}
-      {matchState ? (
-        <MatchBoard state={matchState} agentName={agent.name} />
-      ) : (
-        <WaitingForMatch agentName={agent.name} />
-      )}
-    </div>
-  );
-}
-
-function resolveMatchResult(state: SpectatorMatchState): "win" | "loss" | "draw" {
-  const draw = state.winner == null && state.myLP === state.oppLP;
-  if (draw) return "draw";
-
-  if (state.winner) {
-    return state.winner === state.seat ? "win" : "loss";
-  }
-
-  return state.myLP > state.oppLP ? "win" : "loss";
-}
-
-function MatchBoard({
-  state,
-  agentName,
-}: {
-  state: SpectatorMatchState;
-  agentName: string;
-}) {
-  if (state.gameOver) {
-    const won = state.winner ? state.winner === state.seat : state.myLP > state.oppLP;
-    const draw = state.winner == null && state.myLP === state.oppLP;
-
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="paper-panel p-12 text-center max-w-md">
-          <h1
-            className="text-5xl mb-4"
-            style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
-          >
-            {draw ? "DRAW" : won ? "VICTORY" : "DEFEAT"}
-          </h1>
-          <p
-            className="text-sm text-[#666] mb-4"
-            style={{ fontFamily: "Special Elite, cursive" }}
-          >
-            {agentName} {draw ? "drew" : won ? "won" : "lost"} — LP: {state.myLP} vs{" "}
-            {state.oppLP}
-          </p>
-          {state.chapterId && (
-            <p className="text-xs text-[#999]">
-              Story Stage {state.stageNumber}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col gap-4 p-4 max-w-4xl mx-auto w-full">
-      {/* Status bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Stat label={agentName} value={state.myLP} />
-          <span className="text-[#121212]/30 text-xs">vs</span>
-          <Stat label="Opponent" value={state.oppLP} />
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] text-[#999] uppercase tracking-wider">
-            {state.phase}
-          </p>
-          <p
-            className="text-xs font-bold"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {state.isAgentTurn ? `${agentName}'s turn` : "Opponent's turn"}
-          </p>
-        </div>
-      </div>
-
-      {/* Opponent field */}
-      <FieldRow
-        label="Opponent"
-        monsters={state.opponentField.monsters}
-        faceDown
-      />
-
-      <div className="h-px bg-[#121212]/20 my-2" />
-
-      {/* Agent field */}
-      <FieldRow label={agentName} monsters={state.playerField.monsters} />
-
-      {/* Hand */}
-      <div className="mt-4">
-        <p
-          className="text-xs text-[#999] uppercase tracking-wider mb-2"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
-          Hand ({state.hand.length} cards)
-        </p>
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {state.hand.map((card: any, i: number) => (
-            <div
-              key={card.instanceId ?? i}
-              className="paper-panel p-3 min-w-[120px] shrink-0 text-xs"
-            >
-              <p
-                className="font-bold leading-tight mb-1 line-clamp-2"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {card.name ?? "???"}
-              </p>
-              {card.attack !== undefined && (
-                <p className="text-[10px] text-[#666]">
-                  ATK {card.attack} / DEF {card.defense}
-                </p>
-              )}
-            </div>
-          ))}
-          {state.hand.length === 0 && (
-            <p className="text-xs text-[#999] italic">Empty hand</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FieldRow({
-  label,
-  monsters,
-  faceDown,
-}: {
-  label: string;
-  monsters: any[];
-  faceDown?: boolean;
-}) {
-  const slots = monsters ?? [];
-  return (
-    <div>
-      <p
-        className="text-xs text-[#999] uppercase tracking-wider mb-2"
-        style={{ fontFamily: "Special Elite, cursive" }}
-      >
-        {label}
-      </p>
-      <div className="flex gap-2">
-        {[0, 1, 2, 3, 4].map((i) => {
-          const card = slots[i];
-          return (
-            <div
-              key={i}
-              className={`paper-panel-flat w-20 h-24 flex items-center justify-center text-xs ${
-                card ? "" : "opacity-20"
-              }`}
-            >
-              {card ? (
-                faceDown && card.faceDown ? (
-                  <span className="text-[#999]">?</span>
-                ) : (
-                  <div className="p-1.5 text-center">
-                    <p
-                      className="text-[10px] font-bold leading-tight line-clamp-2"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {card.name ?? "Set"}
-                    </p>
-                    {card.attack !== undefined && (
-                      <p className="text-[9px] text-[#666] mt-0.5">
-                        {card.attack}/{card.defense}
-                      </p>
-                    )}
-                  </div>
-                )
-              ) : (
-                <span className="text-[#ccc]">&mdash;</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function WaitingForMatch({ agentName }: { agentName: string }) {
-  return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-10 h-10 border-4 border-[#121212] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p
-          className="text-sm font-bold mb-2"
+        <span
+          className="inline-flex items-center gap-1.5 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-wider"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
-          Waiting for {agentName}
-        </p>
-        <p
-          className="text-xs text-[#999]"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
-          The agent will start a match soon...
-        </p>
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+          Live
+        </span>
+      </header>
+
+      <main className="p-3 md:p-4 grid grid-cols-1 xl:grid-cols-3 gap-3">
+        <section className="paper-panel p-3 col-span-1 xl:col-span-2">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] uppercase tracking-wider text-[#666]">Stream</p>
+            <a
+              href={streamPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] uppercase tracking-wider font-bold text-[#121212]/70 hover:text-[#121212]"
+            >
+              Open Channel
+            </a>
+          </div>
+          {streamEmbedUrl ? (
+            <iframe
+              src={streamEmbedUrl}
+              title={`${agent.name} stream`}
+              className="w-full aspect-video border-2 border-[#121212]"
+              allow="autoplay; fullscreen"
+            />
+          ) : (
+            <div className="w-full aspect-video border-2 border-[#121212] flex items-center justify-center text-xs text-[#666]">
+              Stream unavailable
+            </div>
+          )}
+        </section>
+
+        <section className="paper-panel p-3 col-span-1">
+          <p className="text-[11px] uppercase tracking-wider text-[#666] mb-2">Chat</p>
+          <div className="border border-[#121212]/30 h-56 overflow-auto bg-white/70 p-2 space-y-2">
+            {chatMessages.length === 0 ? (
+              <p className="text-[11px] text-[#666] italic">No host chat messages yet.</p>
+            ) : (
+              chatMessages.map((entry) => (
+                <div key={entry.id} className="text-[11px]">
+                  <p className="font-bold uppercase tracking-wide text-[10px] text-[#666]">
+                    {entry.role}
+                  </p>
+                  <p className="leading-snug">{entry.text}</p>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") sendMessage();
+              }}
+              disabled={chatReadOnly}
+              placeholder={chatReadOnly ? "Host chat bridge required" : "Send message to host chat"}
+              className="flex-1 border-2 border-[#121212] bg-white px-2 py-1 text-xs disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={chatReadOnly || draft.trim().length === 0}
+              className="tcg-button px-3 py-1 text-[10px] disabled:opacity-60"
+            >
+              Send
+            </button>
+          </div>
+          {chatReadOnly && (
+            <p className="text-[10px] text-[#666] mt-2">
+              {hostChatState?.reason ??
+                (chatEnabled
+                  ? "Chat is read-only until the host bridge is connected."
+                  : "Host disabled chat for this stream.")}
+            </p>
+          )}
+          {!agentId && (
+            <p className="text-[10px] text-[#666] mt-1">
+              Agent relay id not provided by host.
+            </p>
+          )}
+        </section>
+
+        <section className="paper-panel p-3 col-span-1 xl:col-span-2">
+          <p className="text-[11px] uppercase tracking-wider text-[#666] mb-2">Public Game Board</p>
+          {matchState ? (
+            <PublicBoard state={matchState} />
+          ) : (
+            <p className="text-xs text-[#666]">Waiting for an active match...</p>
+          )}
+        </section>
+
+        <section className="paper-panel p-3 col-span-1">
+          <p className="text-[11px] uppercase tracking-wider text-[#666] mb-2">Action Timeline</p>
+          <Timeline entries={timeline} />
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function PublicBoard({ state }: { state: PublicSpectatorView }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 text-[11px]">
+        <Stat label="Phase" value={state.phase} />
+        <Stat label="Turn" value={String(state.turnNumber)} />
+        <Stat label="Agent Turn" value={state.isAgentTurn ? "Yes" : "No"} />
+        <Stat label="Status" value={state.status ?? "unknown"} />
       </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="border border-[#121212]/30 bg-white/70 p-2">
+          <p className="font-bold mb-1">Agent</p>
+          <p>LP: {state.players.agent.lifePoints}</p>
+          <p>Hand: {state.players.agent.handCount}</p>
+          <p>Deck: {state.players.agent.deckCount}</p>
+          <p>GY/BAN: {state.players.agent.graveyardCount}/{state.players.agent.banishedCount}</p>
+        </div>
+        <div className="border border-[#121212]/30 bg-white/70 p-2">
+          <p className="font-bold mb-1">Opponent</p>
+          <p>LP: {state.players.opponent.lifePoints}</p>
+          <p>Hand: {state.players.opponent.handCount}</p>
+          <p>Deck: {state.players.opponent.deckCount}</p>
+          <p>GY/BAN: {state.players.opponent.graveyardCount}/{state.players.opponent.banishedCount}</p>
+        </div>
+      </div>
+
+      <FieldPanel label="Opponent Monsters" slots={state.fields.opponent.monsters} />
+      <FieldPanel label="Opponent Backrow" slots={state.fields.opponent.spellTraps} />
+      <FieldPanel label="Agent Monsters" slots={state.fields.agent.monsters} />
+      <FieldPanel label="Agent Backrow" slots={state.fields.agent.spellTraps} />
+    </div>
+  );
+}
+
+function FieldPanel({ label, slots }: { label: string; slots: PublicSpectatorSlot[] }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-[#666] mb-1">{label}</p>
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5">
+        {slots.map((slot) => (
+          <div key={`${label}-${slot.lane}`} className="border border-[#121212]/30 bg-white/70 p-1.5 min-h-14">
+            {!slot.occupied ? (
+              <p className="text-[10px] text-[#aaa]">Empty</p>
+            ) : slot.faceDown ? (
+              <p className="text-[10px] text-[#666]">Face-down</p>
+            ) : (
+              <>
+                <p className="text-[10px] font-bold leading-tight line-clamp-2">{slot.name ?? "Card"}</p>
+                {slot.attack !== null && slot.defense !== null && (
+                  <p className="text-[9px] text-[#666] mt-0.5">
+                    {slot.attack}/{slot.defense}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ entries }: { entries: PublicEventLogEntry[] }) {
+  if (entries.length === 0) {
+    return <p className="text-xs text-[#666]">No events yet.</p>;
+  }
+
+  return (
+    <div className="max-h-[420px] overflow-auto space-y-2">
+      {entries.slice().reverse().map((entry) => (
+        <div key={`${entry.version}-${entry.eventType}-${entry.createdAt ?? 0}`} className="border border-[#121212]/20 bg-white/70 p-2">
+          <p className="text-[10px] uppercase tracking-wider text-[#666]">
+            {entry.actor} · v{entry.version}
+          </p>
+          <p className="text-xs font-bold mt-0.5">{entry.summary}</p>
+          <p className="text-[11px] text-[#666] mt-1">{entry.rationale}</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -354,16 +293,10 @@ function SpectatorError({ message }: { message: string }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#fdfdfb]">
       <div className="text-center">
-        <p
-          className="text-sm font-bold text-red-600 mb-2"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
+        <p className="text-sm font-bold text-red-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
           Connection Failed
         </p>
-        <p
-          className="text-xs text-[#666]"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
+        <p className="text-xs text-[#666]" style={{ fontFamily: "Special Elite, cursive" }}>
           {message}
         </p>
       </div>
@@ -371,18 +304,11 @@ function SpectatorError({ message }: { message: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center">
-      <p className="text-[10px] text-[#999] uppercase tracking-wider">
-        {label}
-      </p>
-      <p
-        className="text-lg leading-none"
-        style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
-      >
-        {value}
-      </p>
+    <div className="px-2 py-1 border border-[#121212]/30 bg-white/70">
+      <p className="text-[9px] uppercase tracking-wider text-[#777]">{label}</p>
+      <p className="text-xs font-bold">{value}</p>
     </div>
   );
 }
