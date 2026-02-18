@@ -252,8 +252,8 @@ describe("executeAction", () => {
     expect(events[0]).toEqual({
       type: "CARD_BANISHED",
       cardId: "set-trap-1",
-      from: "hand",
-      sourceSeat: undefined,
+      from: "spell_trap_zone",
+      sourceSeat: "host",
     });
   });
 
@@ -284,8 +284,8 @@ describe("executeAction", () => {
     expect(events[0]).toEqual({
       type: "CARD_RETURNED_TO_HAND",
       cardId: "banished_1",
-      from: "graveyard",
-      sourceSeat: undefined,
+      from: "banished",
+      sourceSeat: "host",
     });
   });
 

@@ -159,6 +159,87 @@ function removeCardFromZone(
   }
 }
 
+function removeCardFromZoneForSeat(
+  state: GameState,
+  cardId: string,
+  zone: TransferZone,
+  seat: Seat
+): { state: GameState; removed: boolean } {
+  let next = { ...state };
+  const isHost = seat === "host";
+  const boardKey = isHost ? "hostBoard" : "awayBoard";
+  const handKey = isHost ? "hostHand" : "awayHand";
+  const graveyardKey = isHost ? "hostGraveyard" : "awayGraveyard";
+  const banishedKey = isHost ? "hostBanished" : "awayBanished";
+  const spellTrapKey = isHost ? "hostSpellTrapZone" : "awaySpellTrapZone";
+  const fieldKey = isHost ? "hostFieldSpell" : "awayFieldSpell";
+  const deckKey = isHost ? "hostDeck" : "awayDeck";
+
+  if (zone === "board") {
+    const board = [...(next as any)[boardKey]] as BoardCard[];
+    const index = board.findIndex((c: BoardCard) => c.cardId === cardId);
+    if (index < 0) return { state: next, removed: false };
+    board.splice(index, 1);
+    (next as any)[boardKey] = board;
+    return { state: next, removed: true };
+  }
+
+  if (zone === "hand") {
+    const hand = [...(next as any)[handKey]] as string[];
+    const index = hand.indexOf(cardId);
+    if (index < 0) return { state: next, removed: false };
+    hand.splice(index, 1);
+    (next as any)[handKey] = hand;
+    return { state: next, removed: true };
+  }
+
+  if (zone === "graveyard") {
+    const graveyard = [...(next as any)[graveyardKey]] as string[];
+    const index = graveyard.indexOf(cardId);
+    if (index < 0) return { state: next, removed: false };
+    graveyard.splice(index, 1);
+    (next as any)[graveyardKey] = graveyard;
+    return { state: next, removed: true };
+  }
+
+  if (zone === "banished") {
+    const banished = [...(next as any)[banishedKey]] as string[];
+    const index = banished.indexOf(cardId);
+    if (index < 0) return { state: next, removed: false };
+    banished.splice(index, 1);
+    (next as any)[banishedKey] = banished;
+    return { state: next, removed: true };
+  }
+
+  if (zone === "spell_trap_zone") {
+    const spellTrapZone = [...(next as any)[spellTrapKey]];
+    const index = spellTrapZone.findIndex((c: SpellTrapCard) => c.cardId === cardId);
+    if (index < 0) return { state: next, removed: false };
+    spellTrapZone.splice(index, 1);
+    (next as any)[spellTrapKey] = spellTrapZone;
+    return { state: next, removed: true };
+  }
+
+  if (zone === "field") {
+    if ((next as any)[fieldKey]?.cardId === cardId) {
+      (next as any)[fieldKey] = null;
+      return { state: next, removed: true };
+    }
+    return { state: next, removed: false };
+  }
+
+  if (zone === "deck") {
+    const deck = [...(next as any)[deckKey]] as string[];
+    const index = deck.indexOf(cardId);
+    if (index < 0) return { state: next, removed: false };
+    deck.splice(index, 1);
+    (next as any)[deckKey] = deck;
+    return { state: next, removed: true };
+  }
+
+  return { state: next, removed: false };
+}
+
 export interface EngineOptions {
   config?: Partial<EngineConfig>;
   cardLookup: Record<string, CardDefinition>;
@@ -991,59 +1072,19 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "CARD_BANISHED": {
         const { cardId, from, sourceSeat } = event;
+        const normalizedFrom = normalizeTransferZone(from === "spellTrapZone" ? "spell_trap_zone" : from);
+        if (!normalizedFrom) break;
 
-        const removeToBanished = (seat: Seat) => {
-          const isHost = seat === "host";
-          const boardKey = isHost ? "hostBoard" : "awayBoard";
-          const handKey = isHost ? "hostHand" : "awayHand";
-          const graveyardKey = isHost ? "hostGraveyard" : "awayGraveyard";
-          const spellTrapKey = isHost ? "hostSpellTrapZone" : "awaySpellTrapZone";
-          const fieldKey = isHost ? "hostFieldSpell" : "awayFieldSpell";
-          const banishedKey = isHost ? "hostBanished" : "awayBanished";
-          const normalizedFrom = from === "spellTrapZone" ? "spell_trap_zone" : from;
+        const removeToBanished = (seat: Seat): boolean => {
+          const seatState = removeCardFromZoneForSeat(newState, cardId, normalizedFrom, seat);
+          if (!seatState.removed) return false;
+          newState = seatState.state;
 
-          let removed = false;
-          if (normalizedFrom === "board") {
-            const board = [...(newState as any)[boardKey]];
-            const index = board.findIndex((c: any) => c.cardId === cardId);
-            if (index > -1) {
-              board.splice(index, 1);
-              (newState as any)[boardKey] = board;
-              removed = true;
-            }
-          } else if (normalizedFrom === "hand") {
-            const hand = [...(newState as any)[handKey]];
-            const index = hand.indexOf(cardId);
-            if (index > -1) {
-              hand.splice(index, 1);
-              (newState as any)[handKey] = hand;
-              removed = true;
-            }
-          } else if (normalizedFrom === "graveyard") {
-            const graveyard = [...(newState as any)[graveyardKey]];
-            const index = graveyard.indexOf(cardId);
-            if (index > -1) {
-              graveyard.splice(index, 1);
-              (newState as any)[graveyardKey] = graveyard;
-              removed = true;
-            }
-          } else if (normalizedFrom === "spell_trap_zone") {
-            const spellTrapZone = [...(newState as any)[spellTrapKey]];
-            const index = spellTrapZone.findIndex((c: any) => c.cardId === cardId);
-            if (index > -1) {
-              spellTrapZone.splice(index, 1);
-              (newState as any)[spellTrapKey] = spellTrapZone;
-              removed = true;
-            }
-          } else if (normalizedFrom === "field") {
-            if ((newState as any)[fieldKey]?.cardId === cardId) {
-              (newState as any)[fieldKey] = null;
-              removed = true;
-            }
+          if (seat === "host") {
+            newState.hostBanished = [...newState.hostBanished, cardId];
+          } else {
+            newState.awayBanished = [...newState.awayBanished, cardId];
           }
-
-          if (!removed) return false;
-          (newState as any)[banishedKey] = [...(newState as any)[banishedKey], cardId];
           return true;
         };
 
@@ -1057,50 +1098,19 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "CARD_RETURNED_TO_HAND": {
         const { cardId, from, sourceSeat } = event;
+        const normalizedFrom = normalizeTransferZone(from === "spellTrapZone" ? "spell_trap_zone" : from);
+        if (!normalizedFrom) break;
 
-        const removeToHand = (seat: Seat) => {
-          const isHost = seat === "host";
-          const boardKey = isHost ? "hostBoard" : "awayBoard";
-          const handKey = isHost ? "hostHand" : "awayHand";
-          const graveyardKey = isHost ? "hostGraveyard" : "awayGraveyard";
-          const spellTrapKey = isHost ? "hostSpellTrapZone" : "awaySpellTrapZone";
-          const fieldKey = isHost ? "hostFieldSpell" : "awayFieldSpell";
-          const normalizedFrom = from === "spellTrapZone" ? "spell_trap_zone" : from;
+        const removeToHand = (seat: Seat): boolean => {
+          const seatState = removeCardFromZoneForSeat(newState, cardId, normalizedFrom, seat);
+          if (!seatState.removed) return false;
+          newState = seatState.state;
 
-          let removed = false;
-          if (normalizedFrom === "board") {
-            const board = [...(newState as any)[boardKey]];
-            const index = board.findIndex((c: any) => c.cardId === cardId);
-            if (index > -1) {
-              board.splice(index, 1);
-              (newState as any)[boardKey] = board;
-              removed = true;
-            }
-          } else if (normalizedFrom === "graveyard") {
-            const graveyard = [...(newState as any)[graveyardKey]];
-            const index = graveyard.indexOf(cardId);
-            if (index > -1) {
-              graveyard.splice(index, 1);
-              (newState as any)[graveyardKey] = graveyard;
-              removed = true;
-            }
-          } else if (normalizedFrom === "spell_trap_zone") {
-            const spellTrapZone = [...(newState as any)[spellTrapKey]];
-            const index = spellTrapZone.findIndex((c: any) => c.cardId === cardId);
-            if (index > -1) {
-              spellTrapZone.splice(index, 1);
-              (newState as any)[spellTrapKey] = spellTrapZone;
-              removed = true;
-            }
-          } else if (normalizedFrom === "field") {
-            if ((newState as any)[fieldKey]?.cardId === cardId) {
-              (newState as any)[fieldKey] = null;
-              removed = true;
-            }
+          if (seat === "host") {
+            newState.hostHand = [...newState.hostHand, cardId];
+          } else {
+            newState.awayHand = [...newState.awayHand, cardId];
           }
-
-          if (!removed) return false;
-          (newState as any)[handKey] = [...(newState as any)[handKey], cardId];
           return true;
         };
 

@@ -130,6 +130,39 @@ export function assertInitialStateIntegrity(
   if (state.awayId !== match.awayId) {
     throw new Error("initialState awayId does not match match.awayId");
   }
+  if (!state.config || typeof state.config !== "object") {
+    throw new Error("initialState.config is required");
+  }
+  if (state.currentTurnPlayer !== "host" && state.currentTurnPlayer !== "away") {
+    throw new Error("initialState.currentTurnPlayer must be 'host' or 'away'");
+  }
+  if (state.turnNumber !== 1) {
+    throw new Error("initialState.turnNumber must be 1");
+  }
+  if (state.currentPhase !== "draw") {
+    throw new Error("initialState.currentPhase must start at draw");
+  }
+  if (state.hostNormalSummonedThisTurn || state.awayNormalSummonedThisTurn) {
+    throw new Error("initialState normal summon flags must be false");
+  }
+  if (state.currentChain.length > 0 || state.currentPriorityPlayer !== null) {
+    throw new Error("initialState must start with no active chain");
+  }
+  if (state.currentChainPasser !== null || state.pendingAction !== null) {
+    throw new Error("initialState must start without pending actions");
+  }
+  if (state.temporaryModifiers.length > 0 || state.lingeringEffects.length > 0) {
+    throw new Error("initialState must start without modifiers or lingering effects");
+  }
+  if (state.optUsedThisTurn.length > 0 || state.hoptUsedEffects.length > 0) {
+    throw new Error("initialState must start with empty effect restrictions");
+  }
+  if (state.winner !== null || state.winReason !== null || state.gameOver) {
+    throw new Error("initialState must start in an active non-terminal state");
+  }
+  if (!state.gameStarted) {
+    throw new Error("initialState.gameStarted must be true");
+  }
 
   if (
     state.hostBoard.length > 0 ||
@@ -139,7 +172,9 @@ export function assertInitialStateIntegrity(
     state.hostGraveyard.length > 0 ||
     state.awayGraveyard.length > 0 ||
     state.hostBanished.length > 0 ||
-    state.awayBanished.length > 0
+    state.awayBanished.length > 0 ||
+    state.hostFieldSpell !== null ||
+    state.awayFieldSpell !== null
   ) {
     throw new Error("initialState must start with empty board and discard zones");
   }
@@ -411,6 +446,13 @@ export const submitAction = mutation({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Engine decide()/evolve() failed: ${message}`);
+    }
+
+    if (events.length === 0) {
+      return {
+        events: JSON.stringify([]),
+        version: latestSnapshot.version,
+      };
     }
 
     // -----------------------------------------------------------------------

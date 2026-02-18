@@ -39,48 +39,63 @@ export function deriveValidActions(params: {
   if (!isChainWindow && !isMyTurn) return va;
 
   const isMainPhase = view.currentPhase === "main" || view.currentPhase === "main2";
+  const maxBoardSlots = view.maxBoardSlots ?? MAX_BOARD_SLOTS;
+  const maxSpellTrapSlots = view.maxSpellTrapSlots ?? MAX_SPELL_TRAP_SLOTS;
+  const normalSummonedThisTurn = view.normalSummonedThisTurn ?? false;
   const board = view.board ?? [];
   const hand = view.hand ?? [];
   const stZone = view.spellTrapZone ?? [];
   const opponentBoard = view.opponentBoard ?? [];
+  const hasBoardSpace = board.length < maxBoardSlots;
+  const hasTributeCandidates = board.some((card) => !card.faceDown);
 
   if (isMainPhase) {
-    if (board.length < MAX_BOARD_SLOTS) {
+    if (!normalSummonedThisTurn) {
       for (const cardId of hand) {
         const card = cardLookup[cardId];
         if (!card) continue;
         if (card.cardType === "stereotype" || card.type === "stereotype") {
           const level = card.level ?? 0;
           const needsTribute = level >= TRIBUTE_LEVEL;
-          va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute });
-          va.canSetMonster.add(cardId);
+
+          if (needsTribute) {
+            if (hasTributeCandidates) {
+              va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute: true });
+            }
+          } else if (hasBoardSpace) {
+            va.canSummon.set(cardId, { positions: ["attack", "defense"], needsTribute: false });
+          }
+
+          if (hasBoardSpace) {
+            va.canSetMonster.add(cardId);
+          }
         }
       }
-    }
 
-    if (stZone.length < MAX_SPELL_TRAP_SLOTS) {
-      for (const cardId of hand) {
-        const card = cardLookup[cardId];
+      if (stZone.length < maxSpellTrapSlots) {
+        for (const cardId of hand) {
+          const card = cardLookup[cardId];
+          if (!card) continue;
+          if (card.cardType === "spell" || card.type === "spell") {
+            va.canSetSpellTrap.add(cardId);
+            va.canActivateSpell.add(cardId);
+          }
+          if (card.cardType === "trap" || card.type === "trap") {
+            va.canSetSpellTrap.add(cardId);
+          }
+        }
+      }
+
+      for (const stCard of stZone) {
+        if (!stCard.faceDown) continue;
+        const card = cardLookup[stCard.definitionId];
         if (!card) continue;
-        if (card.cardType === "spell" || card.type === "spell") {
-          va.canSetSpellTrap.add(cardId);
-          va.canActivateSpell.add(cardId);
+        if (card.type === "spell" || card.cardType === "spell") {
+          va.canActivateSpell.add(stCard.cardId);
         }
-        if (card.cardType === "trap" || card.type === "trap") {
-          va.canSetSpellTrap.add(cardId);
+        if (card.type === "trap" || card.cardType === "trap") {
+          va.canActivateTrap.add(stCard.cardId);
         }
-      }
-    }
-
-    for (const stCard of stZone) {
-      if (!stCard.faceDown) continue;
-      const card = cardLookup[stCard.definitionId];
-      if (!card) continue;
-      if (card.type === "spell" || card.cardType === "spell") {
-        va.canActivateSpell.add(stCard.cardId);
-      }
-      if (card.type === "trap" || card.cardType === "trap") {
-        va.canActivateTrap.add(stCard.cardId);
       }
     }
 
