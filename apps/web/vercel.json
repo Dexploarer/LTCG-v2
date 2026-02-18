@@ -50,7 +50,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://discord.com https://*.discord.com https://discordapp.com https://*.discordapp.com https://discordsays.com https://*.discordsays.com https://milaidy.app https://app.milaidy.xyz"
+          "value": "frame-ancestors 'self' https://discord.com https://*.discord.com https://discordapp.com https://*.discordapp.com https://discordapp.net https://*.discordapp.net https://discordsays.com https://*.discordsays.com https://discord-activities.com https://*.discord-activities.com https://discordactivities.com https://*.discordactivities.com https://discord.app https://*.discord.app https://milaidy.app https://app.milaidy.xyz"
         },
         {
           "key": "Referrer-Policy",
