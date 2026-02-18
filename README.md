@@ -41,6 +41,36 @@ bun run dev
 # Or run individually:
 bun run dev:convex  # Backend only
 bun run dev:web     # Frontend only (port 3334)
+bun run dev:rpg     # RPG frontend (port 3340)
+```
+
+## Telegram Cross-Play Setup
+
+Set these environment variables before enabling Telegram inline + Mini App gameplay:
+
+```bash
+# Convex runtime
+TELEGRAM_BOT_TOKEN=123456:your_bot_token
+TELEGRAM_WEBHOOK_SECRET=your_random_secret
+TELEGRAM_BOT_USERNAME=YourBot
+
+# Web runtime
+VITE_TELEGRAM_BOT_USERNAME=YourBot
+```
+
+BotFather checklist:
+- Enable inline mode: `/setinline`
+- Set Mini App URL: `/mybots` -> Bot Settings -> Menu Button URL
+
+Webhook setup:
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":"https://<your-convex-site>/api/telegram/webhook",
+    "secret_token":"'"${TELEGRAM_WEBHOOK_SECRET}"'"
+  }'
 ```
 
 ## Project Structure
@@ -48,8 +78,14 @@ bun run dev:web     # Frontend only (port 3334)
 ```
 LTCG-v2/
 ├── convex/                    # Convex backend (host layer)
+├── apps/rpg-web/              # RPG creator + library + session UI
 ├── packages/
 │   ├── engine/                # Pure TS game engine
+│   ├── rpg-engine/            # Deterministic RPG engine + dice runtime
+│   ├── rpg-worlds/            # RPG world manifests + flagship world bundles
+│   ├── rpg-render/            # 2D renderer + optional 3D adapter contracts
+│   ├── rpg-agents/            # Agent seat policies and safety helpers
+│   ├── plugin-rpg/            # ElizaOS RPG plugin
 │   ├── plugin-ltcg/           # ElizaOS plugin
 │   ├── lunchtable-tcg-cards/  # Card inventory + decks
 │   ├── lunchtable-tcg-match/  # Event-sourced matches

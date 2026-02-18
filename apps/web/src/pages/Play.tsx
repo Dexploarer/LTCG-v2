@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import * as Sentry from "@sentry/react";
 import { apiAny, useConvexQuery, useConvexMutation } from "@/lib/convexHelpers";
 import {
@@ -12,39 +12,21 @@ import {
 } from "@/components/story";
 import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
-import { formatPlatformTag, detectClientPlatform, describeClientPlatform } from "@/lib/clientPlatform";
+import { detectClientPlatform, describeClientPlatform } from "@/lib/clientPlatform";
 import { normalizeMatchId } from "@/lib/matchIds";
-import { useMatchPresence } from "@/hooks/useMatchPresence";
-import {
-  setDiscordActivityMatchContext,
-  shareDiscordMatchInvite,
-  useDiscordActivity,
-} from "@/hooks/useDiscordActivity";
+import { setDiscordActivityMatchContext, useDiscordActivity } from "@/hooks/useDiscordActivity";
 
 type MatchMeta = {
   status: "waiting" | "active" | "ended";
   hostId: string;
   awayId: string | null;
-  mode: "pvp" | "story";
+  mode: string;
   isAIOpponent?: boolean;
   winner?: string;
 };
 
 type CurrentUser = {
   _id: string;
-};
-
-type MatchPlatformTags = {
-  host: {
-    userId: string;
-    username: string;
-    platform: string;
-  };
-  away: {
-    userId: string;
-    username: string;
-    platform: string;
-  } | null;
 };
 
 type StoryCompletion = {
@@ -95,12 +77,15 @@ type ParsedEvent = {
 };
 
 export function Play() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { matchId } = useParams<{ matchId: string }>();
   const activeMatchId = normalizeMatchId(matchId);
+  const autojoin = searchParams.get("autojoin") === "1";
   const joinPvPMatch = useConvexMutation(apiAny.game.joinPvPMatch);
-  const [joiningLobby, setJoiningLobby] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
-  const attemptedAutoJoinRef = useRef<string | null>(null);
+  const autojoinAttemptedRef = useRef(false);
 
   const meta = useConvexQuery(
     apiAny.game.getMatchMeta,
@@ -118,14 +103,7 @@ export function Play() {
     apiAny.auth.currentUser,
     {},
   ) as CurrentUser | null | undefined;
-
-  const platformTags = useConvexQuery(
-    apiAny.game.getMatchPlatformTags,
-    activeMatchId ? { matchId: activeMatchId } : "skip",
-  ) as MatchPlatformTags | null | undefined;
-  const { isDiscordActivity, sdkReady, sdkError } = useDiscordActivity();
-
-  useMatchPresence(activeMatchId);
+  const { isDiscordActivity, sdkReady } = useDiscordActivity();
 
   useEffect(() => {
     if (!activeMatchId || !meta || !isDiscordActivity || !sdkReady) return;
@@ -140,36 +118,49 @@ export function Play() {
       currentPlayers: meta.awayId ? 2 : 1,
       maxPlayers: 2,
       state: isActive ? "Live Duel" : "Waiting for opponent",
-    });
+      });
   }, [activeMatchId, meta, isDiscordActivity, sdkReady]);
 
-  useEffect(() => {
-    if (!activeMatchId || !meta || !currentUser) return;
-    if (meta.mode !== "pvp" || meta.status !== "waiting") return;
-    if (meta.awayId !== null) return;
-    if (meta.hostId === currentUser._id) return;
-    if (joiningLobby) return;
-    if (attemptedAutoJoinRef.current === activeMatchId) return;
-
-    attemptedAutoJoinRef.current = activeMatchId;
-    setJoiningLobby(true);
-    setJoinError("");
-
-    void joinPvPMatch({
-      matchId: activeMatchId,
-      platform: detectClientPlatform(),
-      source: describeClientPlatform(),
-    })
-      .catch((err: any) => {
-        Sentry.captureException(err);
-        setJoinError(err?.message ?? "Failed to join this lobby.");
-      })
-      .finally(() => {
-        setJoiningLobby(false);
-      });
-  }, [activeMatchId, meta, currentUser, joiningLobby, joinPvPMatch]);
-
   const playerSeat = resolvePlayerSeat(currentUser ?? null, meta, isStory);
+
+  const canJoinMatch =
+    Boolean(activeMatchId) &&
+    Boolean(currentUser) &&
+    Boolean(meta) &&
+    !playerSeat &&
+    meta?.mode === "pvp" &&
+    meta?.status === "waiting" &&
+    meta?.awayId === null &&
+    meta?.hostId !== currentUser?._id;
+
+  const joinCurrentMatch = useCallback(async () => {
+    if (!activeMatchId || !canJoinMatch || joining) return;
+    setJoining(true);
+    setJoinError("");
+    try {
+      await joinPvPMatch({
+        matchId: activeMatchId,
+        platform: detectClientPlatform(),
+        source: describeClientPlatform(),
+      });
+      navigate(`/play/${activeMatchId}`);
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setJoinError(err?.message ?? "Failed to join match.");
+    } finally {
+      setJoining(false);
+    }
+  }, [activeMatchId, canJoinMatch, joining, joinPvPMatch, navigate]);
+
+  useEffect(() => {
+    autojoinAttemptedRef.current = false;
+  }, [activeMatchId]);
+
+  useEffect(() => {
+    if (!autojoin || autojoinAttemptedRef.current || !canJoinMatch) return;
+    autojoinAttemptedRef.current = true;
+    void joinCurrentMatch();
+  }, [autojoin, canJoinMatch, joinCurrentMatch]);
 
   // Loading
   if (!activeMatchId) return <CenterMessage>Invalid match ID.</CenterMessage>;
@@ -177,31 +168,25 @@ export function Play() {
   if (meta === null) return <CenterMessage>Match not found.</CenterMessage>;
   if (currentUser === undefined) return <Loading />;
   if (currentUser === null) return <CenterMessage>Unable to load player.</CenterMessage>;
-  if (joiningLobby) return <CenterMessage>Joining lobby...</CenterMessage>;
-  if (joinError) return <CenterMessage>{joinError}</CenterMessage>;
-
-  if (meta.status === "waiting" && meta.mode === "pvp") {
+  if (!playerSeat && canJoinMatch) {
     return (
-      <PvPWaitingLobby
+      <JoinMatchGate
         matchId={activeMatchId}
-        currentUserId={currentUser._id}
-        meta={meta}
-        platformTags={platformTags ?? null}
-        discordEnabled={isDiscordActivity}
-        discordReady={sdkReady}
-        discordSdkError={sdkError}
+        joining={joining}
+        error={joinError}
+        onJoin={joinCurrentMatch}
       />
     );
   }
-
-  if (meta.status === "waiting") {
-    return <CenterMessage>Waiting for opponent...</CenterMessage>;
-  }
-
   if (!playerSeat) return <CenterMessage>You are not a player in this match.</CenterMessage>;
 
   if (!isStory) {
-    return <GameBoard matchId={activeMatchId} seat={playerSeat} />;
+    return (
+      <GameBoard
+        matchId={activeMatchId}
+        seat={playerSeat}
+      />
+    );
   }
 
   return (
@@ -631,127 +616,46 @@ function resolvePlayerSeat(
   return null;
 }
 
-function PvPWaitingLobby({
+function JoinMatchGate({
   matchId,
-  currentUserId,
-  meta,
-  platformTags,
-  discordEnabled,
-  discordReady,
-  discordSdkError,
+  joining,
+  error,
+  onJoin,
 }: {
   matchId: string;
-  currentUserId: string;
-  meta: MatchMeta;
-  platformTags: MatchPlatformTags | null;
-  discordEnabled: boolean;
-  discordReady: boolean;
-  discordSdkError: string | null;
+  joining: boolean;
+  error: string;
+  onJoin: () => Promise<void>;
 }) {
-  const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteStatus, setInviteStatus] = useState("");
-  const isHost = meta.hostId === currentUserId;
-
-  const hostTag = formatPlatformTag(platformTags?.host.platform);
-  const awayTag = formatPlatformTag(platformTags?.away?.platform);
-
-  const copyMatchId = async () => {
-    await navigator.clipboard.writeText(matchId);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  };
-
-  const shareInvite = async () => {
-    setInviteBusy(true);
-    setInviteStatus("");
-    try {
-      const result = await shareDiscordMatchInvite(matchId);
-      if (!result) {
-        throw new Error("Unable to open Discord invite dialog.");
-      }
-      if (!result.success) {
-        setInviteStatus("Invite share canceled.");
-        return;
-      }
-      if (result.didSendMessage) {
-        setInviteStatus("Invite sent in Discord.");
-      } else if (result.didCopyLink) {
-        setInviteStatus("Invite link copied.");
-      } else {
-        setInviteStatus("Invite shared.");
-      }
-    } catch (err: any) {
-      Sentry.captureException(err);
-      setInviteStatus(err?.message ?? "Failed to share invite.");
-    } finally {
-      setInviteBusy(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#fdfdfb] flex items-center justify-center px-4">
-      <div className="paper-panel w-full max-w-lg p-6 border-2 border-[#121212]">
-        <p className="text-xs uppercase tracking-wider font-bold text-[#666]">PvP Lobby</p>
-        <h1
-          className="text-3xl font-black uppercase tracking-tighter text-[#121212]"
+    <div className="min-h-screen flex items-center justify-center bg-[#fdfdfb] px-4">
+      <div className="paper-panel w-full max-w-md p-6">
+        <h2
+          className="text-2xl font-black uppercase tracking-tight text-[#121212]"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
-          {isHost ? "Waiting For Opponent" : "Joining Match"}
-        </h1>
-
-        <div className="mt-4 border-2 border-[#121212] bg-white px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wider font-bold text-[#666]">Match ID</p>
-          <p className="font-mono text-xs break-all text-[#121212] mt-1">{matchId}</p>
-        </div>
-
-        <div className="mt-4 space-y-1 text-xs text-[#121212]">
-          <p>
-            Host: {platformTags?.host.username ?? "Host"}
-            {hostTag ? ` (${hostTag})` : ""}
+          Join Match
+        </h2>
+        <p
+          className="mt-2 text-xs text-[#121212]/70"
+          style={{ fontFamily: "Special Elite, cursive" }}
+        >
+          Waiting PvP lobby detected: <code>{matchId}</code>
+        </p>
+        <button
+          type="button"
+          className="tcg-button-primary mt-4 w-full py-2 disabled:opacity-50"
+          disabled={joining}
+          onClick={() => {
+            void onJoin();
+          }}
+        >
+          {joining ? "Joining..." : "Join Match"}
+        </button>
+        {error ? (
+          <p className="mt-3 text-xs font-bold text-[#b91c1c]" style={{ fontFamily: "Outfit, sans-serif" }}>
+            {error}
           </p>
-          <p>
-            Away: {platformTags?.away?.username ?? "Pending"}
-            {awayTag ? ` (${awayTag})` : ""}
-          </p>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {isHost && (
-            <button
-              type="button"
-              onClick={copyMatchId}
-              className="tcg-button px-3 py-2 text-xs"
-            >
-              {copied ? "Copied" : "Copy Match ID"}
-            </button>
-          )}
-          {isHost && discordEnabled && (
-            <button
-              type="button"
-              onClick={() => {
-                void shareInvite();
-              }}
-              disabled={!discordReady || inviteBusy}
-              className="tcg-button px-3 py-2 text-xs disabled:opacity-60"
-            >
-              {inviteBusy ? "Opening..." : discordReady ? "Invite In Discord" : "Discord SDK Loading..."}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => navigate("/duel")}
-            className="tcg-button-primary px-3 py-2 text-xs"
-          >
-            Back To Duel Lobby
-          </button>
-        </div>
-        {inviteStatus ? (
-          <p className="mt-2 text-[11px] text-[#666]">{inviteStatus}</p>
-        ) : null}
-        {discordSdkError ? (
-          <p className="mt-2 text-[11px] text-red-700">{discordSdkError}</p>
         ) : null}
       </div>
     </div>

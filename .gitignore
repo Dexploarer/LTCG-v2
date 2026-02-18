@@ -43,6 +43,9 @@ coverage/
 .nyc_output/
 test-results/
 
+# Artifacts
+artifacts/
+
 # Convex
 .convex/
 .vercel

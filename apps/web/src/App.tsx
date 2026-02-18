@@ -3,9 +3,10 @@ import { lazy, Suspense, useEffect } from "react";
 import * as Sentry from "@sentry/react";
 import { Toaster } from "sonner";
 import { useIframeMode } from "@/hooks/useIframeMode";
-import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
-import { useDiscordAuth } from "@/hooks/auth/useDiscordAuth";
 import { useDiscordActivity } from "@/hooks/useDiscordActivity";
+import { useDiscordAuth } from "@/hooks/auth/useDiscordAuth";
+import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
+import { useTelegramStartParamRouting } from "@/hooks/auth/useTelegramStartParam";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
 import { AudioContextGate, AudioControlsDock, useAudio } from "@/components/audio/AudioProvider";
@@ -81,6 +82,11 @@ function RouteAudioContextSync() {
   return null;
 }
 
+function TelegramMiniAppBootstrap() {
+  useTelegramStartParamRouting();
+  return null;
+}
+
 function Guarded({ children }: { children: React.ReactNode }) {
   return (
     <Sentry.ErrorBoundary fallback={PageErrorFallback}>
@@ -129,6 +135,7 @@ export function App() {
 
   return (
     <BrowserRouter>
+      <TelegramMiniAppBootstrap />
       <RouteAudioContextSync />
       <SentryRoutes>
         <Route path="/" element={<Public><HomeEntry /></Public>} />

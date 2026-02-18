@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIframeMode } from "@/hooks/useIframeMode";
+import { useDiscordActivity } from "@/hooks/useDiscordActivity";
 import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { TrayNav } from "@/components/layout/TrayNav";
-import { isDiscordActivityFrame } from "@/lib/clientPlatform";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
   STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG,
@@ -77,20 +78,22 @@ function Panel({
 
 export function Home() {
   const { isEmbedded } = useIframeMode();
+  const { sdkReady, isDiscordActivity } = useDiscordActivity();
   const navigate = useNavigate();
-  const { ready, authenticated, login } = usePrivy();
+  const { authenticated, login } = PRIVY_ENABLED
+    ? usePrivy()
+    : { authenticated: false, login: () => {} };
   const discordLoginTriggeredRef = useRef(false);
-  const isDiscordActivity = isDiscordActivityFrame();
 
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
 
   useEffect(() => {
-    if (!ready || !isDiscordActivity || authenticated) return;
+    if (!sdkReady || !isDiscordActivity || authenticated) return;
     if (discordLoginTriggeredRef.current) return;
     discordLoginTriggeredRef.current = true;
     login({ loginMethods: ["discord"] });
-  }, [ready, isDiscordActivity, authenticated, login]);
+  }, [sdkReady, isDiscordActivity, authenticated, login]);
 
   const goTo = useCallback(
     (path: string, requiresAuth: boolean) => {
@@ -137,7 +140,7 @@ export function Home() {
       </header>
 
       {/* Comic panels grid */}
-      <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 p-4 md:p-8 max-w-4xl w-full mx-auto">
+      <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4 md:p-8 max-w-6xl w-full mx-auto">
         <Panel
           title="Story Mode"
           subtitle="Fight your way through the halls"
@@ -166,8 +169,17 @@ export function Home() {
         </Panel>
 
         <Panel
-          title="Duel Lobby"
-          subtitle="Play Web vs Telegram vs Discord"
+          title="PvP Duel"
+          subtitle="Invite friends on web and Telegram"
+          bgImage={WATCH_BG}
+          onClick={() => goTo("/duel", true)}
+        >
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
+        </Panel>
+
+        <Panel
+          title="Watch Live"
+          subtitle="Agents streaming on retake.tv"
           bgImage={WATCH_BG}
           onClick={() => goTo("/duel", true)}
         >

@@ -4,7 +4,6 @@ import type {
   CardDefinition,
   GameCardInstance,
   GameSpellTrapInstance,
-  MatchPlatformTags,
   MatchMeta,
   OpenPrompt,
   ParsedOpenPrompt,
@@ -60,10 +59,6 @@ export function useGameState(matchId: string | undefined, seat: Seat) {
     apiAny.game.getLatestSnapshotVersion,
     matchId ? { matchId } : "skip",
   ) as number | null | undefined;
-  const platformTags = useConvexQuery(
-    apiAny.game.getMatchPlatformTags,
-    matchId ? { matchId } : "skip",
-  ) as MatchPlatformTags | null | undefined;
 
   const validActions = useMemo(() => {
     return deriveValidActions({
@@ -93,7 +88,6 @@ export function useGameState(matchId: string | undefined, seat: Seat) {
       (isWaitingForInitialSnapshot && meta?.status !== "ended"),
     notFound: meta === null,
     latestSnapshotVersion,
-    platformTags,
   };
 }
 
@@ -151,6 +145,9 @@ function parsePlayerView(value: string | null | undefined): PlayerView | null {
     opponentBreakdownsCaused: toFiniteNumber(parsed.opponentBreakdownsCaused) ?? 0,
     currentTurnPlayer,
     currentPriorityPlayer: asSeat(parsed.currentPriorityPlayer),
+    normalSummonedThisTurn: parsed.normalSummonedThisTurn === true,
+    maxBoardSlots: toFiniteNumber(parsed.maxBoardSlots) ?? 3,
+    maxSpellTrapSlots: toFiniteNumber(parsed.maxSpellTrapSlots) ?? 3,
     turnNumber: toFiniteNumber(parsed.turnNumber) ?? 1,
     currentPhase: phase,
     currentChain: normalizeChainLinks(parsed.currentChain),

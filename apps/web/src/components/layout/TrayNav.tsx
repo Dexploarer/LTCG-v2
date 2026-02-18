@@ -3,11 +3,12 @@ import { useNavigate } from "react-router";
 import { usePrivy, useLogout } from "@privy-io/react-auth";
 import { storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { LOGO, DECO_PILLS, DECO_SHIELD, MENU_TEXTURE } from "@/lib/blobUrls";
+import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 
 const textLinks: Array<
   { label: string; path: string; auth: boolean } | { label: string; href: string }
 > = [
-  { label: "Duel", path: "/duel", auth: true },
+  { label: "PvP Duel", path: "/duel", auth: true },
   { label: "Cliques", path: "/cliques", auth: true },
   { label: "Agent Dev", path: "/agent-dev", auth: true },
   { label: "Leaderboard", path: "/leaderboard", auth: false },
@@ -27,13 +28,17 @@ const textLinks: Array<
  */
 export function TrayNav({ invert = true }: { invert?: boolean }) {
   const navigate = useNavigate();
-  const { authenticated, login } = usePrivy();
-  const { logout } = useLogout({
-    onSuccess: () => {
-      sessionStorage.removeItem("ltcg_redirect");
-      navigate("/");
-    },
-  });
+  const { authenticated, login } = PRIVY_ENABLED
+    ? usePrivy()
+    : { authenticated: false, login: () => {} };
+  const { logout } = PRIVY_ENABLED
+    ? useLogout({
+        onSuccess: () => {
+          sessionStorage.removeItem("ltcg_redirect");
+          navigate("/");
+        },
+      })
+    : { logout: async () => {} };
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
