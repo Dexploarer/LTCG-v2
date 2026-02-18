@@ -53,7 +53,9 @@ export function useUserSync() {
     authenticated &&
     convexReady &&
     (syncInFlight || onboardingStatus?.exists === false);
-  const isLoading = waitingForOnboardingStatus || waitingForUserBootstrap;
+  const waitingForConvexAuth = authenticated && !convexReady;
+  const isLoading =
+    waitingForConvexAuth || waitingForOnboardingStatus || waitingForUserBootstrap;
 
   const needsOnboarding =
     onboardingStatus?.exists === true &&
