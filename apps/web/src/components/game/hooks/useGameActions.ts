@@ -3,7 +3,6 @@ import * as Sentry from "@sentry/react";
 import { apiAny, useConvexMutation } from "@/lib/convexHelpers";
 import { useAudio } from "@/components/audio/AudioProvider";
 import { type Seat } from "./useGameState";
-import { isTelegramMiniApp } from "@/hooks/auth/useTelegramAuth";
 
 function sfxForCommand(command: Record<string, unknown>): string | null {
   const type = typeof command.type === "string" ? command.type : "";
@@ -15,6 +14,7 @@ function sfxForCommand(command: Record<string, unknown>): string | null {
     case "SET_SPELL_TRAP":
     case "ACTIVATE_SPELL":
     case "ACTIVATE_TRAP":
+    case "ACTIVATE_EFFECT":
       return "spell";
     case "DECLARE_ATTACK":
       return "attack";
@@ -28,16 +28,41 @@ function sfxForCommand(command: Record<string, unknown>): string | null {
   }
 }
 
+/** Diagnose why an action was silently rejected by the engine. */
+function diagnoseRejection(command: Record<string, unknown>): string {
+  const type = typeof command.type === "string" ? command.type : "";
+  switch (type) {
+    case "SUMMON":
+    case "SET_MONSTER":
+      return "Can't summon — board may be full, or you already normal-summoned this turn.";
+    case "SET_SPELL_TRAP":
+      return "Can't set — spell/trap zone may be full.";
+    case "ACTIVATE_SPELL":
+      return "Spell can't activate — wrong phase or spell/trap zone is full.";
+    case "ACTIVATE_TRAP":
+      return "Trap can't activate — it must be set face-down first.";
+    case "ACTIVATE_EFFECT":
+      return "Effect can't activate — must be main phase with the monster face-up on your field.";
+    case "FLIP_SUMMON":
+      return "Can't flip summon — card must be set for at least one turn.";
+    case "DECLARE_ATTACK":
+      return "Can't attack — must be combat phase, and monster must be face-up in attack position.";
+    case "CHANGE_POSITION":
+      return "Can't change position — already changed this turn, or summoned this turn.";
+    default:
+      return "Action not allowed right now.";
+  }
+}
+
 export function useGameActions(
   matchId: string | undefined,
   seat: Seat,
   expectedVersion?: number | null,
 ) {
-  const submitAction = useConvexMutation(apiAny.game.submitActionWithClient);
+  const submitAction = useConvexMutation(apiAny.game.submitAction);
   const { playSfx } = useAudio();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const client = isTelegramMiniApp() ? "telegram_miniapp" : "web";
 
   const send = useCallback(
     async (command: Record<string, unknown>) => {
@@ -45,13 +70,18 @@ export function useGameActions(
       setSubmitting(true);
       setError("");
       try {
-        await submitAction({
+        const result: any = await submitAction({
           matchId,
           command: JSON.stringify(command),
           seat,
           expectedVersion: typeof expectedVersion === "number" ? expectedVersion : undefined,
-          client,
         });
+        // Engine returns empty events when the action is silently rejected
+        if (result?.events === "[]") {
+          setError(diagnoseRejection(command));
+          playSfx("error");
+          return;
+        }
         const sfx = sfxForCommand(command);
         if (sfx) playSfx(sfx);
       } catch (err: any) {
@@ -68,7 +98,7 @@ export function useGameActions(
         setSubmitting(false);
       }
     },
-    [matchId, seat, expectedVersion, submitAction, submitting, playSfx, client],
+    [matchId, seat, expectedVersion, submitAction, submitting, playSfx],
   );
 
   return {
@@ -87,6 +117,8 @@ export function useGameActions(
       send({ type: "ACTIVATE_SPELL", cardId, targets }),
     activateTrap: (cardId: string, targets?: string[]) =>
       send({ type: "ACTIVATE_TRAP", cardId, targets }),
+    activateEffect: (cardId: string, effectIndex: number, targets?: string[]) =>
+      send({ type: "ACTIVATE_EFFECT", cardId, effectIndex, targets }),
     declareAttack: (attackerId: string, targetId?: string) =>
       send({ type: "DECLARE_ATTACK", attackerId, targetId }),
     chainResponse: (cardId?: string, pass = true) =>

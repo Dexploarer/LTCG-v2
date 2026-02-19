@@ -140,6 +140,19 @@ export class LTCGMatch {
     });
   }
 
+  async getRecentEventsPaginated(
+    ctx: RunQueryCtx,
+    args: {
+      matchId: string;
+      paginationOpts: unknown;
+    }
+  ) {
+    return await ctx.runQuery((this.component.queries as any).getRecentEventsPaginated, {
+      matchId: args.matchId as any,
+      paginationOpts: args.paginationOpts as any,
+    });
+  }
+
   async getLatestSnapshotVersion(
     ctx: RunQueryCtx,
     args: { matchId: string }

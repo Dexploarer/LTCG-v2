@@ -47,7 +47,7 @@ function createSignedHeaders({
   body: string;
   privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
 }) {
-  const signature = sign(null, Buffer.from(`${timestamp}${body}`), privateKey);
+  const signature = sign(null, Buffer.from(`${timestamp}${body}`), privateKey as Parameters<typeof sign>[2]);
   return {
     "x-signature-ed25519": signature.toString("hex"),
     "x-signature-timestamp": timestamp,

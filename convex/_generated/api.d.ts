@@ -24,12 +24,15 @@ import type * as guilds from "../guilds.js";
 import type * as http from "../http.js";
 import type * as match from "../match.js";
 import type * as matchAccess from "../matchAccess.js";
+import type * as publicSpectator from "../publicSpectator.js";
 import type * as rpg from "../rpg.js";
 import type * as seed from "../seed.js";
+import type * as signupAvatar from "../signupAvatar.js";
 import type * as story from "../story.js";
 import type * as studio from "../studio.js";
 import type * as telegram from "../telegram.js";
 import type * as telegramInline from "../telegramInline.js";
+import type * as telegramLinks from "../telegramLinks.js";
 
 import type {
   ApiFromModules,
@@ -54,12 +57,15 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   match: typeof match;
   matchAccess: typeof matchAccess;
+  publicSpectator: typeof publicSpectator;
   rpg: typeof rpg;
   seed: typeof seed;
+  signupAvatar: typeof signupAvatar;
   story: typeof story;
   studio: typeof studio;
   telegram: typeof telegram;
   telegramInline: typeof telegramInline;
+  telegramLinks: typeof telegramLinks;
 }>;
 
 /**

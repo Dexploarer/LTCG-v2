@@ -39,10 +39,17 @@ export const STAGES_BG = blob("stagesbg.png");
 export const COLLECTION_BG = blob("collection-bg.png");
 export const DECK_BG = blob("deck-bg.png");
 export const WATCH_BG = blob("watch-bg.png");
+export const TTG_BG = blob("TTG.png");
+export const PVP_BG = blob("pvp.png");
 export const STREAM_BG = blob("stream-bg.png");
 export const PRIVACY_BG = blob("privacy-bg.png");
 export const MENU_TEXTURE = blob("menu-texture.png");
 export const CRUMPLED_PAPER = blob("crumpled-paper.png");
+
+// ── Navigation ────────────────────────────────────────────
+export const NAV_BACK = blob("back.png");
+export const NAV_HOME = blob("home.png");
+export const NAV_LOGIN = blob("login.png");
 
 // ── Decorative ────────────────────────────────────────────
 export const INK_FRAME = blob("ink-frame.png");
@@ -107,6 +114,12 @@ export const OPENCLAWD_PFP = blob("openclawdpfp.png");
 // ── Vices ─────────────────────────────────────────────────
 export const VICE_SPLASH = blob("vices/vice-splash.png");
 export const VICE_COUNTER = blob("vices/vice-counter.png");
+
+// ── Comic Bubbles (local public assets, not in Vercel Blob) ─
+export const BUBBLE_SPEECH = "/lunchtable/2.png";
+export const BUBBLE_BURST = "/lunchtable/3.png";
+export const BUBBLE_CHAT_STACK = "/lunchtable/4.png";
+export const BUBBLE_WAVY = "/lunchtable/5.png";
 
 /** Get a vice image by slug (e.g. "crypto", "gambling") */
 export function viceImage(slug: string): string {

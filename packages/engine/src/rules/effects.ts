@@ -56,9 +56,9 @@ export function canActivateEffect(state: GameState, effectDef: EffectDefinition)
 /**
  * Scan a list of events for matching trigger effects on board cards.
  *
- * Currently handles:
- * - MONSTER_SUMMONED -> check the summoned card for on_summon effects and auto-fire them
- * - SPECIAL_SUMMONED -> also check for on_summon effects
+ * Handles:
+ * - MONSTER_SUMMONED / SPECIAL_SUMMONED -> fires on_summon effects
+ * - FLIP_SUMMONED -> fires both flip and on_summon effects
  *
  * Returns an array of EFFECT_ACTIVATED events (and their resulting action events)
  * that should be processed by evolve().
@@ -67,37 +67,44 @@ export function detectTriggerEffects(state: GameState, events: EngineEvent[]): E
   const triggeredEvents: EngineEvent[] = [];
 
   for (const event of events) {
-    if (event.type === "MONSTER_SUMMONED" || event.type === "SPECIAL_SUMMONED") {
-      const { seat, cardId } = event;
-      const cardDef = state.cardLookup[cardId];
+    const isSummon = event.type === "MONSTER_SUMMONED" || event.type === "SPECIAL_SUMMONED";
+    const isFlip = event.type === "FLIP_SUMMONED";
 
-      if (!cardDef?.effects) continue;
+    if (!isSummon && !isFlip) continue;
 
-      for (let i = 0; i < cardDef.effects.length; i++) {
-        const eff = expectDefined(
-          cardDef.effects[i],
-          `rules.effects.detectTriggerEffects missing effect at index ${i}`
-        );
+    const { seat, cardId } = event;
+    const cardDef = state.cardLookup[cardId];
 
-        // Only fire on_summon triggers
-        if (eff.type !== "on_summon") continue;
+    if (!cardDef?.effects) continue;
 
-        // Check OPT/HOPT constraints
-        if (!canActivateEffect(state, eff)) continue;
+    for (let i = 0; i < cardDef.effects.length; i++) {
+      const eff = expectDefined(
+        cardDef.effects[i],
+        `rules.effects.detectTriggerEffects missing effect at index ${i}`
+      );
 
-        // Emit EFFECT_ACTIVATED event
-        triggeredEvents.push({
-          type: "EFFECT_ACTIVATED",
-          seat,
-          cardId,
-          effectIndex: i,
-          targets: [],
-        });
+      // Match trigger type to event type
+      const matchesTrigger =
+        (isSummon && eff.type === "on_summon") ||
+        (isFlip && (eff.type === "flip" || eff.type === "on_summon"));
 
-        // Resolve the effect's actions
-        const actionEvents = resolveEffectActions(state, seat, eff.actions, cardId, []);
-        triggeredEvents.push(...actionEvents);
-      }
+      if (!matchesTrigger) continue;
+
+      // Check OPT/HOPT constraints
+      if (!canActivateEffect(state, eff)) continue;
+
+      // Emit EFFECT_ACTIVATED event
+      triggeredEvents.push({
+        type: "EFFECT_ACTIVATED",
+        seat,
+        cardId,
+        effectIndex: i,
+        targets: [],
+      });
+
+      // Resolve the effect's actions
+      const actionEvents = resolveEffectActions(state, seat, eff.actions, cardId, []);
+      triggeredEvents.push(...actionEvents);
     }
   }
 

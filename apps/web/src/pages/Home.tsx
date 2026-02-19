@@ -1,35 +1,49 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy } from "@privy-io/react-auth";
+import { motion } from "framer-motion";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
-  STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG,
+  STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG, TTG_BG, PVP_BG,
 } from "@/lib/blobUrls";
+
+const panelVariants = {
+  hidden: { opacity: 0, y: 24, scale: 0.96 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } },
+};
+
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
 
 function Panel({
   title,
   subtitle,
   bgImage,
+  bgContain,
   children,
   onClick,
 }: {
   title: string;
   subtitle: string;
   bgImage?: string;
+  bgContain?: boolean;
   children?: React.ReactNode;
   onClick?: () => void;
 }) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
-      className="relative group flex flex-col justify-end cursor-pointer
-        transition-all duration-150
-        hover:-translate-x-0.5 hover:-translate-y-0.5
-        active:translate-x-0.5 active:translate-y-0.5"
+      className="relative group flex flex-col justify-end cursor-pointer"
+      variants={panelVariants}
+      whileHover={{ scale: 1.02, y: -4 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       <img
         src={INK_FRAME}
@@ -40,7 +54,7 @@ function Panel({
       />
       {bgImage ? (
         <div
-          className="absolute inset-[6%] bg-cover bg-center z-0"
+          className={`absolute inset-[6%] ${bgContain ? "bg-contain bg-no-repeat bg-center bg-[#fdfdfb]" : "bg-cover bg-center"} z-0`}
           style={{ backgroundImage: `url(${bgImage})` }}
         />
       ) : (
@@ -71,7 +85,7 @@ function Panel({
           {subtitle}
         </p>
       </div>
-    </button>
+    </motion.button>
   );
 }
 
@@ -80,7 +94,7 @@ export function Home() {
   const navigate = useNavigate();
   const { authenticated, login } = PRIVY_ENABLED
     ? usePrivy()
-    : { authenticated: false, login: () => {} };
+    : { authenticated: false, login: () => { } };
 
   // After Privy login returns to Home, auto-navigate to the saved destination
   usePostLoginRedirect();
@@ -105,32 +119,45 @@ export function Home() {
       <div className="absolute inset-0 bg-black/50" />
 
       {/* Decorative pill bottle */}
-      <img
+      <motion.img
         src={DECO_PILLS}
         alt=""
         className="absolute bottom-16 left-2 md:left-6 h-32 md:h-48 w-auto opacity-20 pointer-events-none z-[15] select-none"
         draggable={false}
         loading="lazy"
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
       />
 
       {/* Header */}
       <header className="relative z-10 text-center pt-8 pb-4 px-4">
-        <img
+        <motion.img
           src={TITLE}
           alt="LunchTable"
           className="h-16 md:h-24 mx-auto drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
           draggable={false}
+          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
         />
-        <p
+        <motion.p
           className="text-base md:text-lg text-[#ffcc00] drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
           style={{ fontFamily: "Special Elite, cursive" }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
         >
           School of Hard Knocks
-        </p>
+        </motion.p>
       </header>
 
       {/* Comic panels grid */}
-      <div className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4 md:p-8 max-w-6xl w-full mx-auto">
+      <motion.div
+        className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4 md:p-8 max-w-6xl w-full mx-auto"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         <Panel
           title="Story Mode"
           subtitle="Fight your way through the halls"
@@ -170,19 +197,30 @@ export function Home() {
         <Panel
           title="PvP Lobby"
           subtitle="Human duels + agent join invites"
+          bgImage={PVP_BG}
           onClick={() => goTo("/pvp", true)}
         >
-          <div className="text-4xl mb-3">&#9878;</div>
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
         </Panel>
 
         <Panel
           title="LunchTable TTG"
           subtitle="Create worlds, agents, maps, and campaigns"
+          bgImage={TTG_BG}
+          bgContain
           onClick={() => goTo("/studio?tab=overview", false)}
         >
           <div className="text-4xl mb-3">&#9881;</div>
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
+            <span
+              className="text-white text-xl md:text-2xl font-black uppercase tracking-tighter drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
+              style={{ fontFamily: "Permanent Marker, cursive" }}
+            >
+              find out soon
+            </span>
+          </div>
         </Panel>
-      </div>
+      </motion.div>
 
       {isEmbedded && (
         <p

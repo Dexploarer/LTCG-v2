@@ -7,18 +7,32 @@ import { LPBar } from "./LPBar";
 import { PhaseBar } from "./PhaseBar";
 import { PlayerHand } from "./PlayerHand";
 import { ChainPrompt } from "./ChainPrompt";
-import { ActionSheet } from "./ActionSheet";
+import { CardDetailOverlay } from "./CardDetailOverlay";
 import { TributeSelector } from "./TributeSelector";
 import { AttackTargetSelector } from "./AttackTargetSelector";
 import { GraveyardBrowser } from "./GraveyardBrowser";
 import { GameOverOverlay } from "./GameOverOverlay";
-import { BoardScene } from "./board3d/BoardScene";
+import { FieldRow } from "./FieldRow";
+import { SpellTrapRow } from "./SpellTrapRow";
+import { GameMotionOverlay } from "./GameMotionOverlay";
+import { PongOverlay } from "./pong/PongOverlay";
+import { GameLog } from "./GameLog";
+import { TurnBanner } from "./TurnBanner";
 import { AnimatePresence } from "framer-motion";
+import { BrandedLoader } from "@/components/layout/BrandedLoader";
 import type { Phase } from "./types";
 
 const MAX_BOARD_SLOTS = 3;
 const MAX_SPELL_TRAP_SLOTS = 3;
 const FRAME_MS = 1000 / 60;
+
+const AMBIENT_MOTES = Array.from({ length: 10 }, (_, i) => ({
+  id: i,
+  left: 10 + Math.round((i / 9) * 80),
+  delay: Math.round(i * 0.8 * 10) / 10,
+  duration: 6 + (i % 5),
+  opacity: 0.05 + (i % 3) * 0.05,
+}));
 
 type LaneSnapshot = {
   lane: number;
@@ -235,6 +249,7 @@ export function GameBoard({
   const [pendingSummonPosition, setPendingSummonPosition] = useState<"attack" | "defense" | null>(
     null,
   );
+  const [showBoardCardDetail, setShowBoardCardDetail] = useState(false);
   const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
 
   // Compute playable card IDs for hand highlighting
@@ -254,11 +269,10 @@ export function GameBoard({
   const handleHandCardClick = useCallback(
     (cardId: string) => {
       if (isChainPromptOpen) return;
-      if (!playableIds.has(cardId)) return;
       setSelectedHandCard(cardId);
       setShowActionSheet(true);
     },
-    [isChainPromptOpen, playableIds],
+    [isChainPromptOpen],
   );
 
   const handleBoardCardClick = useCallback(
@@ -276,6 +290,10 @@ export function GameBoard({
         actions.flipSummon(cardId);
         return;
       }
+
+      // Any phase: open board card detail (shows card info + activate effect)
+      setSelectedBoardCard(cardId);
+      setShowBoardCardDetail(true);
     },
     [isChainPromptOpen, phase, attackableIds, flipSummonIds, actions],
   );
@@ -285,20 +303,11 @@ export function GameBoard({
     (position: "attack" | "defense") => {
       if (isChainPromptOpen) return;
       if (!selectedHandCard) return;
-      const summonInfo = validActions.canSummon.get(selectedHandCard);
-      if (!summonInfo) return;
-
-      if (summonInfo.needsTribute) {
-        setPendingSummonPosition(position);
-        setShowActionSheet(false);
-        setShowTributeSelector(true);
-      } else {
-        actions.summon(selectedHandCard, position);
-        setSelectedHandCard(null);
-        setShowActionSheet(false);
-      }
+      actions.summon(selectedHandCard, position);
+      setSelectedHandCard(null);
+      setShowActionSheet(false);
     },
-    [isChainPromptOpen, selectedHandCard, validActions, actions],
+    [isChainPromptOpen, selectedHandCard, actions],
   );
 
   const handleActionSheetSetMonster = useCallback(() => {
@@ -325,18 +334,25 @@ export function GameBoard({
     setShowActionSheet(false);
   }, [isChainPromptOpen, selectedHandCard, actions]);
 
-  const handleActionSheetActivateTrap = useCallback(() => {
-    if (isChainPromptOpen) return;
-    if (!selectedHandCard) return;
-    actions.activateTrap(selectedHandCard);
-    setSelectedHandCard(null);
-    setShowActionSheet(false);
-  }, [isChainPromptOpen, selectedHandCard, actions]);
-
   const handleActionSheetClose = useCallback(() => {
     setSelectedHandCard(null);
     setShowActionSheet(false);
   }, []);
+
+  const handleBoardCardDetailClose = useCallback(() => {
+    setSelectedBoardCard(null);
+    setShowBoardCardDetail(false);
+  }, []);
+
+  const handleActivateEffect = useCallback(
+    (effectIndex: number) => {
+      if (isChainPromptOpen || !selectedBoardCard) return;
+      actions.activateEffect(selectedBoardCard, effectIndex);
+      setSelectedBoardCard(null);
+      setShowBoardCardDetail(false);
+    },
+    [isChainPromptOpen, selectedBoardCard, actions],
+  );
 
   // TributeSelector callback (stubbed until TributeSelector exists)
   const handleTributeConfirm = useCallback(
@@ -391,10 +407,33 @@ export function GameBoard({
     setShowActionSheet(false);
     setShowTributeSelector(false);
     setShowAttackTargets(false);
+    setShowBoardCardDetail(false);
     setShowSurrenderConfirm(false);
     setPendingSummonPosition(null);
     setShowGraveyard(null);
   }, [isChainPromptOpen]);
+
+  // Auto-advance non-interactive phases
+  const autoAdvancePhases = new Set(["draw", "standby", "breakdown_check", "end"]);
+  useEffect(() => {
+    if (!isMyTurn || ended || isChainPromptOpen || actions.submitting) return;
+
+    // Auto-skip draw, standby, breakdown_check, end phases
+    if (autoAdvancePhases.has(phase)) {
+      const timer = setTimeout(() => actions.advancePhase(), 400);
+      return () => clearTimeout(timer);
+    }
+
+    // Auto-skip combat if player has no attackable monsters
+    if (phase === "combat") {
+      const hasAttacker = validActions.canAttack.size > 0;
+      if (!hasAttacker) {
+        const timer = setTimeout(() => actions.advancePhase(), 400);
+        return () => clearTimeout(timer);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, isMyTurn, ended, isChainPromptOpen, actions.submitting, validActions.canAttack.size]);
 
   useEffect(() => {
     if (!ended) {
@@ -603,34 +642,28 @@ export function GameBoard({
 
   // Loading/error states
   if (isLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#fdfdfb]">
-        <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <BrandedLoader variant="dark" message="Loading match..." />;
   }
 
   if (notFound) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#fdfdfb]">
-        <p className="text-[#666] font-bold uppercase text-sm">Match not found.</p>
+      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+        <p className="text-white/40 font-bold uppercase text-sm">Match not found.</p>
       </div>
     );
   }
 
   if (!view) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#fdfdfb]">
-        <p className="text-[#666] font-bold uppercase text-sm">Failed to load game state.</p>
+      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+        <p className="text-white/40 font-bold uppercase text-sm">Failed to load game state.</p>
       </div>
     );
   }
 
   if (ended) {
     if (onMatchEnd) {
-      return <div className="h-screen flex items-center justify-center bg-[#fdfdfb]">
-        <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
-      </div>;
+      return <BrandedLoader variant="dark" message="Finishing match..." />;
     }
 
     return (
@@ -646,261 +679,343 @@ export function GameBoard({
   }
 
   return (
-    <BoardScene
-      playerBoard={playerBoard}
-      opponentBoard={opponentBoard}
-      playerSpellTraps={playerSpellTraps}
-      opponentSpellTraps={opponentSpellTraps}
-      cardLookup={cardLookup}
-      phase={phase as Phase}
-      isMyTurn={isMyTurn}
-      highlightIds={new Set([...attackableIds, ...flipSummonIds])}
-      onCardClick={handleBoardCardClick}
-      isChainPromptOpen={isChainPromptOpen}
-      maxBoardSlots={maxBoardSlots}
-      maxSpellTrapSlots={maxSpellTrapSlots}
-    >
-      {/* DOM Overlays — positioned on top of 3D canvas */}
-      <div className="relative z-10 flex h-full flex-col">
-        {/* Opponent LP Bar */}
-        <div className="px-4 pt-2">
-          <LPBar
-            lp={view.opponentLifePoints ?? 8000}
-            maxLp={8000}
-            label={opponentPlatformTag ? `Opponent · ${opponentPlatformTag}` : "Opponent"}
-            side="opponent"
-          />
-        </div>
+    <div className="relative w-full h-dvh overflow-hidden">
+      {/* Atmosphere overlay */}
+      <GameMotionOverlay phase={phase as Phase} isMyTurn={isMyTurn} />
 
-        {/* Spacer — board area rendered by 3D canvas underneath */}
-        <div className="flex-1" />
+      {/* Board playmat */}
+      <div className="board-playmat absolute inset-0">
+        <div className="board-scanlines absolute inset-0 pointer-events-none" />
 
-        {/* Phase Bar */}
-        <div className="px-4 py-2">
-          <PhaseBar
-            currentPhase={phase as Phase}
-            isMyTurn={isMyTurn}
-            onAdvance={isChainPromptOpen ? () => {} : actions.advancePhase}
-          />
-        </div>
-
-        {/* Player LP Bar */}
-        <div className="px-4 pb-1">
-          <LPBar
-            lp={view.lifePoints ?? 8000}
-            maxLp={8000}
-            label={playerPlatformTag ? `You · ${playerPlatformTag}` : "You"}
-            side="player"
-          />
-        </div>
-
-        {/* Player Hand */}
-        <div className="px-4 pb-4 flex-shrink-0">
-          <PlayerHand
-            hand={hand}
-            cardLookup={cardLookup}
-            playableIds={playableIds}
-            onCardClick={handleHandCardClick}
-          />
-        </div>
-
-        {/* GY/Banished Buttons */}
-        <div className="fixed left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => setShowGraveyard({ zone: "graveyard", owner: "player" })}
-            className="tcg-button px-2 py-1 text-xs"
-            title="Your Graveyard"
-          >
-            GY ({playerGraveyard.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowGraveyard({ zone: "banished", owner: "player" })}
-            className="tcg-button px-2 py-1 text-xs"
-            title="Your Banished"
-          >
-            BAN ({playerBanished.length})
-          </button>
-        </div>
-
-        <div className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => setShowGraveyard({ zone: "graveyard", owner: "opponent" })}
-            className="tcg-button px-2 py-1 text-xs"
-            title="Opponent Graveyard"
-          >
-            OPP GY ({opponentGraveyard.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowGraveyard({ zone: "banished", owner: "opponent" })}
-            className="tcg-button px-2 py-1 text-xs"
-            title="Opponent Banished"
-          >
-            OPP BAN ({opponentBanished.length})
-          </button>
-        </div>
-
-        {/* End Turn / Surrender Buttons */}
-        <div className="fixed bottom-4 right-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowSurrenderConfirm(true)}
-            className={`text-xs text-[#666] hover:text-[#121212] underline ${
-              showSurrenderConfirm ? "hidden" : ""
-            }`}
-            disabled={actions.submitting || isChainPromptOpen}
-          >
-            Surrender
-          </button>
-          {showSurrenderConfirm && (
-            <div className="flex gap-2 items-center">
-              <span className="text-xs text-[#666]">Confirm surrender?</span>
-              <button
-                type="button"
-                onClick={handleSurrender}
-                disabled={isChainPromptOpen}
-                className="tcg-button-primary px-3 py-1 text-xs"
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSurrenderConfirm(false)}
-                disabled={isChainPromptOpen}
-                className="tcg-button px-3 py-1 text-xs"
-              >
-                No
-              </button>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={actions.endTurn}
-            disabled={!isMyTurn || actions.submitting || isChainPromptOpen}
-            className={`tcg-button-primary px-6 py-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed ${
-              isMyTurn && !isChainPromptOpen ? "animate-effect-pulse" : ""
-            }`}
-          >
-            End Turn
-          </button>
-        </div>
-
-        {isChainPromptOpen && (
-          <ChainPrompt
-            opponentCardName={chainOpponentCardName}
-            activatableTraps={chainActivatableTraps}
-            onActivate={handleChainActivate}
-            onPass={handleChainPass}
-          />
-        )}
-
-        {/* Error Display */}
-        {actions.error && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 paper-panel bg-red-50 border-2 border-red-600 px-4 py-2 max-w-md">
-            <p className="text-xs text-red-600 font-bold uppercase">{actions.error}</p>
-            <button
-              type="button"
-              onClick={actions.clearError}
-              className="text-[10px] underline text-red-600 mt-1"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Action Sheet */}
-        {showActionSheet && selectedHandCard && (
-          <ActionSheet
-            cardId={selectedHandCard}
-            cardDef={cardLookup[selectedHandCard] ?? {}}
-            location="hand"
-            validActions={{
-              canSummon: validActions.canSummon.get(selectedHandCard),
-              canSetMonster: validActions.canSetMonster.has(selectedHandCard),
-              canSetSpellTrap: validActions.canSetSpellTrap.has(selectedHandCard),
-              canActivateSpell: validActions.canActivateSpell.has(selectedHandCard),
-            }}
-            onSummon={handleActionSheetSummon}
-            onSetMonster={handleActionSheetSetMonster}
-            onSetSpellTrap={handleActionSheetSetSpellTrap}
-            onActivateSpell={handleActionSheetActivateSpell}
-            onActivateTrap={handleActionSheetActivateTrap}
-            onTributeRequired={() => {
-              setPendingSummonPosition("attack");
-              setShowActionSheet(false);
-              setShowTributeSelector(true);
-            }}
-            onClose={handleActionSheetClose}
-          />
-        )}
-
-        {/* Tribute Selector */}
-        {showTributeSelector && (
-          <TributeSelector
-            board={playerBoard.map((card) => ({
-              cardId: card.cardId,
-              definitionId: card.definitionId,
-              faceDown: Boolean(card.faceDown),
-            }))}
-            cardLookup={cardLookup}
-            requiredCount={1}
-            onConfirm={handleTributeConfirm}
-            onCancel={() => {
-              setShowTributeSelector(false);
-              setPendingSummonPosition(null);
-            }}
-          />
-        )}
-
-        {/* Attack Target Selector */}
-        {showAttackTargets && selectedBoardCard && (() => {
-          const targets = validActions.canAttack.get(selectedBoardCard) ?? [];
-          const attackerCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
-          const attackerDef = attackerCard ? cardLookup[attackerCard.definitionId] : null;
-          const attackerAtk = (attackerDef?.attack ?? 0) + (attackerCard?.temporaryBoosts?.attack ?? 0);
-          const opponentTargets = opponentBoard
-            .filter((c: any) => targets.includes(c.cardId))
-            .map((c: any) => ({
-              cardId: c.cardId,
-              definitionId: c.definitionId,
-              faceDown: Boolean(c.faceDown),
-              position: c.position ?? "attack",
-            }));
-          const canDirectAttack = targets.includes("");
-          return (
-            <AttackTargetSelector
-              targets={opponentTargets}
-              cardLookup={cardLookup}
-              attackerAtk={attackerAtk}
-              canDirectAttack={canDirectAttack}
-              onSelectTarget={(targetId) => handleAttackTarget(targetId)}
-              onDirectAttack={() => handleAttackTarget()}
-              onCancel={() => {
-                setSelectedBoardCard(null);
-                setShowAttackTargets(false);
+        {/* Ambient floating motes */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+          {AMBIENT_MOTES.map((mote) => (
+            <div
+              key={mote.id}
+              className="board-ambient-mote"
+              style={{
+                left: `${mote.left}%`,
+                ["--mote-delay" as string]: `${mote.delay}s`,
+                ["--mote-duration" as string]: `${mote.duration}s`,
+                ["--mote-opacity" as string]: mote.opacity,
               }}
             />
-          );
-        })()}
+          ))}
+        </div>
 
-        {/* Graveyard Browser */}
-        {showGraveyard && (
-          <GraveyardBrowser
-            title={`${showGraveyard.owner === "player" ? "Your" : "Opponent"} ${showGraveyard.zone === "graveyard" ? "Graveyard" : "Banished Zone"}`}
-            cardIds={
-              showGraveyard.owner === "player"
-                ? (showGraveyard.zone === "graveyard" ? playerGraveyard : playerBanished)
-                : (showGraveyard.zone === "graveyard" ? opponentGraveyard : opponentBanished)
-            }
-            cardLookup={cardLookup}
-            onClose={() => setShowGraveyard(null)}
-          />
-        )}
+        {/* Perspective board container */}
+        <div
+          className="absolute inset-0 flex flex-col justify-center items-center px-4"
+          style={{
+            perspective: "900px",
+          }}
+        >
+          <div
+            className="w-full max-w-2xl flex flex-col gap-2"
+            style={{
+              transform: "rotateX(18deg)",
+              transformStyle: "preserve-3d",
+            }}
+          >
+            {/* Opponent spell/trap row */}
+            <SpellTrapRow
+              cards={opponentSpellTraps.map((c: any) => ({
+                cardId: c.cardId,
+                definitionId: c.definitionId,
+                faceDown: Boolean(c.faceDown),
+                activated: Boolean(c.activated),
+              }))}
+              cardLookup={cardLookup}
+              maxSlots={maxSpellTrapSlots}
+            />
+
+            {/* Opponent monster row */}
+            <FieldRow
+              cards={opponentBoard}
+              cardLookup={cardLookup}
+              maxSlots={maxBoardSlots}
+              reversed
+            />
+
+            {/* Center divider */}
+            <div className="board-center-line my-1" />
+
+            {/* Player monster row */}
+            <FieldRow
+              cards={playerBoard}
+              cardLookup={cardLookup}
+              maxSlots={maxBoardSlots}
+              highlightIds={new Set([...attackableIds, ...flipSummonIds])}
+              onSlotClick={handleBoardCardClick}
+            />
+
+            {/* Player spell/trap row */}
+            <SpellTrapRow
+              cards={playerSpellTraps.map((c: any) => ({
+                cardId: c.cardId,
+                definitionId: c.definitionId,
+                faceDown: Boolean(c.faceDown),
+                activated: Boolean(c.activated),
+              }))}
+              cardLookup={cardLookup}
+              maxSlots={maxSpellTrapSlots}
+              interactive
+              onSlotClick={(cardId: string) => {
+                const stCard = playerSpellTraps.find((c: any) => c.cardId === cardId);
+                if (!stCard) return;
+                const def = cardLookup[stCard.definitionId];
+                if (!def) return;
+                if (stCard.faceDown && def.type === "trap") {
+                  actions.activateTrap(cardId);
+                } else if (stCard.faceDown && def.type === "spell") {
+                  actions.activateSpell(cardId);
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Active field glow */}
+        {isMyTurn && <div className="board-field-active absolute inset-0 pointer-events-none" />}
       </div>
-    </BoardScene>
+
+      {/* === DOM Overlays === */}
+
+      {/* Turn announcement banner */}
+      <TurnBanner turnNumber={view.turnNumber} isMyTurn={isMyTurn} />
+
+      {/* === OPPONENT LP — top-center shield === */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4">
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-['Special_Elite'] text-[9px] text-white/25 uppercase">Hand {view.opponentHandCount}</span>
+          <span className="font-['Special_Elite'] text-[9px] text-white/25 uppercase">Deck {view.opponentDeckCount}</span>
+        </div>
+        <div className="lp-shield">
+          <span className="lp-shield-label">{opponentPlatformTag || "OPP"}</span>
+          <LPBar lp={view.opponentLifePoints ?? 8000} maxLp={8000} label="" side="opponent" />
+        </div>
+        <span className="font-['Outfit'] font-black uppercase tracking-tighter text-[10px] text-white/30">
+          T{view.turnNumber}
+        </span>
+      </div>
+
+      {/* Phase Bar — centered overlay */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+        <PhaseBar
+          currentPhase={phase as Phase}
+          isMyTurn={isMyTurn}
+          onAdvance={isChainPromptOpen ? () => {} : actions.advancePhase}
+        />
+      </div>
+
+      {/* === PLAYER LP — bottom-left corner overlay === */}
+      <div className="absolute bottom-[clamp(70px,11vh,110px)] left-3 z-20 flex items-center gap-2">
+        <div className="lp-corner">
+          <span className="lp-corner-label">{playerPlatformTag ? `YOU · ${playerPlatformTag}` : "YOU"}</span>
+          <LPBar lp={view.lifePoints ?? 8000} maxLp={8000} label="" side="player" />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="font-['Special_Elite'] text-[10px] text-white/30">DECK {view.deckCount}</span>
+          <span className="font-['Special_Elite'] text-[10px] text-white/30">HAND {hand.length}</span>
+        </div>
+      </div>
+
+      {/* === PLAYER HAND — docked to bottom edge === */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-2 overflow-visible">
+        <PlayerHand
+          hand={hand}
+          cardLookup={cardLookup}
+          playableIds={playableIds}
+          onCardClick={handleHandCardClick}
+        />
+      </div>
+
+      {/* Game Log */}
+      <GameLog matchId={matchId} seat={seat} />
+
+      {/* GY/Banished — left edge */}
+      <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-20">
+        <button type="button" onClick={() => setShowGraveyard({ zone: "graveyard", owner: "player" })} className="gy-btn relative w-9 h-9 flex items-center justify-center" title="Your Graveyard">
+          <span className="font-['Outfit'] font-black text-[9px] text-white/60">GY</span>
+          {playerGraveyard.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white/80 text-[#121212] text-[7px] font-black flex items-center justify-center">{playerGraveyard.length}</span>}
+        </button>
+        <button type="button" onClick={() => setShowGraveyard({ zone: "banished", owner: "player" })} className="gy-btn relative w-9 h-9 flex items-center justify-center" title="Your Banished">
+          <span className="font-['Outfit'] font-black text-[8px] text-white/60">BAN</span>
+          {playerBanished.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white/50 text-[#121212] text-[7px] font-black flex items-center justify-center">{playerBanished.length}</span>}
+        </button>
+      </div>
+
+      {/* GY/Banished — right edge */}
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-20">
+        <button type="button" onClick={() => setShowGraveyard({ zone: "graveyard", owner: "opponent" })} className="gy-btn relative w-9 h-9 flex items-center justify-center" title="Opponent GY">
+          <span className="font-['Outfit'] font-black text-[8px] text-white/40">OGY</span>
+          {opponentGraveyard.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white/80 text-[#121212] text-[7px] font-black flex items-center justify-center">{opponentGraveyard.length}</span>}
+        </button>
+        <button type="button" onClick={() => setShowGraveyard({ zone: "banished", owner: "opponent" })} className="gy-btn relative w-9 h-9 flex items-center justify-center" title="Opponent Banished">
+          <span className="font-['Outfit'] font-black text-[7px] text-white/40">OBAN</span>
+          {opponentBanished.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white/50 text-[#121212] text-[7px] font-black flex items-center justify-center">{opponentBanished.length}</span>}
+        </button>
+      </div>
+
+      {/* End Turn / Surrender — bottom-right overlay */}
+      <div className="absolute bottom-[clamp(70px,11vh,110px)] right-3 z-20 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowSurrenderConfirm(true)}
+          className={`text-[10px] text-white/30 hover:text-white/60 underline ${showSurrenderConfirm ? "hidden" : ""}`}
+          disabled={actions.submitting || isChainPromptOpen}
+        >
+          Surrender
+        </button>
+        {showSurrenderConfirm && (
+          <div className="flex gap-2 items-center">
+            <span className="text-[10px] text-white/40">Confirm?</span>
+            <button type="button" onClick={handleSurrender} disabled={isChainPromptOpen} className="tcg-button-primary px-2 py-1 text-[10px]">Yes</button>
+            <button type="button" onClick={() => setShowSurrenderConfirm(false)} disabled={isChainPromptOpen} className="tcg-button px-2 py-1 text-[10px]">No</button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={actions.endTurn}
+          disabled={!isMyTurn || actions.submitting || isChainPromptOpen}
+          className={`end-turn-btn px-5 py-1.5 text-xs font-black uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed ${
+            isMyTurn && !isChainPromptOpen ? "end-turn-glow" : ""
+          }`}
+        >
+          End Turn
+        </button>
+      </div>
+
+      {isChainPromptOpen && (
+        <ChainPrompt
+          opponentCardName={chainOpponentCardName}
+          activatableTraps={chainActivatableTraps}
+          onActivate={handleChainActivate}
+          onPass={handleChainPass}
+        />
+      )}
+
+      {/* Error Display */}
+      {actions.error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 paper-panel bg-red-50 border-2 border-red-600 px-4 py-2 max-w-md">
+          <p className="text-xs text-red-600 font-bold uppercase">{actions.error}</p>
+          <button type="button" onClick={actions.clearError} className="text-[10px] underline text-red-600 mt-1">Dismiss</button>
+        </div>
+      )}
+
+      {/* Card Detail Overlay (hand card actions) */}
+      {showActionSheet && selectedHandCard && (
+        <CardDetailOverlay
+          cardDef={cardLookup[selectedHandCard] ?? {}}
+          location="hand"
+          phase={phase}
+          isMyTurn={isMyTurn}
+          onSummon={handleActionSheetSummon}
+          onSetMonster={handleActionSheetSetMonster}
+          onSetSpellTrap={handleActionSheetSetSpellTrap}
+          onActivateSpell={handleActionSheetActivateSpell}
+          onClose={handleActionSheetClose}
+        />
+      )}
+
+      {/* Board Card Detail Overlay */}
+      {showBoardCardDetail && selectedBoardCard && (() => {
+        const boardCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
+        if (!boardCard) return null;
+        const def = cardLookup[boardCard.definitionId];
+        return (
+          <CardDetailOverlay
+            cardDef={def ?? {}}
+            location="board"
+            phase={phase}
+            isMyTurn={isMyTurn}
+            onActivateEffect={handleActivateEffect}
+            onClose={handleBoardCardDetailClose}
+          />
+        );
+      })()}
+
+      {/* Tribute Selector */}
+      {showTributeSelector && (
+        <TributeSelector
+          board={playerBoard.map((card) => ({
+            cardId: card.cardId,
+            definitionId: card.definitionId,
+            faceDown: Boolean(card.faceDown),
+          }))}
+          cardLookup={cardLookup}
+          requiredCount={1}
+          onConfirm={handleTributeConfirm}
+          onCancel={() => {
+            setShowTributeSelector(false);
+            setPendingSummonPosition(null);
+          }}
+        />
+      )}
+
+      {/* Attack Target Selector */}
+      {showAttackTargets && selectedBoardCard && (() => {
+        const targets = validActions.canAttack.get(selectedBoardCard) ?? [];
+        const attackerCard = playerBoard.find((c: any) => c.cardId === selectedBoardCard);
+        const attackerDef = attackerCard ? cardLookup[attackerCard.definitionId] : null;
+        const attackerAtk = (attackerDef?.attack ?? 0) + (attackerCard?.temporaryBoosts?.attack ?? 0);
+        const opponentTargets = opponentBoard
+          .filter((c: any) => targets.includes(c.cardId))
+          .map((c: any) => ({
+            cardId: c.cardId,
+            definitionId: c.definitionId,
+            faceDown: Boolean(c.faceDown),
+            position: c.position ?? "attack",
+          }));
+        const canDirectAttack = targets.includes("");
+        return (
+          <AttackTargetSelector
+            targets={opponentTargets}
+            cardLookup={cardLookup}
+            attackerAtk={attackerAtk}
+            canDirectAttack={canDirectAttack}
+            onSelectTarget={(targetId) => handleAttackTarget(targetId)}
+            onDirectAttack={() => handleAttackTarget()}
+            onCancel={() => {
+              setSelectedBoardCard(null);
+              setShowAttackTargets(false);
+            }}
+          />
+        );
+      })()}
+
+      {/* Graveyard Browser */}
+      {showGraveyard && (
+        <GraveyardBrowser
+          title={`${showGraveyard.owner === "player" ? "Your" : "Opponent"} ${showGraveyard.zone === "graveyard" ? "Graveyard" : "Banished Zone"}`}
+          cardIds={
+            showGraveyard.owner === "player"
+              ? (showGraveyard.zone === "graveyard" ? playerGraveyard : playerBanished)
+              : (showGraveyard.zone === "graveyard" ? opponentGraveyard : opponentBanished)
+          }
+          cardLookup={cardLookup}
+          onClose={() => setShowGraveyard(null)}
+        />
+      )}
+
+      {/* Beer Pong Overlay */}
+      {view.pendingPong && view.pendingPong.seat === seat && (
+        <PongOverlay
+          mode="combat"
+          cardName={cardLookup[view.pendingPong.destroyedCardId]?.name ?? "Unknown Card"}
+          onResult={(result) => actions.pongShoot(view.pendingPong!.destroyedCardId, result)}
+          onDecline={() => actions.pongDecline(view.pendingPong!.destroyedCardId)}
+        />
+      )}
+      {view.pendingRedemption && view.pendingRedemption.seat === seat && (
+        <PongOverlay
+          mode="redemption"
+          cardName=""
+          onResult={(result) => actions.redemptionShoot(result)}
+          onDecline={() => actions.redemptionDecline()}
+        />
+      )}
+    </div>
   );
 }
 

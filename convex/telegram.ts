@@ -32,7 +32,7 @@ function toBytes(buffer: ArrayBuffer): Uint8Array {
 async function hmacSha256Raw(keyBytes: Uint8Array, data: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes as unknown as BufferSource,
+    keyBytes.buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -274,7 +274,7 @@ export const getTelegramLinkStatus = query({
 
 export const findLinkedUserByTelegramId = internalQuery({
   args: { telegramUserId: v.string() },
-  returns: v.union(v.id("users"), v.null()),
+  returns: v.union(v.string(), v.null()),
   handler: async (ctx, args) => {
     const identity = await ctx.db
       .query("telegramIdentities")

@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { components } from "./_generated/api";
 import {
   internalMutation,
@@ -342,6 +343,13 @@ async function joinPvpLobbyInternal(ctx: any, args: { matchId: string; awayUserI
   });
 
   await activatePvpLobbyOnJoin(ctx, args.matchId);
+
+  // Schedule the first disconnect check after the timeout window
+  await ctx.scheduler.runAfter(
+    60_000 + 15_000, // give both players time to connect, then start checking
+    internal.game.checkPvpDisconnect,
+    { matchId: args.matchId },
+  );
 
   return {
     matchId: args.matchId,
@@ -721,7 +729,6 @@ export const createPvpLobby = mutation({
 
     const matchId = await match.createMatch(ctx, {
       hostId: user._id,
-      awayId: null,
       mode: "pvp",
       hostDeck,
       isAIOpponent: false,
@@ -1651,6 +1658,49 @@ export const submitActionAsActor = internalMutation({
     }),
 });
 
+// Public mutation used by the web frontend (includes a `client` tag for telemetry).
+export const submitActionWithClient = mutation({
+  args: {
+    matchId: v.string(),
+    command: v.string(),
+    seat: v.union(v.literal("host"), v.literal("away")),
+    expectedVersion: v.optional(v.number()),
+    client: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return submitActionForActor(ctx, {
+      matchId: args.matchId,
+      command: args.command,
+      seat: args.seat,
+      expectedVersion: args.expectedVersion,
+      actorUserId: user._id,
+    });
+  },
+});
+
+// Internal mutation used by Telegram HTTP handler (accepts userId directly).
+export const submitActionWithClientForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    matchId: v.string(),
+    command: v.string(),
+    seat: v.union(v.literal("host"), v.literal("away")),
+    expectedVersion: v.optional(v.number()),
+    client: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) =>
+    submitActionForActor(ctx, {
+      matchId: args.matchId,
+      command: args.command,
+      seat: args.seat,
+      expectedVersion: args.expectedVersion,
+      actorUserId: args.userId,
+    }),
+});
+
 // ── AI Decision Logic ──────────────────────────────────────────────
 
 function pickAICommand(
@@ -1774,57 +1824,59 @@ function pickAICommand(
     if (phase === "main2") {
       return { type: "END_TURN" };
     }
+  }
 
-    // Combat phase
-    if (phase === "combat") {
-      // Find all monsters that can attack
-      const attackableMonsters = board.filter(
-        (c: any) => !c.faceDown && c.canAttack && !c.hasAttackedThisTurn
-      );
+  // Combat phase — must be outside the main/main2 block
+  if (phase === "combat") {
+    const attackableMonsters = board.filter(
+      (c: any) => !c.faceDown && c.canAttack && !c.hasAttackedThisTurn
+    );
 
-      if (attackableMonsters.length > 0) {
-        const attacker = attackableMonsters[0];
-        const attackerId = attacker?.cardId ?? attacker?.instanceId;
-        if (!attackerId) return { type: "ADVANCE_PHASE" };
+    if (attackableMonsters.length > 0) {
+      const attacker = attackableMonsters[0];
+      const attackerId = attacker?.cardId ?? attacker?.instanceId;
+      if (!attackerId) return { type: "ADVANCE_PHASE" };
 
-        // Check opponent monsters (including face-down)
-        const opponentMonsters = opponentBoard;
+      // Direct attack only when opponent has no face-up monsters
+      // (engine allows attacking past face-down monsters)
+      const faceUpOpponents = opponentBoard.filter((c: any) => !c.faceDown);
 
-        if (opponentMonsters.length === 0) {
-          // Direct attack
-          return {
-            type: "DECLARE_ATTACK",
-            attackerId,
-          };
-        }
-
-        // Find weakest opponent monster
-        let weakestOpponent = opponentMonsters[0];
-        let weakestAtk =
-          (cardLookup[weakestOpponent.definitionId]?.attack ?? 0) +
-          (weakestOpponent.temporaryBoosts?.attack ?? 0);
-
-        for (const opp of opponentMonsters) {
-          const oppAtk =
-            (cardLookup[opp.definitionId]?.attack ?? 0) +
-            (opp.temporaryBoosts?.attack ?? 0);
-          if (oppAtk < weakestAtk) {
-            weakestOpponent = opp;
-            weakestAtk = oppAtk;
-          }
-        }
-
-        const targetId = weakestOpponent.cardId ?? weakestOpponent.instanceId;
+      if (faceUpOpponents.length === 0) {
         return {
           type: "DECLARE_ATTACK",
           attackerId,
-          targetId,
         };
       }
+
+      // Attack weakest opponent monster by ATK
+      let weakestOpponent = faceUpOpponents[0];
+      let weakestAtk =
+        (cardLookup[weakestOpponent.definitionId]?.attack ?? 0) +
+        (weakestOpponent.temporaryBoosts?.attack ?? 0);
+
+      for (const opp of faceUpOpponents) {
+        const oppAtk =
+          (cardLookup[opp.definitionId]?.attack ?? 0) +
+          (opp.temporaryBoosts?.attack ?? 0);
+        if (oppAtk < weakestAtk) {
+          weakestOpponent = opp;
+          weakestAtk = oppAtk;
+        }
+      }
+
+      const targetId = weakestOpponent.cardId ?? weakestOpponent.instanceId;
+      return {
+        type: "DECLARE_ATTACK",
+        attackerId,
+        targetId,
+      };
     }
+
+    // No attackers in combat — advance past combat
+    return { type: "ADVANCE_PHASE" };
   }
 
-  // No attacks possible, advance phase
+  // Fallback: advance phase
   return { type: "ADVANCE_PHASE" };
 }
 
@@ -2038,6 +2090,48 @@ export const getActiveMatchByHost = query({
   args: { hostId: v.string() },
   returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => match.getActiveMatchByHost(ctx, args),
+});
+
+// ── Public Spectator Queries (no auth) ─────────────────────────────
+
+const vSeat = v.union(v.literal("host"), v.literal("away"));
+
+export const getSpectatorView = query({
+  args: { matchId: v.string(), seat: vSeat },
+  returns: v.union(v.any(), v.null()),
+  handler: async (ctx, { matchId, seat }) => {
+    const rawView = await match.getPlayerView(ctx, { matchId, seat });
+    if (!rawView) return null;
+    let view: Record<string, unknown>;
+    try { view = JSON.parse(rawView); } catch { return null; }
+
+    const [meta, storyMatch, cardLookup] = await Promise.all([
+      match.getMatchMeta(ctx, { matchId }),
+      ctx.db.query("storyMatches").withIndex("by_matchId", (q: any) => q.eq("matchId", matchId)).first(),
+      getCachedCardLookup(ctx),
+    ]);
+
+    return buildPublicSpectatorView({
+      matchId,
+      seat,
+      status: (meta as any)?.status ?? null,
+      mode: (meta as any)?.mode ?? null,
+      chapterId: storyMatch?.chapterId ?? null,
+      stageNumber: storyMatch?.stageNumber ?? null,
+      view,
+      cardLookup,
+    });
+  },
+});
+
+export const getSpectatorEventsPaginated = query({
+  args: { matchId: v.string(), seat: vSeat, paginationOpts: paginationOptsValidator },
+  returns: v.any(),
+  handler: async (ctx, { matchId, seat, paginationOpts }) => {
+    const paginated = await match.getRecentEventsPaginated(ctx, { matchId, paginationOpts });
+    const page = Array.isArray((paginated as any)?.page) ? (paginated as any).page : [];
+    return { ...(paginated as any), page: buildPublicEventLog({ batches: page, agentSeat: seat }) };
+  },
 });
 
 // ── Story Match Context ─────────────────────────────────────────────
@@ -2325,5 +2419,111 @@ export const completeStoryStage = mutation({
         firstClearBonus: 0,
       },
     };
+  },
+});
+
+// ── Match Presence & PvP Disconnect Timer ─────────────────────────
+
+const PVP_DISCONNECT_TIMEOUT_MS = 60_000; // 60s without heartbeat → auto-surrender
+const PVP_DISCONNECT_CHECK_INTERVAL_MS = 15_000; // re-check every 15s
+
+export const upsertMatchPresence = mutation({
+  args: {
+    matchId: v.string(),
+    platform: v.union(
+      v.literal("web"),
+      v.literal("telegram"),
+      v.literal("discord"),
+      v.literal("embedded"),
+      v.literal("agent"),
+      v.literal("cpu"),
+      v.literal("unknown"),
+    ),
+    source: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("matchPresence")
+      .withIndex("by_match_user", (q) =>
+        q.eq("matchId", args.matchId).eq("userId", user._id),
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        lastSeenAt: now,
+        platform: args.platform,
+        source: args.source,
+      });
+    } else {
+      await ctx.db.insert("matchPresence", {
+        matchId: args.matchId,
+        userId: user._id,
+        platform: args.platform,
+        source: args.source,
+        lastSeenAt: now,
+        createdAt: now,
+      });
+    }
+
+    return null;
+  },
+});
+
+export const checkPvpDisconnect = internalMutation({
+  args: { matchId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
+    if (!meta || (meta as any).status !== "active") return null;
+    if ((meta as any).mode !== "pvp") return null;
+    if ((meta as any).isAIOpponent) return null;
+
+    const now = Date.now();
+    const hostId = (meta as any).hostId as string;
+    const awayId = (meta as any).awayId as string;
+    if (!awayId) return null;
+
+    const presenceRows = await ctx.db
+      .query("matchPresence")
+      .withIndex("by_match", (q) => q.eq("matchId", args.matchId))
+      .collect();
+
+    const hostPresence = presenceRows.find((r) => r.userId === hostId);
+    const awayPresence = presenceRows.find((r) => r.userId === awayId);
+
+    const hostStale = !hostPresence || now - hostPresence.lastSeenAt > PVP_DISCONNECT_TIMEOUT_MS;
+    const awayStale = !awayPresence || now - awayPresence.lastSeenAt > PVP_DISCONNECT_TIMEOUT_MS;
+
+    // If both are stale or neither is stale, keep checking
+    if (hostStale === awayStale) {
+      // Both disconnected or both connected — schedule next check if match still active
+      if (!hostStale && !awayStale) {
+        await ctx.scheduler.runAfter(
+          PVP_DISCONNECT_CHECK_INTERVAL_MS,
+          internal.game.checkPvpDisconnect,
+          { matchId: args.matchId },
+        );
+      }
+      return null;
+    }
+
+    // One player is stale → auto-surrender them
+    const disconnectedSeat: "host" | "away" = hostStale ? "host" : "away";
+    try {
+      await match.submitAction(ctx, {
+        matchId: args.matchId,
+        command: JSON.stringify({ type: "SURRENDER" }),
+        seat: disconnectedSeat,
+      });
+    } catch {
+      // Match may have already ended
+    }
+
+    return null;
   },
 });

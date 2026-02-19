@@ -14,6 +14,8 @@ import { GameBoard } from "@/components/game/GameBoard";
 import { type Seat } from "@/components/game/hooks/useGameState";
 import { normalizeMatchId } from "@/lib/matchIds";
 import { postToHost } from "@/lib/iframe";
+import { useMatchPresence } from "@/hooks/useMatchPresence";
+import { BrandedLoader } from "@/components/layout/BrandedLoader";
 
 type MatchMeta = {
   status: string;
@@ -62,18 +64,6 @@ type StoryMatchEnd = {
   opponentLP: number;
 };
 
-type StoryLogBatch = {
-  version: number;
-  events: string;
-  seat?: string;
-  command?: string;
-  createdAt?: number;
-};
-
-type ParsedEvent = {
-  type?: string;
-  [key: string]: unknown;
-};
 
 export function Play() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -100,6 +90,9 @@ export function Play() {
 
   const playerSeat = resolvePlayerSeat(currentUser ?? null, meta, isStory);
   const endResult = resolveMatchResult(meta, playerSeat);
+
+  // Send presence heartbeats so the PvP disconnect timer knows we're connected
+  useMatchPresence(activeMatchId);
 
   useEffect(() => {
     if (!activeMatchId || !meta) return;
@@ -173,25 +166,14 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
   const [error, setError] = useState("");
   const [agentNextMatchId, setAgentNextMatchId] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
-  const [eventCursor, setEventCursor] = useState(0);
-  const [eventLog, setEventLog] = useState<string[]>([]);
   const storyDoneRef = useRef(false);
   const dialogueQueuedRef = useRef(false);
   const preMatchQueuedRef = useRef(false);
-  const eventCursorRef = useRef(0);
-
-  const rawEvents = useConvexQuery(
-    apiAny.game.getRecentEvents,
-    matchId ? { matchId, sinceVersion: eventCursor } : "skip",
-  ) as StoryLogBatch[] | undefined;
 
   const outcome = resolveStoryWon(meta?.winner, playerSeat);
   const won = completion ? completion.outcome === "won" : outcome;
 
   useEffect(() => {
-    eventCursorRef.current = 0;
-    setEventCursor(0);
-    setEventLog([]);
     setCompletion(null);
     setIsCompleting(false);
     setIsStartingNext(false);
@@ -202,42 +184,6 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
     dialogueQueuedRef.current = false;
     preMatchQueuedRef.current = false;
   }, [matchId]);
-
-  useEffect(() => {
-    if (!rawEvents || rawEvents.length === 0) return;
-
-    const lines: string[] = [];
-    let nextCursor = eventCursorRef.current;
-
-    for (const batch of rawEvents) {
-      if (typeof batch.version === "number") {
-        nextCursor = Math.max(nextCursor, batch.version);
-      }
-      const actor = batch.seat ?? "system";
-      const timestamp = batch.createdAt ? formatEventTime(batch.createdAt) : "tbd";
-      const resolvedEvents = parseMatchEvents(batch.events);
-      const commandType =
-        resolvedEvents.length === 0 && batch.command
-          ? safeParseCommand(batch.command)?.type ?? "command"
-          : "events";
-      if (resolvedEvents.length === 0) {
-        lines.push(`${timestamp} ${actor} ${commandType}`);
-      } else {
-        for (const event of resolvedEvents) {
-          lines.push(`${timestamp} ${actor} ${formatEngineEvent(event)}`);
-        }
-      }
-    }
-
-    if (lines.length) {
-      setEventLog((prev) => [...prev, ...lines].slice(-80));
-    }
-
-    if (nextCursor > eventCursorRef.current) {
-      eventCursorRef.current = nextCursor;
-      setEventCursor(nextCursor);
-    }
-  }, [rawEvents]);
 
   const preMatchDialogue = useMemo<DialogueLine[]>(() => {
     if (!storyCtx?.preMatchDialogue) return [];
@@ -340,6 +286,14 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
     meta.isAIOpponent,
   ]);
 
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   const handleCopyAgentMatch = useCallback(async () => {
     if (!agentNextMatchId) return;
 
@@ -349,17 +303,23 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
     } catch {
       setCopyMessage("Clipboard not available. Select and copy manually.");
     } finally {
-      setTimeout(() => setCopyMessage(""), 2200);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        setCopyMessage("");
+        copyTimerRef.current = null;
+      }, 2200);
     }
   }, [agentNextMatchId]);
 
   const handleCancelAgentMatch = useCallback(async () => {
     if (!agentNextMatchId) return;
+    const pendingMatchId = agentNextMatchId;
+    setAgentNextMatchId(null);
+    setCopyMessage("");
     try {
-      await cancelStoryMatch({ matchId: agentNextMatchId });
-      setAgentNextMatchId(null);
-      setCopyMessage("");
+      await cancelStoryMatch({ matchId: pendingMatchId });
     } catch (err: any) {
+      setAgentNextMatchId(pendingMatchId);
       setError(err.message ?? "Failed to cancel match lobby.");
     }
   }, [agentNextMatchId, cancelStoryMatch]);
@@ -430,7 +390,6 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
           </div>
         )}
         {error && <p className="mt-2 text-center text-xs text-[#666]">{error}</p>}
-        <StoryEventLog log={eventLog} />
       </div>
     );
   }
@@ -443,7 +402,6 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
           Resolving story stage...
         </p>
         {error && <p className="text-red-600 text-xs mt-2">{error}</p>}
-        <StoryEventLog log={eventLog} />
       </div>
     );
   }
@@ -462,26 +420,6 @@ function StoryPlayFlow({ matchId, playerSeat, meta, storyCtx }: StoryPlayFlowPro
   return (
     <div className="relative h-screen">
       <GameBoard matchId={matchId} seat={playerSeat} onMatchEnd={handleMatchEnd} />
-      <StoryEventLog log={eventLog} />
-    </div>
-  );
-}
-
-function StoryEventLog({ log }: { log: string[] }) {
-  if (log.length === 0) return null;
-
-  return (
-    <div className="fixed right-2 left-2 md:left-4 top-2 md:top-3 max-w-xl md:max-w-2xl mx-auto">
-      <div className="paper-panel border border-[#121212] p-3 max-h-32 overflow-y-auto bg-white/95 backdrop-blur">
-        <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-[#121212]">
-          Match Log
-        </p>
-        <div className="space-y-1 text-[10px] leading-tight text-[#666] font-mono">
-          {log.map((line, index) => (
-            <p key={`${index}-${line}`}>{line}</p>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -508,40 +446,6 @@ function normalizeDialogueLines(dialogue: unknown): DialogueLine[] {
   }
 
   return lines;
-}
-
-function formatEventTime(createdAt: number) {
-  const date = new Date(createdAt);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function parseMatchEvents(raw: string): ParsedEvent[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed as ParsedEvent[];
-  } catch {
-    return [];
-  }
-}
-
-function safeParseCommand(raw: string): ParsedEvent | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed === "object" && parsed !== null) {
-      return parsed as ParsedEvent;
-    }
-  } catch {}
-  return null;
-}
-
-function formatEngineEvent(event: ParsedEvent) {
-  if (typeof event.type === "string") {
-    const target = typeof event.target === "string" ? ` ${event.target}` : "";
-    return `${event.type}${target}`.trim();
-  }
-  return "event";
 }
 
 function resolveStoryWon(winner: string | null | undefined, seat: Seat): boolean {
@@ -573,11 +477,7 @@ function resolvePlayerSeat(
 // ── Helpers ──────────────────────────────────────────────────────
 
 function Loading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fdfdfb]">
-      <div className="w-8 h-8 border-4 border-[#121212] border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  return <BrandedLoader variant="light" message="Loading match..." />;
 }
 
 function CenterMessage({ children }: { children: React.ReactNode }) {

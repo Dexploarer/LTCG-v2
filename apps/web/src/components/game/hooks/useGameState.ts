@@ -230,7 +230,7 @@ function normalizeBoardCards(value: unknown): GameCardInstance[] {
 function normalizeBoardCard(value: unknown): GameCardInstance | null {
   if (!isRecord(value)) return null;
   const cardId = toString(value.cardId);
-  const definitionId = toString(value.definitionId);
+  const definitionId = toString(value.definitionId) ?? cardId;
   if (!cardId || !definitionId) return null;
 
   const boosts = isRecord(value.temporaryBoosts) ? value.temporaryBoosts : null;
@@ -266,7 +266,7 @@ function normalizeSpellTrapCards(value: unknown): GameSpellTrapInstance[] {
 function normalizeSpellTrapCard(value: unknown): GameSpellTrapInstance | null {
   if (!isRecord(value)) return null;
   const cardId = toString(value.cardId);
-  const definitionId = toString(value.definitionId);
+  const definitionId = toString(value.definitionId) ?? cardId;
   if (!cardId || !definitionId) return null;
 
   return {

@@ -492,6 +492,36 @@ export default defineSchema(
       .index("by_run_state", ["runId", "state"])
       .index("by_claim_token", ["claimToken"]),
 
+    // Telegram identity linking (maps Telegram users to LTCG users)
+    telegramIdentities: defineTable({
+      userId: v.string(),
+      telegramUserId: v.string(),
+      username: v.optional(v.string()),
+      firstName: v.optional(v.string()),
+      privateChatId: v.optional(v.string()),
+      lastSeenAt: v.number(),
+      linkedAt: v.number(),
+    })
+      .index("by_userId", ["userId"])
+      .index("by_telegramUserId", ["telegramUserId"]),
+
+    // One-time action tokens for Telegram inline buttons
+    telegramActionTokens: defineTable({
+      token: v.string(),
+      matchId: v.string(),
+      seat: v.union(v.literal("host"), v.literal("away")),
+      commandJson: v.string(),
+      expectedVersion: v.optional(v.number()),
+      expiresAt: v.number(),
+      createdAt: v.number(),
+    }).index("by_token", ["token"]),
+
+    // Idempotency guard for Telegram webhook updates
+    telegramProcessedUpdates: defineTable({
+      updateId: v.number(),
+      processedAt: v.number(),
+    }).index("by_updateId", ["updateId"]),
+
     studioPromotions: defineTable({
       promotionId: v.string(),
       runId: v.optional(v.string()),

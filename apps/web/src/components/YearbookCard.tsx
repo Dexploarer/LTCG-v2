@@ -133,7 +133,7 @@ export function YearbookCard({
                   className="w-28 h-28 border-4 border-[#121212] bg-white flex items-center justify-center overflow-hidden"
                   style={{ boxShadow: "4px 4px 0px rgba(18,18,18,0.8)" }}
                 >
-                <img
+                  <img
                     src={entry.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.name}`}
                     alt={entry.name}
                     className="w-24 h-24 object-cover"

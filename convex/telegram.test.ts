@@ -12,7 +12,7 @@ function toHex(bytes: Uint8Array): string {
 async function hmacSha256Raw(keyBytes: Uint8Array, data: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes as unknown as BufferSource,
+    keyBytes.buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],

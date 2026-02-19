@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { mask } from "@lunchtable-tcg/engine";
 import type { GameState, Seat } from "@lunchtable-tcg/engine";
 
@@ -132,6 +133,30 @@ export const getRecentEvents = query({
       .collect();
 
     return mapRecentEventsRows(recentEvents);
+  },
+});
+
+/**
+ * Paginated variant of recent events for timeline UIs.
+ * Ordered newest-first so clients can render the latest action immediately.
+ */
+export const getRecentEventsPaginated = query({
+  args: {
+    matchId: v.id("matches"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const pageResult = await ctx.db
+      .query("matchEvents")
+      .withIndex("by_match_version", (q) => q.eq("matchId", args.matchId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    return {
+      ...pageResult,
+      page: mapRecentEventsRows(pageResult.page),
+    };
   },
 });
 

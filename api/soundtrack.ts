@@ -147,7 +147,7 @@ function playlistsFromTrackBlobs(blobs: TrackBlobEntry[]): SoundtrackPlaylists |
   };
 
   for (const blob of blobs) {
-    pushUnique(playlists.default, blob.url);
+    pushUnique(playlists.default!, blob.url);
     const contexts = classifyBlobTrack(blob.pathname);
     const routedContexts = contexts.length > 0 ? contexts : ["play"];
 
@@ -159,7 +159,7 @@ function playlistsFromTrackBlobs(blobs: TrackBlobEntry[]): SoundtrackPlaylists |
 
   for (const key of ["landing", "play", "story", "watch"] as const) {
     if (!playlists[key] || playlists[key].length === 0) {
-      playlists[key] = playlists.default.slice(0, 4);
+      playlists[key] = playlists.default!.slice(0, 4);
     }
   }
 

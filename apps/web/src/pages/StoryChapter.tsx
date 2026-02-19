@@ -179,13 +179,15 @@ function StoryChapterInner() {
 
   const handleCancelAgentMatch = async () => {
     if (!agentMatch?.matchId) return;
+    const pendingMatch = agentMatch;
+    setAgentMatch(null);
+    setCopyMessage("");
     try {
       await cancelStoryMatch({
-        matchId: agentMatch.matchId,
+        matchId: pendingMatch.matchId,
       }) as { canceled: boolean };
-      setAgentMatch(null);
-      setCopyMessage("");
     } catch (err: any) {
+      setAgentMatch(pendingMatch);
       setError(err.message ?? "Failed to cancel match lobby.");
     }
   };

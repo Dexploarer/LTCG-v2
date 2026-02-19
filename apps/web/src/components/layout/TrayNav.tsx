@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { usePrivy, useLogout } from "@privy-io/react-auth";
+import { motion, AnimatePresence } from "framer-motion";
 import { storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { LOGO, DECO_PILLS, DECO_SHIELD, MENU_TEXTURE } from "@/lib/blobUrls";
 import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
@@ -93,20 +94,26 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
         </button>
       </div>
 
-      {/* Backdrop */}
-      <div
-        className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${
-          menuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => setMenuOpen(false)}
-      />
+      {/* Backdrop + Off-canvas tray menu */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 bg-black/60 z-40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMenuOpen(false)}
+            />
 
-      {/* Off-canvas tray menu */}
-      <div
-        className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out ${
-          menuOpen ? "translate-y-0" : "translate-y-full"
-        }`}
-      >
+            <motion.div
+              className="fixed bottom-0 left-0 right-0 z-50"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            >
         {/* Torn paper top edge */}
         <div
           className="h-4 w-full"
@@ -138,52 +145,32 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
 
           {/* Image nav row */}
           <div className="relative flex items-end justify-center gap-4 md:gap-6 mb-4 px-2">
-            {/* Home */}
-            <button
-              onClick={() => { setMenuOpen(false); navigate("/"); }}
-              className="tray-icon-btn relative group"
-              title="Home"
-            >
-              <img
-                src={LOGO}
-                alt="Home"
-                className="h-20 md:h-16 w-auto brightness-110 contrast-110 hover:brightness-125 transition-all drop-shadow-[0_2px_12px_rgba(255,255,255,0.5)]"
-                draggable={false}
-              />
-              <span className="tray-tooltip">Home</span>
-            </button>
-
-            {/* Pill bottle → $LUNCH / Token */}
-            <button
-              onClick={() => { setMenuOpen(false); navigate("/token"); }}
-              className="tray-icon-btn relative group"
-              title="$LUNCH"
-            >
-              <img
-                src={DECO_PILLS}
-                alt="$LUNCH"
-                className="h-20 md:h-16 w-auto brightness-110 contrast-110 hover:brightness-125 transition-all drop-shadow-[0_2px_12px_rgba(255,255,255,0.5)]"
-                draggable={false}
-                loading="lazy"
-              />
-              <span className="tray-tooltip">$LUNCH</span>
-            </button>
-
-            {/* Shield/Anchor → Legal */}
-            <button
-              onClick={() => { setMenuOpen(false); navigate("/privacy"); }}
-              className="tray-icon-btn relative group"
-              title="Legal"
-            >
-              <img
-                src={DECO_SHIELD}
-                alt="Privacy & Legal"
-                className="h-20 md:h-16 w-auto brightness-110 contrast-110 hover:brightness-125 transition-all drop-shadow-[0_2px_12px_rgba(255,255,255,0.5)]"
-                draggable={false}
-                loading="lazy"
-              />
-              <span className="tray-tooltip">Legal</span>
-            </button>
+            {[
+              { src: LOGO, alt: "Home", label: "Home", path: "/", delay: 0 },
+              { src: DECO_PILLS, alt: "$LUNCH", label: "$LUNCH", path: "/token", delay: 0.05 },
+              { src: DECO_SHIELD, alt: "Privacy & Legal", label: "Legal", path: "/privacy", delay: 0.1 },
+            ].map((item) => (
+              <motion.button
+                key={item.path}
+                onClick={() => { setMenuOpen(false); navigate(item.path); }}
+                className="tray-icon-btn relative group"
+                title={item.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: item.delay, type: "spring", stiffness: 300, damping: 20 }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <img
+                  src={item.src}
+                  alt={item.alt}
+                  className="h-20 md:h-16 w-auto brightness-110 contrast-110 hover:brightness-125 transition-all drop-shadow-[0_2px_12px_rgba(255,255,255,0.5)]"
+                  draggable={false}
+                  loading="lazy"
+                />
+                <span className="tray-tooltip">{item.label}</span>
+              </motion.button>
+            ))}
           </div>
 
           {/* Desktop: Legal sub-links */}
@@ -209,27 +196,33 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
 
           {/* Text links */}
           <div className="relative flex flex-wrap justify-center gap-x-5 gap-y-1 max-w-md mx-auto">
-            {textLinks.map((item) =>
+            {textLinks.map((item, i) =>
               "href" in item ? (
-                <a
+                <motion.a
                   key={item.label}
                   href={item.href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-2 py-1 text-[clamp(1rem,2.5vw,1.25rem)] font-bold uppercase tracking-wider text-white hover:text-[#ffcc00] transition-colors"
                   style={{ fontFamily: "Permanent Marker, cursive", textShadow: "2px 2px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000" }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + i * 0.03 }}
                 >
                   {item.label}
-                </a>
+                </motion.a>
               ) : (
-                <button
+                <motion.button
                   key={item.label}
                   onClick={() => goTo(item.path, item.auth)}
                   className="px-2 py-1 text-[clamp(1rem,2.5vw,1.25rem)] font-bold uppercase tracking-wider text-white hover:text-[#ffcc00] transition-colors"
                   style={{ fontFamily: "Permanent Marker, cursive", textShadow: "2px 2px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000" }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + i * 0.03 }}
                 >
                   {item.label}
-                </button>
+                </motion.button>
               ),
             )}
           </div>
@@ -259,7 +252,10 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
             tap outside to close
           </p>
         </div>
-      </div>
+      </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -10,7 +10,14 @@
       "category": "game",
       "launchType": "connect",
       "launchUrl": "https://lunchtable.app",
-      "capabilities": ["observe", "control", "story-mode", "pvp", "spectate", "chat"],
+      "capabilities": [
+        "observe",
+        "control",
+        "story-mode",
+        "pvp",
+        "spectate",
+        "chat"
+      ],
       "minPlayers": 1,
       "maxPlayers": 2,
       "viewer": {

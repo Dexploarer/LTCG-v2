@@ -120,9 +120,9 @@ function errorResponse(message: string, status = 400) {
 	return jsonResponse({ error: message }, status);
 }
 
-async function parseRequestJson(request: Request) {
+async function parseRequestJson(request: Request): Promise<Record<string, any>> {
 	try {
-		return await request.json();
+		return (await request.json()) as Record<string, any>;
 	} catch {
 		return {};
 	}
@@ -187,7 +187,7 @@ corsRoute({
 	path: "/api/agent/register",
 	method: "POST",
 	handler: async (ctx, request) => {
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { name } = body;
 
 		if (
@@ -275,7 +275,7 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { chapterId, stageNumber } = body;
 
 		if (!chapterId || typeof chapterId !== "string") {
@@ -320,7 +320,7 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { matchId } = body;
 
 		if (!matchId || typeof matchId !== "string") {
@@ -346,7 +346,7 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { matchId, command, seat: requestedSeat, expectedVersion } = body;
 
 		if (!matchId || !command) {
@@ -575,7 +575,7 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { deckCode } = body;
 
 		if (!deckCode || typeof deckCode !== "string") {
@@ -659,7 +659,7 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const body = await request.json();
+		const body = (await request.json()) as Record<string, any>;
 		const { matchId } = body;
 
 		if (!matchId || typeof matchId !== "string") {

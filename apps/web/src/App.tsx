@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-ro
 import { lazy, Suspense, useEffect } from "react";
 import * as Sentry from "@sentry/react";
 import { Toaster } from "sonner";
+import { AnimatePresence } from "framer-motion";
 import { useIframeMode } from "@/hooks/useIframeMode";
 import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -9,6 +10,9 @@ import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
 import { AudioContextGate, AudioControlsDock, useAudio } from "@/components/audio/AudioProvider";
 import { getAudioContextFromPath } from "@/lib/audio/routeContext";
 import { sendChatToHost } from "@/lib/iframe";
+import { Breadcrumb, BreadcrumbSpacer } from "@/components/layout/Breadcrumb";
+import { PageTransition, FastPageTransition } from "@/components/layout/PageTransition";
+import { BrandedLoader } from "@/components/layout/BrandedLoader";
 import { Home } from "@/pages/Home";
 
 const Onboarding = lazy(() => import("@/pages/Onboarding").then(m => ({ default: m.Onboarding })));
@@ -24,7 +28,6 @@ const Token = lazy(() => import("@/pages/Token").then(m => ({ default: m.Token }
 const AgentDev = lazy(() => import("@/pages/AgentDev").then(m => ({ default: m.AgentDev })));
 const Leaderboard = lazy(() => import("@/pages/Leaderboard").then(m => ({ default: m.Leaderboard })));
 const Watch = lazy(() => import("@/pages/Watch").then(m => ({ default: m.Watch })));
-const Studio = lazy(() => import("@/pages/Studio").then(m => ({ default: m.Studio })));
 const DeckBuilder = lazy(() => import("@/pages/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const Cliques = lazy(() => import("@/pages/Cliques").then(m => ({ default: m.Cliques })));
 const Profile = lazy(() => import("@/pages/Profile").then(m => ({ default: m.Profile })));
@@ -61,11 +64,7 @@ function PageErrorFallback({ resetError }: { resetError: () => void }) {
 }
 
 function PageLoader() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fdfdfb]">
-      <div className="w-8 h-8 border-4 border-[#ffcc00] border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  return <BrandedLoader variant="light" />;
 }
 
 function RouteAudioContextSync() {
@@ -120,6 +119,13 @@ function IframeCommandRouter({
   return null;
 }
 
+/** Hide audio dock on the game board to prevent overlap with LP bars. */
+function RouteAwareAudioDock() {
+  const location = useLocation();
+  if (location.pathname.startsWith("/play/")) return null;
+  return <AudioControlsDock />;
+}
+
 function Guarded({ children }: { children: React.ReactNode }) {
   return (
     <Sentry.ErrorBoundary fallback={PageErrorFallback}>
@@ -137,6 +143,41 @@ function Public({ children }: { children: React.ReactNode }) {
         {children}
       </Suspense>
     </Sentry.ErrorBoundary>
+  );
+}
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  const isPlay = location.pathname.startsWith("/play/");
+  const Wrap = isPlay ? FastPageTransition : PageTransition;
+
+  return (
+    <AnimatePresence mode="wait">
+      <Wrap key={location.pathname}>
+        <SentryRoutes location={location}>
+          <Route path="/" element={<Public><Home /></Public>} />
+          <Route path="/privacy" element={<Public><Privacy /></Public>} />
+          <Route path="/terms" element={<Public><Terms /></Public>} />
+          <Route path="/about" element={<Public><About /></Public>} />
+          <Route path="/token" element={<Public><Token /></Public>} />
+          <Route path="/agent-dev" element={<Public><AgentDev /></Public>} />
+          <Route path="/leaderboard" element={<Public><Leaderboard /></Public>} />
+          <Route path="/watch" element={<Public><Watch /></Public>} />
+
+          <Route path="/onboarding" element={<Guarded><Onboarding /></Guarded>} />
+          <Route path="/collection" element={<Guarded><Collection /></Guarded>} />
+          <Route path="/story" element={<Guarded><Story /></Guarded>} />
+          <Route path="/story/:chapterId" element={<Guarded><StoryChapter /></Guarded>} />
+          <Route path="/pvp" element={<Guarded><Pvp /></Guarded>} />
+          <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
+          <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
+          <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
+          <Route path="/profile" element={<Guarded><Profile /></Guarded>} />
+          <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
+          <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
+        </SentryRoutes>
+      </Wrap>
+    </AnimatePresence>
   );
 }
 
@@ -182,31 +223,11 @@ export function App() {
   return (
     <BrowserRouter>
       <RouteAudioContextSync />
+      <Breadcrumb />
+      <BreadcrumbSpacer />
       <IframeCommandRouter command={startMatchCommand} clearCommand={clearStartMatchCommand} />
-      <SentryRoutes>
-        <Route path="/" element={<Public><Home /></Public>} />
-        <Route path="/privacy" element={<Public><Privacy /></Public>} />
-        <Route path="/terms" element={<Public><Terms /></Public>} />
-        <Route path="/about" element={<Public><About /></Public>} />
-        <Route path="/token" element={<Public><Token /></Public>} />
-        <Route path="/agent-dev" element={<Public><AgentDev /></Public>} />
-        <Route path="/studio" element={<Public><Studio /></Public>} />
-        <Route path="/leaderboard" element={<Public><Leaderboard /></Public>} />
-        <Route path="/watch" element={<Public><Watch /></Public>} />
-
-        <Route path="/onboarding" element={<Guarded><Onboarding /></Guarded>} />
-        <Route path="/collection" element={<Guarded><Collection /></Guarded>} />
-        <Route path="/story" element={<Guarded><Story /></Guarded>} />
-        <Route path="/story/:chapterId" element={<Guarded><StoryChapter /></Guarded>} />
-        <Route path="/pvp" element={<Guarded><Pvp /></Guarded>} />
-        <Route path="/decks" element={<Guarded><Decks /></Guarded>} />
-        <Route path="/decks/:deckId" element={<Guarded><DeckBuilder /></Guarded>} />
-        <Route path="/cliques" element={<Guarded><Cliques /></Guarded>} />
-        <Route path="/profile" element={<Guarded><Profile /></Guarded>} />
-        <Route path="/settings" element={<Guarded><Settings /></Guarded>} />
-        <Route path="/play/:matchId" element={<Guarded><Play /></Guarded>} />
-      </SentryRoutes>
-      <AudioControlsDock />
+      <AnimatedRoutes />
+      <RouteAwareAudioDock />
       <Toaster
         position={isEmbedded ? "bottom-center" : "bottom-right"}
         toastOptions={{

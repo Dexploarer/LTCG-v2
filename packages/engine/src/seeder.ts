@@ -32,6 +32,16 @@ export interface ConvexCardRow {
  * Inverse of toConvexCardRows. Accepts the _id from Convex as the `id` field.
  */
 export function fromConvexCardRow(row: ConvexCardRow & { _id: string }): CardDefinition {
+  const effects = parseCSVAbilities(row.ability);
+  // Prefix effect IDs with the card ID to make them globally unique,
+  // preventing cross-card OPT/HOPT collisions (e.g. two different cards
+  // both having "eff_0" would block each other's once-per-turn effects).
+  if (effects) {
+    for (const eff of effects) {
+      eff.id = `${row._id}:${eff.id}`;
+    }
+  }
+
   return {
     id: row._id,
     name: row.name,
@@ -45,7 +55,7 @@ export function fromConvexCardRow(row: ConvexCardRow & { _id: string }): CardDef
     archetype: row.archetype,
     spellType: row.spellType as SpellType | undefined,
     trapType: row.trapType as TrapType | undefined,
-    effects: parseCSVAbilities(row.ability),
+    effects,
     viceType: row.viceType,
     flavorText: row.flavorText,
     imageUrl: row.imageUrl,

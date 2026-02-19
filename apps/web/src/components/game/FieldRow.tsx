@@ -1,3 +1,4 @@
+import { AnimatePresence } from "framer-motion";
 import type { BoardCard } from "./types";
 import { BoardSlot } from "./BoardSlot";
 
@@ -21,23 +22,28 @@ export function FieldRow({
   const slots = Array.from({ length: maxSlots });
 
   return (
-    <div className="flex gap-1 justify-center">
-      {slots.map((_, i) => {
-        const cardIndex = reversed ? cards.length - 1 - i : i;
-        const card = cards[cardIndex];
-        const cardDef = card ? cardLookup[card.definitionId] : undefined;
-        const isHighlighted = card && highlightIds?.has(card.cardId);
+    <div className="flex justify-center overflow-visible" style={{ gap: "clamp(6px, 1vw, 12px)", transformStyle: "preserve-3d" }}>
+      <AnimatePresence mode="popLayout">
+        {slots.map((_, i) => {
+          const displayIndex = reversed ? maxSlots - 1 - i : i;
+          const card = cards[displayIndex];
+          const cardDef = card ? cardLookup[card.definitionId] : undefined;
+          const isHighlighted = card && highlightIds?.has(card.cardId);
+          const slotKey = card
+            ? `${card.cardId}-${card.faceDown ? "fd" : "fu"}`
+            : `empty-${displayIndex}`;
 
-        return (
-          <BoardSlot
-            key={i}
-            card={card}
-            cardDef={cardDef}
-            highlight={isHighlighted}
-            onClick={card && onSlotClick ? () => onSlotClick(card.cardId) : undefined}
-          />
-        );
-      })}
+          return (
+            <BoardSlot
+              key={slotKey}
+              card={card}
+              cardDef={cardDef}
+              highlight={isHighlighted}
+              onClick={card && onSlotClick ? () => onSlotClick(card.cardId) : undefined}
+            />
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }

@@ -28,8 +28,8 @@ const getRegisteredFunctions = (
   let match: RegExpExecArray | null = registeredFunctionPattern.exec(source);
 
   while (match) {
-    const name = match[1];
-    const kind = match[2];
+    const name = match[1]!;
+    const kind = match[2]!;
     const start = match.index;
     const handlerIndex = source.indexOf("handler:", start);
     expect(handlerIndex).toBeGreaterThan(start);

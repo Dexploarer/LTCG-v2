@@ -201,6 +201,7 @@ function executeHeal(
 function executeBoostAttack(
   state: GameState,
   action: Extract<EffectAction, { type: "boost_attack" }>,
+  activatingPlayer: Seat,
   sourceCardId: string,
   targets: string[]
 ): EngineEvent[] {
@@ -208,8 +209,15 @@ function executeBoostAttack(
   const expiresAt =
     action.duration === "turn" ? "end_of_turn" : "permanent";
 
-  // If no specific targets, apply to source card
-  const targetIds = targets.length > 0 ? targets : [sourceCardId];
+  // Resolve targets: explicit targets > source on board > all friendly monsters
+  let targetIds = targets.length > 0 ? targets : [sourceCardId];
+
+  // If the only target is the source and it's not on the board (e.g. spell card
+  // that went to graveyard), auto-target the activating player's board monsters.
+  if (targetIds.length === 1 && targetIds[0] === sourceCardId && !findBoardCard(state, sourceCardId)) {
+    const board = activatingPlayer === "host" ? state.hostBoard : state.awayBoard;
+    targetIds = board.map((c) => c.cardId);
+  }
 
   for (const targetId of targetIds) {
     const found = findBoardCard(state, targetId);
@@ -231,6 +239,7 @@ function executeBoostAttack(
 function executeBoostDefense(
   state: GameState,
   action: Extract<EffectAction, { type: "boost_defense" }>,
+  activatingPlayer: Seat,
   sourceCardId: string,
   targets: string[]
 ): EngineEvent[] {
@@ -238,8 +247,15 @@ function executeBoostDefense(
   const expiresAt =
     action.duration === "turn" ? "end_of_turn" : "permanent";
 
-  // If no specific targets, apply to source card
-  const targetIds = targets.length > 0 ? targets : [sourceCardId];
+  // Resolve targets: explicit targets > source on board > all friendly monsters
+  let targetIds = targets.length > 0 ? targets : [sourceCardId];
+
+  // If the only target is the source and it's not on the board (e.g. spell card
+  // that went to graveyard), auto-target the activating player's board monsters.
+  if (targetIds.length === 1 && targetIds[0] === sourceCardId && !findBoardCard(state, sourceCardId)) {
+    const board = activatingPlayer === "host" ? state.hostBoard : state.awayBoard;
+    targetIds = board.map((c) => c.cardId);
+  }
 
   for (const targetId of targetIds) {
     const found = findBoardCard(state, targetId);
@@ -477,9 +493,9 @@ export function executeAction(
     case "heal":
       return executeHeal(state, action, activatingPlayer);
     case "boost_attack":
-      return executeBoostAttack(state, action, sourceCardId, targets);
+      return executeBoostAttack(state, action, activatingPlayer, sourceCardId, targets);
     case "boost_defense":
-      return executeBoostDefense(state, action, sourceCardId, targets);
+      return executeBoostDefense(state, action, activatingPlayer, sourceCardId, targets);
     case "add_vice":
       return executeAddVice(state, action, targets);
     case "remove_vice":

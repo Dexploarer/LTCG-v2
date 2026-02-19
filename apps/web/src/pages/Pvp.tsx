@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { motion, AnimatePresence } from "framer-motion";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { LANDING_BG, MENU_TEXTURE } from "@/lib/blobUrls";
@@ -14,6 +15,8 @@ type PvpLobbySummary = {
   createdAt: number;
   activatedAt: number | null;
   endedAt: number | null;
+  pongEnabled: boolean;
+  redemptionEnabled: boolean;
 };
 
 type JoinResult = {
@@ -31,6 +34,22 @@ type CreateResult = {
   createdAt: number;
 };
 
+function createOptimisticLobby(visibility: "public" | "private"): PvpLobbySummary {
+  return {
+    matchId: `optimistic:${Date.now()}:${Math.floor(Math.random() * 1000)}`,
+    hostUserId: "__self__",
+    hostUsername: "You",
+    visibility,
+    joinCode: null,
+    status: "waiting",
+    createdAt: Date.now(),
+    activatedAt: null,
+    endedAt: null,
+    pongEnabled: false,
+    redemptionEnabled: false,
+  };
+}
+
 export function Pvp() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
@@ -38,14 +57,40 @@ export function Pvp() {
   const [joinCode, setJoinCode] = useState("");
   const [copied, setCopied] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [pongEnabled, setPongEnabled] = useState(false);
+  const [redemptionEnabled, setRedemptionEnabled] = useState(false);
 
   const myLobby = useConvexQuery(apiAny.game.getMyPvpLobby, {}) as PvpLobbySummary | null | undefined;
   const openLobbies = useConvexQuery(apiAny.game.listOpenPvpLobbies, {}) as PvpLobbySummary[] | undefined;
 
-  const createPvpLobby = useConvexMutation(apiAny.game.createPvpLobby);
-  const joinPvpLobby = useConvexMutation(apiAny.game.joinPvpLobby);
+  const createPvpLobby = useConvexMutation(apiAny.game.createPvpLobby).withOptimisticUpdate(
+    (localStore: any, args: { visibility?: "public" | "private" }) => {
+      const visibility = args.visibility === "private" ? "private" : "public";
+      localStore.setQuery(apiAny.game.getMyPvpLobby, {}, createOptimisticLobby(visibility));
+    },
+  );
+  const joinPvpLobby = useConvexMutation(apiAny.game.joinPvpLobby).withOptimisticUpdate(
+    (localStore: any, args: { matchId: string }) => {
+      const open = (localStore.getQuery(apiAny.game.listOpenPvpLobbies, {}) ?? []) as PvpLobbySummary[];
+      localStore.setQuery(
+        apiAny.game.listOpenPvpLobbies,
+        {},
+        open.filter((lobby) => lobby.matchId !== args.matchId),
+      );
+    },
+  );
   const joinPvpLobbyByCode = useConvexMutation(apiAny.game.joinPvpLobbyByCode);
-  const cancelPvpLobby = useConvexMutation(apiAny.game.cancelPvpLobby);
+  const cancelPvpLobby = useConvexMutation(apiAny.game.cancelPvpLobby).withOptimisticUpdate(
+    (localStore: any, args: { matchId: string }) => {
+      const current = localStore.getQuery(apiAny.game.getMyPvpLobby, {}) as
+        | PvpLobbySummary
+        | null
+        | undefined;
+      if (current && current.matchId === args.matchId) {
+        localStore.setQuery(apiAny.game.getMyPvpLobby, {}, null);
+      }
+    },
+  );
 
   const canCreate = !myLobby || myLobby.status !== "waiting";
   const sortedOpenLobbies = useMemo(
@@ -59,22 +104,38 @@ export function Pvp() {
     }
   }, [myLobby?.status, myLobby?.matchId, navigate]);
 
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const clearFlash = useCallback(() => {
-    setTimeout(() => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => {
       setMessage("");
       setCopied("");
+      flashTimerRef.current = null;
     }, 1800);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
+  const resetNotices = useCallback(() => {
+    setError("");
+    setMessage("");
+    setCopied("");
   }, []);
 
   const handleCreateLobby = useCallback(
     async (visibility: "public" | "private") => {
-      setError("");
-      setMessage("");
-      setCopied("");
+      resetNotices();
       setBusyKey(`create:${visibility}`);
       try {
         const created = (await createPvpLobby({
           visibility,
+          pongEnabled,
+          redemptionEnabled,
         })) as CreateResult;
         setMessage(
           visibility === "private"
@@ -88,14 +149,12 @@ export function Pvp() {
         setBusyKey(null);
       }
     },
-    [clearFlash, createPvpLobby],
+    [clearFlash, createPvpLobby, resetNotices],
   );
 
   const handleJoinLobby = useCallback(
     async (matchId: string) => {
-      setError("");
-      setMessage("");
-      setCopied("");
+      resetNotices();
       setBusyKey(`join:${matchId}`);
       try {
         const result = (await joinPvpLobby({ matchId })) as JoinResult;
@@ -106,7 +165,7 @@ export function Pvp() {
         setBusyKey(null);
       }
     },
-    [joinPvpLobby, navigate],
+    [joinPvpLobby, navigate, resetNotices],
   );
 
   const handleJoinByCode = useCallback(async () => {
@@ -116,9 +175,7 @@ export function Pvp() {
       return;
     }
 
-    setError("");
-    setMessage("");
-    setCopied("");
+    resetNotices();
     setBusyKey("join:code");
     try {
       const result = (await joinPvpLobbyByCode({
@@ -130,13 +187,11 @@ export function Pvp() {
     } finally {
       setBusyKey(null);
     }
-  }, [joinCode, joinPvpLobbyByCode, navigate]);
+  }, [joinCode, joinPvpLobbyByCode, navigate, resetNotices]);
 
   const handleCancelLobby = useCallback(async () => {
     if (!myLobby?.matchId) return;
-    setError("");
-    setMessage("");
-    setCopied("");
+    resetNotices();
     setBusyKey("cancel");
     try {
       await cancelPvpLobby({ matchId: myLobby.matchId });
@@ -147,7 +202,7 @@ export function Pvp() {
     } finally {
       setBusyKey(null);
     }
-  }, [cancelPvpLobby, clearFlash, myLobby?.matchId]);
+  }, [cancelPvpLobby, clearFlash, myLobby?.matchId, resetNotices]);
 
   const handleCopy = useCallback(async (value: string, label: "Join code" | "Match ID") => {
     try {
@@ -210,6 +265,31 @@ export function Pvp() {
                 {busyKey === "create:private" ? "Creating..." : "Create Private Lobby"}
               </button>
             </div>
+
+            {/* House rules toggles */}
+            <div className="mt-3 flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={pongEnabled}
+                  onChange={(e) => setPongEnabled(e.target.checked)}
+                  className="w-4 h-4 accent-[#ffcc00]"
+                />
+                <span className="text-[11px] font-bold uppercase text-[#121212]">Beer Pong</span>
+                <span className="text-[10px] text-[#666]">Pong shots after kills</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={redemptionEnabled}
+                  onChange={(e) => setRedemptionEnabled(e.target.checked)}
+                  className="w-4 h-4 accent-[#ffcc00]"
+                />
+                <span className="text-[11px] font-bold uppercase text-[#121212]">Redemption</span>
+                <span className="text-[10px] text-[#666]">Loser gets a redemption shot</span>
+              </label>
+            </div>
+
             {!canCreate && (
               <p className="text-[11px] text-[#555] mt-2">
                 You already have a waiting/active lobby below.
@@ -250,12 +330,17 @@ export function Pvp() {
 
         {myLobby?.status === "waiting" && (
           <section
-            className="relative mb-5 p-5 border-2 border-[#121212]"
+            className="relative mb-5 p-5 border-2 border-[#121212] animate-waiting-glow"
             style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
           >
             <div className="absolute inset-0 bg-white/82 pointer-events-none" />
             <div className="relative">
-              <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-2">
+              <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-2 flex items-center gap-2">
+                <motion.span
+                  className="inline-block w-2.5 h-2.5 rounded-full bg-[#ffcc00]"
+                  animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                />
                 Your Waiting Lobby
               </p>
               <p className="text-xs text-[#444] mb-1">
@@ -315,29 +400,50 @@ export function Pvp() {
               <p className="text-xs text-[#555]">No public lobbies are open right now.</p>
             ) : (
               <div className="space-y-2">
-                {sortedOpenLobbies.map((lobby) => (
-                  <div
-                    key={lobby.matchId}
-                    className="border border-[#121212]/30 bg-white/70 px-3 py-2 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold truncate">
-                        Host: {lobby.hostUsername}
-                      </p>
-                      <p className="text-[11px] text-[#555] font-mono truncate">
-                        {lobby.matchId}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleJoinLobby(lobby.matchId)}
-                      disabled={busyKey !== null}
-                      className="tcg-button px-3 py-2 text-[10px] shrink-0 disabled:opacity-60"
+                <AnimatePresence mode="popLayout">
+                  {sortedOpenLobbies.map((lobby, index) => (
+                    <motion.div
+                      key={lobby.matchId}
+                      className="border border-[#121212]/30 bg-white/70 px-3 py-2 flex items-center justify-between gap-2"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ delay: index * 0.05, type: "spring", stiffness: 300, damping: 25 }}
+                      layout
                     >
-                      {busyKey === `join:${lobby.matchId}` ? "Joining..." : "Join"}
-                    </button>
-                  </div>
-                ))}
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold truncate">
+                          Host: {lobby.hostUsername}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[11px] text-[#555] font-mono truncate">
+                            {lobby.matchId}
+                          </p>
+                          {lobby.pongEnabled && (
+                            <span className="inline-block bg-[#ffcc00] text-[#121212] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-wider">
+                              PONG
+                            </span>
+                          )}
+                          {lobby.redemptionEnabled && (
+                            <span className="inline-block bg-[#33ccff] text-[#121212] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-wider">
+                              REDEMPTION
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <motion.button
+                        type="button"
+                        onClick={() => handleJoinLobby(lobby.matchId)}
+                        disabled={busyKey !== null}
+                        className="tcg-button px-3 py-2 text-[10px] shrink-0 disabled:opacity-60"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {busyKey === `join:${lobby.matchId}` ? "Joining..." : "Join"}
+                      </motion.button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>

@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import { apiAny } from "@/lib/convexHelpers";
 
 type Seat = "host" | "away";
 
@@ -62,203 +64,90 @@ export type PublicEventLogEntry = {
   rationale: string;
 };
 
-type ActiveMatchResponse = {
-  matchId: string | null;
-  seat?: Seat | null;
-};
-
 export function clampSeat(value: unknown): Seat | null {
   return value === "host" || value === "away" ? value : null;
 }
 
-const POLL_INTERVAL_MS = 2000;
 const TIMELINE_LIMIT = 120;
-
-export function appendTimelineEntries(
-  previous: PublicEventLogEntry[],
-  incoming: PublicEventLogEntry[],
-  limit = TIMELINE_LIMIT,
-) {
-  return [...previous, ...incoming].slice(-limit);
-}
 
 export interface SpectatorAgent {
   id: string;
+  userId: string;
   name: string;
   apiKeyPrefix: string;
 }
 
 export function useAgentSpectator(apiKey: string | null, apiUrl: string | null) {
   const [agent, setAgent] = useState<SpectatorAgent | null>(null);
-  const [matchState, setMatchState] = useState<PublicSpectatorView | null>(null);
-  const [timeline, setTimeline] = useState<PublicEventLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [overrideMatchId, setOverrideMatchId] = useState<string | null>(null);
+  const [overrideSeat, setOverrideSeat] = useState<Seat | null>(null);
 
-  const activeMatchId = useRef<string | null>(null);
-  const activeMatchSeat = useRef<Seat | null>(null);
-  const eventCursor = useRef(0);
-  const mountedRef = useRef(true);
-
-  const apiFetch = useCallback(
-    async (path: string) => {
-      if (!apiKey || !apiUrl) return null;
-      const url = `${apiUrl.replace(/\/$/, "")}${path}`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!response.ok) return null;
-      return response.json();
-    },
-    [apiKey, apiUrl],
-  );
-
-  const resetTimeline = useCallback(() => {
-    eventCursor.current = 0;
-    setTimeline([]);
-  }, []);
-
+  // One-time HTTP call to identify the agent
   useEffect(() => {
-    if (!apiKey || !apiUrl) {
-      setLoading(false);
-      return;
-    }
-
+    if (!apiKey || !apiUrl) { setLoading(false); return; }
     let cancelled = false;
-
-    async function verify() {
+    (async () => {
       try {
-        const me = await apiFetch("/api/agent/me");
+        const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/agent/me`, {
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        });
         if (cancelled) return;
-        if (!me) {
-          setError("Invalid API key");
-          setLoading(false);
-          return;
-        }
-
+        if (!res.ok) { setError("Invalid API key"); setLoading(false); return; }
+        const me = await res.json();
+        if (cancelled) return;
         setAgent({
-          id: String(me.id),
+          id: String(me.id ?? ""),
+          userId: String(me.userId ?? ""),
           name: String(me.name ?? "Agent"),
           apiKeyPrefix: String(me.apiKeyPrefix ?? ""),
         });
         setError(null);
       } catch {
-        if (!cancelled) {
-          setError("Failed to connect");
-        }
+        if (!cancelled) setError("Failed to connect");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    }
+    })();
+    return () => { cancelled = true; };
+  }, [apiKey, apiUrl]);
 
-    verify();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiKey, apiUrl, apiFetch]);
+  // Auto-discover active match (uses Convex user _id, not agent doc _id)
+  const hostId = agent?.userId || null;
+  const autoMatch = useQuery(apiAny.game.getActiveMatchByHost, hostId ? { hostId } : "skip") as any;
 
+  const matchId = overrideMatchId ?? (autoMatch?._id as string) ?? null;
+  const seat: Seat = overrideSeat ?? (autoMatch?.hostId === hostId ? "host" : "away");
+  const matchArgs = matchId ? { matchId, seat } : "skip";
+
+  const matchState = useQuery(apiAny.game.getSpectatorView, matchArgs) as PublicSpectatorView | null | undefined;
+  const {
+    results: pagedEvents,
+    status: eventsStatus,
+    loadMore: loadMoreEvents,
+  } = usePaginatedQuery(apiAny.game.getSpectatorEventsPaginated, matchArgs, {
+    initialNumItems: 40,
+  });
+
+  // Pull enough history to fill the panel, then stop.
   useEffect(() => {
-    if (!agent) return;
-    mountedRef.current = true;
+    if (eventsStatus !== "CanLoadMore") return;
+    if (pagedEvents.length >= TIMELINE_LIMIT) return;
+    loadMoreEvents(Math.min(40, TIMELINE_LIMIT - pagedEvents.length));
+  }, [eventsStatus, pagedEvents.length, loadMoreEvents]);
 
-    async function poll() {
-      if (!mountedRef.current) return;
-
-      try {
-        if (activeMatchId.current) {
-          const query = new URLSearchParams({
-            matchId: activeMatchId.current,
-          });
-          if (activeMatchSeat.current) {
-            query.set("seat", activeMatchSeat.current);
-          }
-
-          const view = (await apiFetch(
-            `/api/agent/game/public-view?${query.toString()}`,
-          )) as PublicSpectatorView | null;
-          if (!mountedRef.current) return;
-
-          if (view) {
-            setMatchState(view);
-            activeMatchSeat.current = clampSeat(view.seat) ?? activeMatchSeat.current;
-
-            const eventsQuery = new URLSearchParams({
-              matchId: activeMatchId.current,
-              sinceVersion: String(eventCursor.current),
-            });
-            if (activeMatchSeat.current) {
-              eventsQuery.set("seat", activeMatchSeat.current);
-            }
-
-            const events = (await apiFetch(
-              `/api/agent/game/public-events?${eventsQuery.toString()}`,
-            )) as PublicEventLogEntry[] | null;
-            if (!mountedRef.current) return;
-
-            if (Array.isArray(events) && events.length > 0) {
-              let maxVersion = eventCursor.current;
-              for (const entry of events) {
-                maxVersion = Math.max(maxVersion, Number(entry.version ?? 0));
-              }
-              eventCursor.current = maxVersion;
-              setTimeline((prev) => appendTimelineEntries(prev, events, TIMELINE_LIMIT));
-            }
-
-            return;
-          }
-
-          activeMatchId.current = null;
-          activeMatchSeat.current = null;
-          setMatchState(null);
-          resetTimeline();
-        }
-
-        const activeMatch = (await apiFetch(
-          "/api/agent/active-match",
-        )) as ActiveMatchResponse | null;
-        if (!mountedRef.current || !activeMatch) return;
-
-        if (typeof activeMatch.matchId === "string" && activeMatch.matchId.trim()) {
-          if (activeMatchId.current !== activeMatch.matchId) {
-            resetTimeline();
-          }
-          activeMatchId.current = activeMatch.matchId;
-          activeMatchSeat.current = clampSeat(activeMatch.seat);
-        }
-      } catch {
-        // Keep polling on transient network failures.
-      }
-    }
-
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL_MS);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(interval);
-    };
-  }, [agent, apiFetch, resetTimeline]);
-
-  const watchMatch = useCallback(
-    (matchId: string, seat?: Seat) => {
-      activeMatchId.current = matchId;
-      activeMatchSeat.current = clampSeat(seat);
-      setMatchState(null);
-      resetTimeline();
-    },
-    [resetTimeline],
+  const timeline = useMemo(
+    // usePaginatedQuery returns newest-first when server query is order("desc").
+    // Keep oldest->newest for existing Timeline rendering semantics.
+    () => [...(pagedEvents.slice(0, TIMELINE_LIMIT) as PublicEventLogEntry[])].reverse(),
+    [pagedEvents],
   );
 
-  return {
-    agent,
-    matchState,
-    timeline,
-    error,
-    loading,
-    watchMatch,
-  };
+  const watchMatch = useCallback((id: string, s?: Seat) => {
+    setOverrideMatchId(id);
+    setOverrideSeat(clampSeat(s));
+  }, []);
+
+  return { agent, matchState: matchState ?? null, timeline, error, loading, watchMatch };
 }

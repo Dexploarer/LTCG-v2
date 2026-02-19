@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { useConvexAuth } from "convex/react";
+import { motion } from "framer-motion";
 import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
+
+const gridContainerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.02 } },
+};
+
+const cardTileVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } },
+};
 
 type CardDef = {
   _id: string;
@@ -123,7 +134,13 @@ export function Collection() {
             No cards match your filters.
           </p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <motion.div
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+            variants={gridContainerVariants}
+            initial="hidden"
+            animate="visible"
+            key={filter + search}
+          >
             {filtered.map((card) => (
               <CardTile
                 key={card._id}
@@ -131,7 +148,7 @@ export function Collection() {
                 owned={ownedIds.has(card._id)}
               />
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
@@ -173,9 +190,11 @@ function CardTile({ card, owned }: { card: CardDef; owned: boolean }) {
   const typeLabel = TYPE_LABELS[card.cardType] ?? card.cardType;
 
   return (
-    <div
-      className={`paper-panel p-4 transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(18,18,18,1)] ${!owned ? "opacity-40 grayscale" : ""
-        }`}
+    <motion.div
+      className={`paper-panel p-4 ${!owned ? "opacity-40 grayscale" : ""}`}
+      variants={cardTileVariants}
+      whileHover={{ y: -6, scale: 1.02, boxShadow: "6px 6px 0px 0px rgba(18,18,18,1)" }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       {/* Type badge */}
       <div className="flex items-center justify-between mb-2">
@@ -225,6 +244,6 @@ function CardTile({ card, owned }: { card: CardDef; owned: boolean }) {
           {card.flavorText}
         </p>
       )}
-    </div>
+    </motion.div>
   );
 }

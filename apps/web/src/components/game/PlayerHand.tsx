@@ -14,10 +14,11 @@ export function PlayerHand({
   onCardClick,
 }: PlayerHandProps) {
   return (
-    <div className="flex justify-center items-end py-2 overflow-x-auto hide-scrollbar">
+    <div className="overflow-visible" style={{ perspective: "600px" }}>
+    <div className="flex justify-center items-end pt-10 pb-2 overflow-visible" style={{ transformStyle: "preserve-3d" }}>
       {hand.map((cardId, i) => (
         <HandCard
-          key={cardId}
+          key={`${cardId}-${i}`}
           cardId={cardId}
           cardDef={cardLookup[cardId]}
           index={i}
@@ -26,6 +27,7 @@ export function PlayerHand({
           onClick={onCardClick ? () => onCardClick(cardId) : undefined}
         />
       ))}
+    </div>
     </div>
   );
 }

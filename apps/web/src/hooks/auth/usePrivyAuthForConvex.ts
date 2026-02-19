@@ -22,9 +22,8 @@ export function usePrivyAuthForConvex() {
   // Iframe + JWT → full Convex real-time auth
   const hasIframeJwtAuth = isEmbedded && isJwt;
 
-  // Iframe + API key → spectator mode, skip Convex auth
-  // The app still mounts with ConvexProviderWithAuth but won't be authenticated.
-  // Spectator components use useAgentSpectator (HTTP polling) instead.
+  // Iframe + API key → spectator mode, skip Convex auth.
+  // The Convex WebSocket still connects (for public queries), just unauthenticated.
   const isSpectatorMode = isEmbedded && isApiKey;
 
   const fetchAccessToken = useCallback(
