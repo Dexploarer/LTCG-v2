@@ -1,19 +1,322 @@
-name: Agent Review Trust Scoring
+name: Agent Review
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   pull_request_review:
     types: [submitted]
-  pull_request:
+  pull_request_target:
     types: [closed]
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
   issues: write
   pull-requests: write
+  checks: write
+  statuses: write
+
+concurrency:
+  group: agent-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Classify PR changes
+  # ---------------------------------------------------------------------------
+  classify:
+    if: >-
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    outputs:
+      category: ${{ steps.classify.outputs.category }}
+    steps:
+      - uses: actions/github-script@v7
+        id: classify
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            const filenames = files.map(f => f.filename).join(' ');
+            const title = (context.payload.pull_request.title || '').toLowerCase();
+
+            const aestheticPatterns = /\.(css|scss|svg|png|jpg|webp)$|theme|color|font|style|animation|design|ui.*polish/i;
+            const bugfixPatterns = /fix|bug|crash|error|broken|regression|hotfix/i;
+
+            let category = 'feature';
+            if (bugfixPatterns.test(title)) category = 'bugfix';
+            else if (aestheticPatterns.test(filenames) || aestheticPatterns.test(title)) category = 'aesthetic';
+
+            core.setOutput('category', category);
+            console.log(`PR classified as: ${category}`);
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Claude Code review (on PR open/sync)
+  # ---------------------------------------------------------------------------
+  review-pr:
+    needs: classify
+    if: >-
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    outputs:
+      verdict: ${{ steps.extract.outputs.verdict }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch contributor trust score
+        id: trust
+        env:
+          TRUST_STATE_PATH: .github/contributor-trust.json
+        run: |
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          if [ -f "$TRUST_STATE_PATH" ]; then
+            SCORE=$(node -e "
+              const fs = require('node:fs');
+              const data = JSON.parse(fs.readFileSync('$TRUST_STATE_PATH', 'utf8'));
+              const entry = (data.contributors || {})[process.argv[1]] || {};
+              console.log(entry.score || 0);
+            " "$AUTHOR" 2>/dev/null || echo "0")
+          else
+            SCORE=0
+          fi
+          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+
+          # Compute tier
+          if [ "$SCORE" -ge 100 ]; then TIER="legendary";
+          elif [ "$SCORE" -ge 50 ]; then TIER="trusted";
+          elif [ "$SCORE" -ge 20 ]; then TIER="established";
+          elif [ "$SCORE" -ge 5 ]; then TIER="contributing";
+          elif [ "$SCORE" -ge 0 ]; then TIER="probationary";
+          else TIER="restricted"; fi
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code review
+        id: claude_review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          allowed_tools: "Bash(git diff:*),Bash(git log:*),Bash(gh pr *),Read,Glob,Grep,LS"
+          prompt: |
+            You are reviewing PR #${{ github.event.pull_request.number }} by @${{ steps.trust.outputs.author }}.
+            Category: ${{ needs.classify.outputs.category }}
+            Trust tier: ${{ steps.trust.outputs.tier }} (score: ${{ steps.trust.outputs.score }})
+
+            ## Review Protocol
+
+            ### 1. Scope Check
+            - What files changed? Are changes in-scope for what the PR claims?
+            - Any unrelated changes bundled in?
+
+            ### 2. Code Quality
+            - TypeScript strict compliance (no `any` types without justification)
+            - Follows existing patterns in the codebase
+            - No over-engineering, no unnecessary abstractions
+            - Functions under 50 lines preferred, files under 500 lines
+
+            ### 3. Security Review
+            - Auth guards on all Convex mutations/queries that need them (`requireUser(ctx)`)
+            - No credential leaks, no `console.log` of secrets
+            - Input validation at system boundaries
+            - No XSS, injection, or prototype pollution vectors
+
+            ### 4. Test Coverage
+            - New features should have tests
+            - Bug fixes should have regression tests
+            - Integration tests for Convex functions
+
+            ### 5. Game Engine Integrity
+            - If engine changes: does `decide()` remain pure? Does `evolve()` remain deterministic?
+            - State mutations only through events
+            - No breaking changes to command types without migration
+
+            ### Trust-Calibrated Review
+            - legendary/trusted: Light review, focus on architecture only
+            - established/contributing: Standard review
+            - probationary/restricted: Deep review, verify every change
+
+            ## Output Format
+
+            End your review with exactly one of these on its own line:
+            - `VERDICT: APPROVE` — PR is good to merge
+            - `VERDICT: REQUEST_CHANGES` — Issues found that must be fixed
+            - `VERDICT: CLOSE` — PR should be closed (spam, out of scope, harmful)
+
+      - name: Extract verdict
+        id: extract
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Poll for the review comment
+            const prNumber = context.payload.pull_request.number;
+            let verdict = 'REQUEST_CHANGES'; // default safe
+
+            for (let attempt = 0; attempt < 5; attempt++) {
+              await new Promise(r => setTimeout(r, 3000));
+
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                per_page: 30,
+              });
+
+              // Check most recent comments for verdict
+              for (const comment of comments.reverse()) {
+                const body = comment.body || '';
+                const match = body.match(/VERDICT:\s*(APPROVE|REQUEST_CHANGES|CLOSE)/i);
+                if (match) {
+                  verdict = match[1].toUpperCase();
+                  break;
+                }
+              }
+
+              if (verdict !== 'REQUEST_CHANGES') break;
+            }
+
+            core.setOutput('verdict', verdict);
+            console.log(`Extracted verdict: ${verdict}`);
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Create check run from review result
+  # ---------------------------------------------------------------------------
+  review-postprocess:
+    needs: review-pr
+    if: always() && needs.review-pr.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create check run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const verdict = '${{ needs.review-pr.outputs.verdict }}' || 'REQUEST_CHANGES';
+            const conclusionMap = {
+              'APPROVE': 'success',
+              'REQUEST_CHANGES': 'failure',
+              'CLOSE': 'action_required',
+            };
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Agent Review',
+              head_sha: context.payload.pull_request.head.sha,
+              status: 'completed',
+              conclusion: conclusionMap[verdict] || 'failure',
+              output: {
+                title: `Agent Review: ${verdict}`,
+                summary: `Automated review verdict: **${verdict}**`,
+              },
+            });
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Auto-merge approved PRs (not targeting main)
+  # ---------------------------------------------------------------------------
+  auto-merge:
+    needs: review-pr
+    if: >-
+      needs.review-pr.outputs.verdict == 'APPROVE' &&
+      github.event.pull_request.base.ref != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for other checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha;
+            const maxWait = 15 * 60 * 1000; // 15 minutes
+            const start = Date.now();
+
+            while (Date.now() - start < maxWait) {
+              const { data: checkRuns } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sha,
+                per_page: 100,
+              });
+
+              const pending = checkRuns.check_runs.filter(
+                cr => cr.name !== 'Agent Review' && cr.status !== 'completed'
+              );
+
+              if (pending.length === 0) {
+                const failed = checkRuns.check_runs.filter(
+                  cr => cr.name !== 'Agent Review' &&
+                        cr.conclusion &&
+                        !['success', 'skipped', 'neutral'].includes(cr.conclusion)
+                );
+                if (failed.length > 0) {
+                  core.setFailed(`${failed.length} check(s) failed — skipping auto-merge`);
+                  return;
+                }
+                console.log('All checks passed');
+                return;
+              }
+
+              console.log(`Waiting for ${pending.length} check(s)...`);
+              await new Promise(r => setTimeout(r, 30000));
+            }
+
+            core.setFailed('Timed out waiting for checks');
+
+      - name: Merge PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: ${{ vars.AGENT_REVIEW_MERGE_METHOD || 'squash' }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --"$MERGE_METHOD" \
+            --auto || echo "::warning::Auto-merge failed — may need manual merge"
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Close PR if verdict is CLOSE
+  # ---------------------------------------------------------------------------
+  close-pr:
+    needs: review-pr
+    if: needs.review-pr.outputs.verdict == 'CLOSE'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              state: 'closed',
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: 'This PR was closed by automated review. See the review comment above for details.',
+            });
+
+  # ---------------------------------------------------------------------------
+  # Job 6: Trust scoring (on review submitted or PR closed)
+  # ---------------------------------------------------------------------------
   update-trust:
-    name: Update contributor trust state
+    if: >-
+      github.event_name == 'pull_request_review' ||
+      (github.event_name == 'pull_request_target' && github.event.action == 'closed')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -176,3 +479,33 @@ jobs:
                 body,
               });
             }
+
+  # ---------------------------------------------------------------------------
+  # Job 7: Triage new issues
+  # ---------------------------------------------------------------------------
+  triage-issue:
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-haiku-4-5-20251001
+          allowed_tools: "Bash(gh issue *),Read,Glob,Grep,LS"
+          prompt: |
+            Triage issue #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
+
+            Classify as one of:
+            - valid-bug: Clear bug report with reproduction steps
+            - needs-info: Missing details needed to investigate
+            - feature-request: Enhancement or new feature
+            - duplicate: Likely duplicate of existing issue
+            - close: Spam, off-topic, or not actionable
+
+            For valid bugs: add the `bug` label.
+            For feature requests: add the `enhancement` label.
+            For needs-info: add the `needs-info` label and ask for specifics.
+            For duplicates: reference the likely duplicate and add `duplicate` label.
+            For close: close the issue with a brief explanation.

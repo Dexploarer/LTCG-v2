@@ -12,6 +12,8 @@ build/
 .env
 .env.local
 .env.*.local
+.openai-key
+*.key
 
 # Logs
 *.log

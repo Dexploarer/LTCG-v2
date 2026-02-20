@@ -1,0 +1,29 @@
+# Default owner
+* @lunchtable-team
+
+# Game Engine (pure TS, zero deps)
+packages/engine/ @lunchtable-team
+
+# Convex Backend (shared, needs coordination)
+convex/ @lunchtable-team
+
+# Frontend domains
+apps/web/src/components/game/ @lunchtable-team
+apps/web/src/components/collection/ @lunchtable-team
+apps/web/src/components/story/ @lunchtable-team
+apps/web/src/components/auth/ @lunchtable-team
+apps/web/src/components/streaming/ @lunchtable-team
+
+# Convex components (isolated packages)
+packages/lunchtable-tcg-cards/ @lunchtable-team
+packages/lunchtable-tcg-match/ @lunchtable-team
+packages/lunchtable-tcg-story/ @lunchtable-team
+packages/lunchtable-tcg-guilds/ @lunchtable-team
+
+# ElizaOS Plugin
+packages/plugin-ltcg/ @lunchtable-team
+
+# CI/CD & Security
+.github/ @lunchtable-team
+package.json @lunchtable-team
+bun.lock @lunchtable-team

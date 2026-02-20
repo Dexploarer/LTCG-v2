@@ -6,47 +6,81 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  lint:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.5
-
       - name: Install dependencies
         env:
-          # Playwright downloads browsers in postinstall; skip for the default CI job.
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: bun install --frozen-lockfile
-
       - name: Lint
         run: bun run lint
 
-      - name: Type check
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Install dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: bun install --frozen-lockfile
+      - name: Type check all packages
         run: |
           bunx tsc --noEmit -p apps/web/tsconfig.json
-          bunx tsc --noEmit -p apps/card-studio/tsconfig.json
           bunx tsc --noEmit -p packages/engine/tsconfig.json
-          bunx tsc --noEmit -p packages/lunchtable-tcg-card-studio-sdk/tsconfig.json
           bunx tsc --noEmit -p packages/lunchtable-tcg-cards/tsconfig.json
           bunx tsc --noEmit -p packages/lunchtable-tcg-match/tsconfig.json
           bunx tsc --noEmit -p packages/lunchtable-tcg-story/tsconfig.json
+          bunx tsc --noEmit -p packages/lunchtable-tcg-guilds/tsconfig.json
           bunx tsc --noEmit -p packages/plugin-ltcg/tsconfig.json
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Install dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: bun install --frozen-lockfile
       - name: Verify package exports
         run: bun run test:package-exports
-
       - name: Run tests
         run: bun run test:once
 
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Install dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: bun install --frozen-lockfile
+      - name: Build web app
+        env:
+          VITE_CONVEX_URL: "https://placeholder.convex.cloud"
+        run: bun run build
+
   live-gameplay-core:
     runs-on: ubuntu-latest
-    needs: build
-
+    needs: [lint, typecheck, test, build]
     steps:
       - name: Check live gameplay config
         id: live_gameplay_config
@@ -71,7 +105,6 @@ jobs:
       - name: Install dependencies
         if: ${{ steps.live_gameplay_config.outputs.enabled == 'true' }}
         env:
-          # Install browsers explicitly to keep installs deterministic.
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: bun install --frozen-lockfile
 
@@ -107,3 +140,19 @@ jobs:
         with:
           name: live-gameplay-core
           path: artifacts/live-gameplay
+
+  ci-status:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, build]
+    if: always()
+    steps:
+      - name: Check CI status
+        run: |
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.typecheck.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.build.result }}" != "success" ]; then
+            echo "CI failed"
+            exit 1
+          fi
+          echo "All CI checks passed"

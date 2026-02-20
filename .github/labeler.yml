@@ -6,37 +6,91 @@ core:
           - 'packages/lunchtable-tcg-match/**'
           - 'packages/lunchtable-tcg-story/**'
           - 'packages/lunchtable-tcg-cards/**'
+          - 'packages/lunchtable-tcg-guilds/**'
           - 'convex/game.ts'
           - 'convex/matchAccess.ts'
           - 'convex/cliques.ts'
           - 'convex/agentAuth.ts'
+
+game-engine:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/engine/**'
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'apps/web/src/components/**'
+          - 'apps/web/src/pages/**'
+          - 'apps/web/src/globals.css'
+          - '**/*.css'
+          - '**/*.svg'
+
 security:
   - changed-files:
       - any-glob-to-any-file:
-          - 'convex/**'
+          - 'convex/auth.ts'
+          - 'convex/agentAuth.ts'
+          - 'convex/matchAccess.ts'
           - '.github/**'
           - 'package.json'
           - 'bun.lock'
+
 test:
   - changed-files:
       - any-glob-to-any-file:
           - '**/*.test.ts'
           - '**/*.test.tsx'
           - '**/__tests__/**'
-          - 'packages/**/*.spec.ts'
-          - 'apps/**/*.test.ts'
-          - 'apps/**/*.spec.ts'
+          - '**/*.spec.ts'
+
 docs:
   - changed-files:
       - any-glob-to-any-file:
           - 'docs/**'
           - '**/*.md'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'scripts/**'
+          - 'vercel.json'
+
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'bun.lock'
+          - 'tsconfig*.json'
+          - '**/tsconfig*.json'
+
+story-mode:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/lunchtable-tcg-story/**'
+          - 'apps/web/src/components/story/**'
+          - 'apps/web/src/pages/story/**'
+
+pvp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/lunchtable-tcg-match/**'
+          - 'apps/web/src/components/game/**'
+          - 'apps/web/src/pages/pvp/**'
+
+ai-agent:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/plugin-ltcg/**'
+          - 'convex/agentAuth.ts'
+          - 'scripts/live-gameplay/**'
+
 chore:
   - changed-files:
       - any-glob-to-any-file:
           - '.agent/**'
           - '.claude/**'
-          - '.github/**'
           - '.prettierignore'
           - 'README.md'
           - 'CLAUDE.md'

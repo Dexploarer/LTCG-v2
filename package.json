@@ -14,9 +14,14 @@
     "dev:convex": "bash scripts/convex-dev.sh dev",
     "dev:web": "cd apps/web && bun run dev",
     "check:manifests": "node scripts/validate-manifests.mjs",
-    "lint": "bun run check:manifests && bash -n cleanup.sh fix-packages.sh && echo \"lint: no-op\"",
+    "lint": "bun run check:manifests && bun run typecheck",
+    "typecheck": "bunx tsc --noEmit -p apps/web/tsconfig.json && bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/plugin-ltcg/tsconfig.json",
     "test": "vitest",
-    "test:once": "vitest run"
+    "test:once": "vitest run",
+    "test:package-exports": "node scripts/test-package-exports.mjs",
+    "test:live:core": "bun run scripts/live-gameplay/run.ts --suite=core",
+    "test:live:full": "bun run scripts/live-gameplay/run.ts --suite=full",
+    "test:live:soak": "bun run scripts/live-gameplay/run.ts --suite=soak"
   },
   "dependencies": {
     "@lunchtable-tcg/cards": "workspace:*",
@@ -33,6 +38,7 @@
     "@vercel/blob": "^2.2.0",
     "@vercel/node": "^5.6.5",
     "concurrently": "^9.2.1",
+    "convex-test": "^0.0.41",
     "typescript": "^5.8.0",
     "vitest": "^4.0.18"
   },
