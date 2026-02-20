@@ -107,11 +107,10 @@ export function Breadcrumb() {
       initial={{ y: -48, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="fixed top-0 left-0 right-0 z-30 h-12 px-3 flex items-center gap-2 bg-[#fdfdfb] border-b-2"
-      style={{ borderBottomColor: accentColor }}
+      className="fixed top-0 left-0 right-0 z-30 h-12 px-3 flex items-center gap-2 bg-[#fdfdfb]"
       aria-label="Breadcrumb"
     >
-      {/* Back button — comic "Back" image */}
+      {/* Back button -- comic "Back" image */}
       <button
         type="button"
         onClick={() => navigate(parentCrumb.path)}
@@ -163,7 +162,7 @@ export function Breadcrumb() {
                   />
                 </button>
               ) : isLast ? (
-                <span className="text-[#121212]">{crumb.label}</span>
+                <span className="text-[#121212] comic-stamp">{crumb.label}</span>
               ) : (
                 <button
                   type="button"
@@ -177,6 +176,12 @@ export function Breadcrumb() {
           );
         })}
       </ol>
+
+      {/* Skewed accent bar at bottom */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-1 clip-skew-left"
+        style={{ backgroundColor: accentColor }}
+      />
     </motion.nav>
   );
 }

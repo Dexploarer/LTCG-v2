@@ -2,7 +2,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { TrayNav } from "@/components/layout/TrayNav";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { TITLE, VICE_SPLASH, VICE_COUNTER, MENU_TEXTURE, viceImage } from "@/lib/blobUrls";
+import { TITLE, VICE_SPLASH, VICE_COUNTER, MENU_TEXTURE, MILUNCHLADY_HYPEBEAST, viceImage } from "@/lib/blobUrls";
+import { StickerBadge } from "@/components/ui/StickerBadge";
+import { SpeedLines } from "@/components/ui/SpeedLines";
+import { ComicImpactText } from "@/components/ui/ComicImpactText";
 
 const SOLANA_TOKEN = "DfC2mRB5SNF1eCQZPh2cGi5QhNQnm3jRNHwa5Rtkpump";
 
@@ -139,27 +142,39 @@ export function Token() {
         </div>
       </div>
 
-      {/* Vice counter icon */}
+      {/* Vice counter icon with speed lines */}
       <div className="relative z-10 flex justify-center py-6">
-        <img
-          src={VICE_COUNTER}
-          alt="Vice Counter"
-          className="h-20 md:h-28 w-auto opacity-60 invert"
-          draggable={false}
-        />
+        <div className="relative">
+          <SpeedLines intensity={1} />
+          <img
+            src={VICE_COUNTER}
+            alt="Vice Counter"
+            className="h-20 md:h-28 w-auto opacity-60 invert relative z-10"
+            draggable={false}
+          />
+        </div>
       </div>
 
       {/* Section title */}
       <div className="relative z-10 text-center mb-12 px-4 max-w-5xl mx-auto">
-        <motion.h2
-          className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#ffcc00] drop-shadow-[4px_4px_0px_rgba(0,0,0,1)] mb-2"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-          initial={{ opacity: 0, scale: 1.5, rotate: -5 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 200, damping: 15 }}
-        >
-          The 10 Vices
-        </motion.h2>
+        <div className="flex items-center justify-center gap-4 mb-2">
+          <motion.h2
+            className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#ffcc00] drop-shadow-[4px_4px_0px_rgba(0,0,0,1)]"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+            initial={{ opacity: 0, scale: 1.5, rotate: -5 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15 }}
+          >
+            The 10 Vices
+          </motion.h2>
+          <StickerBadge label="VICE" variant="stamp" rotation={-4} />
+        </div>
+
+        {/* Static decorative impact text */}
+        <div className="mb-3">
+          <ComicImpactText text="DANGEROUS" size="md" color="#ef4444" rotation={-6} />
+        </div>
+
         <p
           className="text-white/70 text-base md:text-lg"
           style={{ fontFamily: "Special Elite, cursive" }}
@@ -238,6 +253,16 @@ export function Token() {
             </div>
           </ViceCardReveal>
         ))}
+      </div>
+
+      {/* Character insert decoration */}
+      <div className="absolute bottom-24 right-4 z-[5] pointer-events-none hidden md:block">
+        <img
+          src={MILUNCHLADY_HYPEBEAST}
+          alt=""
+          className="h-32 w-auto opacity-40"
+          draggable={false}
+        />
       </div>
 
       {/* Bottom info */}

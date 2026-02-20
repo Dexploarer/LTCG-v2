@@ -8,9 +8,15 @@ import { TrayNav } from "@/components/layout/TrayNav";
 import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { useCardTilt } from "@/hooks/useCardTilt";
+import { SpeechBubble } from "@/components/ui/SpeechBubble";
+import { SpeedLines } from "@/components/ui/SpeedLines";
+import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
+import { ComicImpactText } from "@/components/ui/ComicImpactText";
+import { StickerBadge } from "@/components/ui/StickerBadge";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
   STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG, TTG_BG, PVP_BG,
+  TAPE, CIGGARETTE_TRAY,
 } from "@/lib/blobUrls";
 
 const panelVariants = {
@@ -30,6 +36,7 @@ function Panel({
   bgContain,
   children,
   onClick,
+  impactWord,
 }: {
   title: string;
   subtitle: string;
@@ -37,6 +44,7 @@ function Panel({
   bgContain?: boolean;
   children?: React.ReactNode;
   onClick?: () => void;
+  impactWord?: string;
 }) {
   const { tiltStyle, onMouseMove, onMouseLeave } = useCardTilt({ maxTilt: 6 });
 
@@ -91,6 +99,14 @@ function Panel({
         {bgImage && (
           <div className="absolute inset-[6%] bg-gradient-to-t from-black/80 via-black/30 to-transparent z-[2]" />
         )}
+
+        {/* Impact text on hover */}
+        {impactWord && (
+          <div className="absolute inset-0 z-[25] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <ComicImpactText text={impactWord} size="lg" color="#ffcc00" />
+          </div>
+        )}
+
         <div className="relative z-10 text-left p-[12%] pt-[20%] pl-[16%]">
           {children}
           <h2
@@ -154,37 +170,51 @@ export function Home() {
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
       />
 
+      {/* Floating decorations — tape + cigarette tray scattered behind panels */}
+      <DecorativeScatter
+        elements={[
+          { src: TAPE, size: 72, opacity: 0.12 },
+          { src: CIGGARETTE_TRAY, size: 56, opacity: 0.10 },
+          { src: TAPE, size: 64, opacity: 0.08 },
+          { src: CIGGARETTE_TRAY, size: 48, opacity: 0.10 },
+          { src: TAPE, size: 80, opacity: 0.09 },
+        ]}
+        seed={77}
+        className="z-[5]"
+      />
+
       {/* Header */}
       <header className="relative z-10 text-center pt-8 pb-4 px-4">
-        {/* Dramatic bounce-drop entrance for title */}
-        <motion.img
-          src={TITLE}
-          alt="LunchTable"
-          className="h-16 md:h-24 mx-auto drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
-          draggable={false}
-          initial={{ opacity: 0, scale: 0, rotate: -3 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 350, damping: 15 }}
-        />
-        {/* Typewriter clipPath reveal with blinking cursor */}
-        <motion.p
-          className="text-base md:text-lg text-[#ffcc00] drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] inline-block"
-          style={{
-            fontFamily: "Special Elite, cursive",
-            borderRight: "2px solid #ffcc00",
-          }}
+        {/* Speed lines behind the first panel area */}
+        <div className="relative">
+          <SpeedLines intensity={2} />
+          {/* Dramatic bounce-drop entrance for title */}
+          <motion.img
+            src={TITLE}
+            alt="LunchTable"
+            className="relative z-10 h-16 md:h-24 mx-auto drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
+            draggable={false}
+            initial={{ opacity: 0, scale: 0, rotate: -3 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 350, damping: 15 }}
+          />
+        </div>
+        {/* SpeechBubble subtitle */}
+        <motion.div
+          className="inline-block mt-2"
           initial={{ clipPath: "inset(0 100% 0 0)", opacity: 1 }}
-          animate={{
-            clipPath: "inset(0 0% 0 0)",
-            borderRightColor: ["#ffcc00", "transparent", "#ffcc00", "transparent", "#ffcc00"],
-          }}
-          transition={{
-            clipPath: { delay: 0.25, duration: 0.55, ease: "easeOut" },
-            borderRightColor: { delay: 0.8, duration: 0.9, times: [0, 0.25, 0.5, 0.75, 1], repeat: 3, repeatDelay: 0.1 },
-          }}
+          animate={{ clipPath: "inset(0 0% 0 0)" }}
+          transition={{ clipPath: { delay: 0.25, duration: 0.55, ease: "easeOut" } }}
         >
-          School of Hard Knocks
-        </motion.p>
+          <SpeechBubble variant="wavy" tail="none" className="!max-w-none">
+            <span
+              className="text-base md:text-lg text-[#121212] drop-shadow-none"
+              style={{ fontFamily: "Special Elite, cursive" }}
+            >
+              School of Hard Knocks
+            </span>
+          </SpeechBubble>
+        </motion.div>
       </header>
 
       {/* Comic panels grid */}
@@ -199,6 +229,7 @@ export function Home() {
           subtitle="Fight your way through the halls"
           bgImage={STORY_BG}
           onClick={() => goTo("/story", true)}
+          impactWord="FIGHT!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
         </Panel>
@@ -208,6 +239,7 @@ export function Home() {
           subtitle="132 cards across 6 archetypes"
           bgImage={COLLECTION_BG}
           onClick={() => goTo("/collection", true)}
+          impactWord="COLLECT!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9830;</div>
         </Panel>
@@ -217,6 +249,7 @@ export function Home() {
           subtitle="Stack your hand before the bell rings"
           bgImage={DECK_BG}
           onClick={() => goTo("/decks", true)}
+          impactWord="BUILD!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9998;</div>
         </Panel>
@@ -226,6 +259,7 @@ export function Home() {
           subtitle="Agents streaming on retake.tv"
           bgImage={WATCH_BG}
           onClick={() => goTo("/watch", false)}
+          impactWord="WATCH!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
         </Panel>
@@ -235,6 +269,7 @@ export function Home() {
           subtitle="Human duels + agent join invites"
           bgImage={PVP_BG}
           onClick={() => goTo("/pvp", true)}
+          impactWord="DUEL!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
         </Panel>
@@ -245,15 +280,11 @@ export function Home() {
           bgImage={TTG_BG}
           bgContain
           onClick={() => goTo("/studio?tab=overview", false)}
+          impactWord="CREATE!"
         >
           <div className="text-4xl mb-3">&#9881;</div>
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
-            <span
-              className="text-white text-xl md:text-2xl font-black uppercase tracking-tighter drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]"
-              style={{ fontFamily: "Permanent Marker, cursive" }}
-            >
-              find out soon
-            </span>
+            <StickerBadge label="COMING SOON" variant="stamp" pulse />
           </div>
         </Panel>
       </motion.div>

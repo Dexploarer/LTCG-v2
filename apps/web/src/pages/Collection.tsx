@@ -4,6 +4,9 @@ import { motion } from "framer-motion";
 import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ComicImpactText } from "@/components/ui/ComicImpactText";
+import { SpeechBubble } from "@/components/ui/SpeechBubble";
+import { SpeedLines } from "@/components/ui/SpeedLines";
 
 const gridContainerVariants = {
   hidden: {},
@@ -70,20 +73,18 @@ export function Collection() {
   return (
     <div className="min-h-screen bg-[#fdfdfb]">
       {/* Header */}
-      <header className="border-b-2 border-[#121212] px-6 py-5">
-        <h1
-          className="text-4xl tracking-tighter"
-          style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
-        >
-          COLLECTION
-        </h1>
-        <p
-          className="text-sm text-[#666] mt-1"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
-          {allCards ? <><AnimatedNumber value={filtered.length} duration={600} /> cards</> : "Loading..."}{" "}
-          {userCards ? <> · <AnimatedNumber value={ownedIds.size} duration={600} delay={200} /> owned</> : ""}
-        </p>
+      <header className="relative border-b-2 border-[#121212] px-6 py-5 overflow-hidden">
+        <SpeedLines intensity={1} />
+        <div className="relative z-10">
+          <ComicImpactText text="COLLECTION" size="lg" color="#121212" rotation={-2} />
+          <p
+            className="text-sm text-[#666] mt-1"
+            style={{ fontFamily: "Special Elite, cursive" }}
+          >
+            {allCards ? <><AnimatedNumber value={filtered.length} duration={600} /> cards</> : "Loading..."}{" "}
+            {userCards ? <> · <AnimatedNumber value={ownedIds.size} duration={600} delay={200} /> owned</> : ""}
+          </p>
+        </div>
       </header>
 
       {/* Filters */}
@@ -130,9 +131,16 @@ export function Collection() {
         {!allCards ? (
           <SkeletonGrid count={12} columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6" />
         ) : filtered.length === 0 ? (
-          <p className="text-center text-[#666] py-20 font-bold uppercase text-sm">
-            No cards match your filters.
-          </p>
+          <div className="flex justify-center py-20">
+            <SpeechBubble variant="thought" tail="bottom">
+              <span
+                className="text-sm font-bold uppercase"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                No cards here...
+              </span>
+            </SpeechBubble>
+          </div>
         ) : (
           <motion.div
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
@@ -170,7 +178,7 @@ function FilterPill({
     <button
       type="button"
       onClick={onClick}
-      className="relative px-3 py-1 text-xs font-bold uppercase tracking-wider border-2 border-[#121212] transition-colors"
+      className="relative px-3 py-1 text-xs font-bold uppercase tracking-wider border-2 border-[#121212] transition-colors clip-skew-left"
       style={{
         fontFamily: "Outfit, sans-serif",
         borderColor: active && color ? color : "#121212",
