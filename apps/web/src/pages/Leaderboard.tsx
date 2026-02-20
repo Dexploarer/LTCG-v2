@@ -19,6 +19,7 @@ type LeaderboardPlayer = {
 };
 
 type PlayerRankData = {
+  userId?: string;
   rank: number | null;
   rating: number;
   peakRating?: number;
@@ -315,9 +316,8 @@ export function Leaderboard() {
                 {filteredLeaderboard.map((player, index) => {
                   const isCurrentUser =
                     isAuthenticated &&
-                    myRank &&
-                    myRank.rank !== null &&
-                    myRank.rating === player.rating;
+                    myRank?.userId != null &&
+                    myRank.userId === player.userId;
 
                   return (
                     <motion.div

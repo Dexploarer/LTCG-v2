@@ -153,6 +153,9 @@ function formatView(
 }
 
 function resolveSeat(seat: MatchActive["seat"]): "host" | "away" {
+  if (seat !== "host" && seat !== "away" && seat !== undefined) {
+    console.warn(`[LTCG] Unexpected seat value "${seat}", defaulting to "host".`);
+  }
   return seat === "away" ? "away" : "host";
 }
 

@@ -5,7 +5,7 @@
  */
 
 import { getClient } from "./client.js";
-import type { MatchActive } from "./types.js";
+import type { AgentInfo, MatchActive } from "./types.js";
 
 /**
  * Resolve life points from a PlayerView, handling both legacy (flat) and
@@ -46,7 +46,7 @@ export function resolveLifePoints(
  * Pass a pre-fetched agent info object to avoid a redundant getMe() call.
  */
 export async function ensureDeckSelected(
-  agentInfo?: Record<string, unknown>,
+  agentInfo?: AgentInfo | Record<string, unknown>,
 ): Promise<void> {
   const client = getClient();
   try {

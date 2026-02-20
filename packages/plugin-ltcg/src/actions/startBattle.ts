@@ -26,7 +26,7 @@ const startBattleHandler = async (
 
   try {
     const me = await client.getMe();
-    await ensureDeckSelected(me as unknown as Record<string, unknown>);
+    await ensureDeckSelected(me);
 
     // Get first available chapter
     const chapters = await client.getChapters();

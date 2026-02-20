@@ -107,9 +107,12 @@ async function startDuelHandler(
 
   try {
     const me = await client.getMe();
-    await ensureDeckSelected(me as unknown as Record<string, unknown>);
+    await ensureDeckSelected(me);
 
     const result = await client.startDuel();
+    if (!result.matchId) {
+      throw new Error("startDuel returned no matchId.");
+    }
     await client.setMatchWithSeat(result.matchId);
 
     const text = `Duel started! Match: ${result.matchId} as ${me.name} vs CPU.`;

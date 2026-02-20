@@ -221,6 +221,14 @@ export class LTCGClient {
   /** Default timeout for HTTP requests (ms). */
   static readonly REQUEST_TIMEOUT_MS = 30_000;
 
+  /** Maximum number of retry attempts for transient failures. */
+  static readonly MAX_RETRIES = 2;
+
+  /** Exponential backoff delay: 1s, 2s, 4s, capped at 8s. */
+  private static backoffDelay(attempt: number): number {
+    return Math.min(1000 * Math.pow(2, attempt), 8000);
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -247,10 +255,10 @@ export class LTCGClient {
       });
     } catch (err) {
       clearTimeout(timer);
-      // Retry once on network errors / timeouts
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 1000));
-        return this.request<T>(method, path, body, 1);
+      // Retry on network errors / timeouts with exponential backoff
+      if (attempt < LTCGClient.MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, LTCGClient.backoffDelay(attempt)));
+        return this.request<T>(method, path, body, attempt + 1);
       }
       const errorMessage =
         err instanceof Error && err.name === "AbortError"
@@ -267,10 +275,10 @@ export class LTCGClient {
       clearTimeout(timer);
     }
 
-    // Retry once on 503 (service unavailable)
-    if (res.status === 503 && attempt === 0) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return this.request<T>(method, path, body, 1);
+    // Retry on 503 (service unavailable) with exponential backoff
+    if (res.status === 503 && attempt < LTCGClient.MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, LTCGClient.backoffDelay(attempt)));
+      return this.request<T>(method, path, body, attempt + 1);
     }
 
     // Safe JSON parsing: check Content-Type before calling .json()
