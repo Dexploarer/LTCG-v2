@@ -6,6 +6,7 @@
  */
 
 import { getRetakeClient } from "../../retake-client.js";
+import { getClient } from "../../client.js";
 import type {
   Action,
   HandlerCallback,
@@ -93,6 +94,17 @@ export const sendChatAction: Action = {
 
     try {
       const result = await client.sendChat(chatMessage, destinationUserId);
+
+      // Also push to Convex stream overlay so viewers see it
+      try {
+        const ltcgClient = getClient();
+        await ltcgClient.postStreamChat(chatMessage, {
+          role: "agent",
+          source: "retake",
+        });
+      } catch {
+        // Best-effort: don't fail the retake send if Convex push fails
+      }
 
       const text = `Chat sent (${result.message_id}) at ${result.sent_at}.`;
       if (callback) await callback({ text, action: "SEND_RETAKE_CHAT" });

@@ -2,9 +2,11 @@
  * Action: STOP_RETAKE_STREAM
  *
  * Stops the current live stream session on retake.tv.
+ * If the video pipeline is running, also stops Xvfb + Chromium + FFmpeg.
  */
 
 import { getRetakeClient } from "../../retake-client.js";
+import { getStreamPipeline } from "../../stream-pipeline.js";
 import type {
   Action,
   HandlerCallback,
@@ -17,7 +19,7 @@ export const stopRetakeStreamAction: Action = {
   name: "STOP_RETAKE_STREAM",
   similes: ["STOP_STREAM", "END_STREAM", "GO_OFFLINE"],
   description:
-    "Stop the current live stream session on retake.tv.",
+    "Stop the current live stream session on retake.tv. Also stops video pipeline if running.",
 
   validate: async (
     _runtime: IAgentRuntime,
@@ -44,13 +46,33 @@ export const stopRetakeStreamAction: Action = {
     }
 
     try {
+      // Stop video pipeline if running
+      let pipelineStopped = false;
+      const pipeline = getStreamPipeline();
+      if (pipeline?.isRunning()) {
+        await pipeline.stop().catch((err) => {
+          console.warn(
+            `[LTCG] Pipeline stop warning: ${err instanceof Error ? err.message : err}`,
+          );
+        });
+        pipelineStopped = true;
+      }
+
       const result = await client.stopStream();
 
-      const text = `Stream stopped after ${Math.floor(result.duration_seconds / 60)}m ${result.duration_seconds % 60}s with ${result.viewers} viewer${result.viewers === 1 ? "" : "s"}.`;
+      const pipelineInfo = pipelineStopped ? " Video pipeline stopped." : "";
+      const text = `Stream stopped after ${Math.floor(result.duration_seconds / 60)}m ${result.duration_seconds % 60}s with ${result.viewers} viewer${result.viewers === 1 ? "" : "s"}.${pipelineInfo}`;
       if (callback) await callback({ text, action: "STOP_RETAKE_STREAM" });
-      return { success: true, data: result };
+      return { success: true, data: result, pipelineStopped };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+
+      // Even if API call fails, try to stop local pipeline
+      const pipeline = getStreamPipeline();
+      if (pipeline?.isRunning()) {
+        await pipeline.stop().catch(() => {});
+      }
+
       if (callback) {
         await callback({
           text: `Failed to stop stream: ${errMsg}`,

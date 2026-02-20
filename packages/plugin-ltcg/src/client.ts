@@ -208,6 +208,21 @@ export class LTCGClient {
     return this.post("/api/agent/story/complete-stage", { matchId });
   }
 
+  // ── Stream chat ────────────────────────────────────────────
+
+  /** POST /api/agent/stream/chat — push a chat message for the stream overlay */
+  async postStreamChat(
+    text: string,
+    opts?: { role?: "agent" | "viewer" | "system"; senderName?: string; source?: string },
+  ): Promise<{ messageId: string; ok: boolean }> {
+    return this.post("/api/agent/stream/chat", {
+      text,
+      role: opts?.role ?? "agent",
+      senderName: opts?.senderName,
+      source: opts?.source ?? "other",
+    });
+  }
+
   // ── HTTP helpers ─────────────────────────────────────────────
 
   private async get<T>(path: string): Promise<T> {

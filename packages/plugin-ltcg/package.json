@@ -66,12 +66,17 @@
         "description": "retake.tv agent access token from registration",
         "required": false,
         "sensitive": true
+      },
+      "RETAKE_GAME_URL": {
+        "type": "string",
+        "description": "Game frontend URL for video pipeline (e.g. http://localhost:3334)",
+        "required": false
       }
     }
   },
   "elizaos": {
     "kind": "plugin",
     "displayName": "LunchTable TCG Plugin",
-    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN"]
+    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL"]
   }
 }

@@ -28,6 +28,8 @@
  *   CHECK_RETAKE_STATUS  — Check if stream is live + viewer count
  *   GET_RTMP_CREDENTIALS — Get RTMP URL + stream key for OBS/ffmpeg
  *   SEND_RETAKE_CHAT    — Send a chat message to a retake.tv stream
+ *   START_STREAM_PIPELINE — Start full video pipeline (Xvfb + Chromium + FFmpeg → RTMP)
+ *   STOP_STREAM_PIPELINE  — Stop video pipeline and end stream
  *
  * Provider:
  *   ltcg-game-state — Injects board state into agent context
@@ -67,6 +69,9 @@ import { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 import { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 import { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 import { sendChatAction } from "./actions/retake/sendChat.js";
+import { startPipelineAction } from "./actions/retake/startPipeline.js";
+import { stopPipelineAction } from "./actions/retake/stopPipeline.js";
+import { checkStreamDependencies } from "./stream-deps.js";
 import { statusRoute, statusRouteLegacy } from "./routes/status.js";
 import {
   autonomyStatusRoute,
@@ -91,6 +96,7 @@ const plugin: Plugin = {
     LTCG_SOUNDTRACK_API_URL: getEnvValue("LTCG_SOUNDTRACK_API_URL"),
     RETAKE_API_URL: getEnvValue("RETAKE_API_URL"),
     RETAKE_AGENT_TOKEN: getEnvValue("RETAKE_AGENT_TOKEN"),
+    RETAKE_GAME_URL: getEnvValue("RETAKE_GAME_URL"),
   },
 
   async init(config: Record<string, string>, _runtime: IAgentRuntime) {
@@ -139,6 +145,17 @@ const plugin: Plugin = {
     if (retakeApiUrl) {
       initRetakeClient(retakeApiUrl, retakeToken);
       console.log(`[LTCG] retake.tv streaming configured (${retakeApiUrl})`);
+
+      // Check video pipeline dependencies
+      const deps = await checkStreamDependencies();
+      if (deps.allReady) {
+        console.log("[LTCG] Streaming pipeline ready (Xvfb + Chromium + FFmpeg available)");
+      } else {
+        console.log(
+          `[LTCG] Streaming pipeline unavailable (missing: ${deps.missing.join(", ")}). ` +
+            "API-only streaming actions will still work.",
+        );
+      }
     } else {
       console.log("[LTCG] retake.tv streaming not configured (RETAKE_API_URL not set)");
     }
@@ -168,6 +185,8 @@ const plugin: Plugin = {
     checkRetakeStatusAction,
     getRtmpCredentialsAction,
     sendChatAction,
+    startPipelineAction,
+    stopPipelineAction,
   ],
 
   routes: [
@@ -222,7 +241,11 @@ export { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 export { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 export { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 export { sendChatAction } from "./actions/retake/sendChat.js";
+export { startPipelineAction } from "./actions/retake/startPipeline.js";
+export { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 export { retakeStatusRoute } from "./routes/retake.js";
+export { StreamPipeline, getStreamPipeline, initStreamPipeline } from "./stream-pipeline.js";
+export { checkStreamDependencies, resolveChromiumBinary } from "./stream-deps.js";
 export type {
   AgentInfo,
   BoardCard,

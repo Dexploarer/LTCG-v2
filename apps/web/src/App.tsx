@@ -35,6 +35,7 @@ const Settings = lazy(() => import("@/pages/Settings").then(m => ({ default: m.S
 const Pvp = lazy(() => import("@/pages/Pvp").then(m => ({ default: m.Pvp })));
 const Duel = lazy(() => import("@/pages/Duel").then(m => ({ default: m.Duel })));
 const Studio = lazy(() => import("@/pages/Studio").then(m => ({ default: m.Studio })));
+const StreamOverlay = lazy(() => import("@/pages/StreamOverlay").then(m => ({ default: m.StreamOverlay })));
 
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
 
@@ -125,6 +126,7 @@ function IframeCommandRouter({
 function RouteAwareAudioDock() {
   const location = useLocation();
   if (location.pathname.startsWith("/play/")) return null;
+  if (location.pathname.startsWith("/stream-overlay")) return null;
   return <AudioControlsDock />;
 }
 
@@ -197,6 +199,7 @@ function AnimatedRoutes() {
           <Route path="/agent-dev" element={<Public><AgentDev /></Public>} />
           <Route path="/leaderboard" element={<Public><Leaderboard /></Public>} />
           <Route path="/watch" element={<Public><Watch /></Public>} />
+          <Route path="/stream-overlay" element={<Public><StreamOverlay /></Public>} />
 
           <Route path="/onboarding" element={<Guarded><Onboarding /></Guarded>} />
           <Route path="/collection" element={<Guarded><Collection /></Guarded>} />
