@@ -71,7 +71,7 @@ export function Collection() {
   const archetypes = [...new Set((allCards ?? []).map((c) => c.archetype).filter(Boolean))];
 
   return (
-    <div className="min-h-screen bg-[#fdfdfb]">
+    <div className="min-h-screen bg-[#fdfdfb]" style={{ paddingBottom: "var(--safe-area-bottom)" }}>
       {/* Header */}
       <header className="relative border-b-2 border-[#121212] px-6 py-5 overflow-hidden">
         <SpeedLines intensity={1} />

@@ -859,7 +859,7 @@ export function GameBoard({
 
   if (notFound) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+      <div className="h-dvh flex items-center justify-center bg-[#1a1816]">
         <p className="text-white/40 font-bold uppercase text-sm">Match not found.</p>
       </div>
     );
@@ -867,7 +867,7 @@ export function GameBoard({
 
   if (!view) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#1a1816]">
+      <div className="h-dvh flex items-center justify-center bg-[#1a1816]">
         <p className="text-white/40 font-bold uppercase text-sm">Failed to load game state.</p>
       </div>
     );
