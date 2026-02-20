@@ -218,27 +218,73 @@ export class LTCGClient {
     return this.request("POST", path, body);
   }
 
+  /** Default timeout for HTTP requests (ms). */
+  static readonly REQUEST_TIMEOUT_MS = 30_000;
+
   private async request<T>(
     method: string,
     path: string,
     body?: unknown,
+    attempt = 0,
   ): Promise<T> {
     const url = `${this.apiUrl}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      LTCGClient.REQUEST_TIMEOUT_MS,
+    );
 
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      // Retry once on network errors / timeouts
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 1000));
+        return this.request<T>(method, path, body, 1);
+      }
+      throw new LTCGApiError(
+        err instanceof Error ? err.message : "Network error",
+        0,
+        `${method} ${path.split("?")[0]}`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
 
-    const data = await res.json();
+    // Retry once on 503 (service unavailable)
+    if (res.status === 503 && attempt === 0) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return this.request<T>(method, path, body, 1);
+    }
+
+    // Safe JSON parsing: check Content-Type before calling .json()
+    const contentType = res.headers.get("content-type") ?? "";
+    let data: unknown;
+    if (contentType.includes("application/json")) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      throw new LTCGApiError(
+        `Expected JSON response, got ${contentType || "no content-type"}: ${text.slice(0, 200)}`,
+        res.status,
+        `${method} ${path.split("?")[0]}`,
+      );
+    }
 
     if (!res.ok) {
+      const errData = data as Record<string, unknown>;
       throw new LTCGApiError(
-        data.error ?? `HTTP ${res.status}`,
+        (typeof errData.error === "string" ? errData.error : null) ?? `HTTP ${res.status}`,
         res.status,
         `${method} ${path.split("?")[0]}`,
       );

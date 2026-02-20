@@ -6,6 +6,7 @@
  */
 
 import { getClient } from "../client.js";
+import { ensureDeckSelected } from "../utils.js";
 import type {
   Action,
   IAgentRuntime,
@@ -106,17 +107,7 @@ async function startDuelHandler(
 
   try {
     const me = await client.getMe();
-
-    // Ensure the agent has an active deck — fallback to starter deck selection.
-    try {
-      const decks = await client.getStarterDecks();
-      if (decks.length > 0) {
-        const deck = decks[Math.floor(Math.random() * decks.length)];
-        await client.selectDeck(deck.deckCode);
-      }
-    } catch {
-      // Ignore; the duel endpoint will surface missing deck errors clearly.
-    }
+    await ensureDeckSelected(me as unknown as Record<string, unknown>);
 
     const result = await client.startDuel();
     await client.setMatchWithSeat(result.matchId);
