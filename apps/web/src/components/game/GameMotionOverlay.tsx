@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 import {motion} from "framer-motion";
-import type {Phase} from "@lunchtable-tcg/engine";
+type Phase = "draw" | "standby" | "main" | "combat" | "main2" | "breakdown_check" | "end";
 
 const GAMEPLAY_AMBIENT_SRC = "/lunchtable/ui-motion/gameplay-ambient-loop.mp4";
 

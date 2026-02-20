@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query, internalMutation } from "./_generated/server";
 
 // ── Campaign Timeline ─────────────────────────────────────────────
@@ -524,6 +525,222 @@ const vSetCampaignDayResult = v.object({
   dayOfWeek: v.number(),
 });
 
+// ── Briefing Content Templates ────────────────────────────────────
+// Content type rotates by dayOfWeek:
+//   Mon (1) = archetype_spotlight
+//   Tue (2) = card_tip
+//   Wed (3) = meta_report
+//   Thu (4) = lore_tidbit
+//   Fri (5) = weekly_recap
+
+const CONTENT_TYPE_BY_DAY: Record<number, "archetype_spotlight" | "card_tip" | "meta_report" | "lore_tidbit" | "weekly_recap"> = {
+  1: "archetype_spotlight",
+  2: "card_tip",
+  3: "meta_report",
+  4: "lore_tidbit",
+  5: "weekly_recap",
+};
+
+const ARCHETYPES = ["dropouts", "preps", "geeks", "freaks", "nerds", "goodies"] as const;
+type Archetype = (typeof ARCHETYPES)[number];
+
+const ARCHETYPE_DISPLAY: Record<Archetype, string> = {
+  dropouts: "Dropouts",
+  preps: "Preps",
+  geeks: "Geeks",
+  freaks: "Freaks",
+  nerds: "Nerds",
+  goodies: "Goodie Two-Shoes",
+};
+
+const ARCHETYPE_SPOTLIGHTS: Record<Archetype, { title: string; body: string }> = {
+  dropouts: {
+    title: "ARCHETYPE SPOTLIGHT: THE DROPOUTS",
+    body: "Red-hot aggro with nothing to lose. Dropouts hit fast and hard — Crypto All-In Carl can nuke the board for +1500 rep when stability hits zero. Their strategy: burn bright, burn everything. High risk, high reward. If you see a Dropout deck across the table, kill their monsters before they chain-react. They WANT to self-destruct.",
+  },
+  preps: {
+    title: "ARCHETYPE SPOTLIGHT: THE PREPS",
+    body: "Blue midrange with social capital to spare. Preps thrive on reputation — stacking buffs, controlling the social battlefield. They're not the fastest or the trickiest, but they grind you down with consistent value. Watch for their equip spells — a well-timed popularity boost turns an average Stereotype into a cafeteria king.",
+  },
+  geeks: {
+    title: "ARCHETYPE SPOTLIGHT: THE GEEKS",
+    body: "Yellow combo fiends who build engines. Geeks play the long game — setting up chains of spells and effects that snowball into unstoppable combos. Their monsters look weak on paper but their synergy is unmatched. If you let a Geek set up for three turns, you've already lost. Pressure early or pay later.",
+  },
+  freaks: {
+    title: "ARCHETYPE SPOTLIGHT: THE FREAKS",
+    body: "Purple chaos incarnate. Freaks don't play by the rules — they randomize, disrupt, and thrive in disorder. Their cards break symmetry: shuffling stats, swapping positions, triggering random effects. Playing against Freaks feels like fighting in a funhouse mirror. Playing AS Freaks feels like being the mirror.",
+  },
+  nerds: {
+    title: "ARCHETYPE SPOTLIGHT: THE NERDS",
+    body: "Green control with fortress energy. Nerds build walls, set traps, and wait. Their defense stats are absurd and their trap cards punish aggression. The Nerd strategy is patience weaponized — they'll outlast you, outblock you, and slowly drain your resources while hiding behind 2500 DEF monsters.",
+  },
+  goodies: {
+    title: "ARCHETYPE SPOTLIGHT: THE GOODIE TWO-SHOES",
+    body: "White/gray attrition that grinds you to dust. Goodies heal, recover, and never seem to die. Their stability management is pristine — vice barely touches them. They win by existing longer than you. The counter? Overwhelm them with burst damage before their passive recovery kicks in. They're boring. They're effective. They're infuriating.",
+  },
+};
+
+type CardTip = { title: string; body: string; cardName: string };
+
+// 16 card tips, one per week — cycling through archetypes
+const CARD_TIPS: CardTip[] = [
+  { title: "CARD TIP: CRYPTO ALL-IN CARL", cardName: "Crypto All-In Carl", body: "Carl's OnStabilityZero trigger destroys all your allied Stereotypes but gives +1500 rep. The key: have Carl be your LAST monster. No allies to destroy means pure profit. Pair with spells that drain your own stability to trigger it on your terms." },
+  { title: "CARD TIP: SETTING TRAPS EARLY", cardName: "Generic Trap Strategy", body: "Don't hold traps in your hand waiting for the 'perfect' moment. Set them face-down early — they cost nothing to place and information denial is half the battle. Your opponent plays differently when they see a face-down card. Even if it's garbage, the threat is real." },
+  { title: "CARD TIP: TRIBUTE TIMING", cardName: "Tribute Summon Strategy", body: "Two-tribute monsters are the strongest cards in the game, but burning two Stereotypes to summon one is a tempo loss. The trick: tribute SET monsters. A face-down Stereotype that already tanked an attack is worth more as tribute fuel than as a defender." },
+  { title: "CARD TIP: VICE MANAGEMENT", cardName: "Vice Counter Strategy", body: "Vice counters accumulate on your Stereotypes and trigger breakdowns at threshold. But here's the secret: you can CHOOSE which monster absorbs vice. Spread counters across multiple monsters to stay below threshold, or stack them on one sacrificial lamb and tribute it before breakdown." },
+  { title: "CARD TIP: FIELD SPELL DOMINANCE", cardName: "Field Spell Strategy", body: "Field spells affect BOTH players. When you activate a field spell, you're changing the rules for everyone. The advantage goes to the player who built their deck around that field. If your opponent plays a field spell, replace it with yours — only one field spell can be active." },
+  { title: "CARD TIP: CHAIN RESPONSE WINDOWS", cardName: "Chain Response Basics", body: "When your opponent activates a spell or trap, you get a chain response window. This is where counter-traps shine — they resolve BEFORE the triggering card. A well-timed counter can negate a summon, block an attack declaration, or flip a combat result. Always leave mana for responses." },
+  { title: "CARD TIP: POSITION CHANGES", cardName: "Battle Position Strategy", body: "Switching a monster from attack to defense (or vice versa) costs your normal summon for the turn. But sometimes it's the right play. A low-ATK monster in defense mode survives combat that would destroy it in attack. Flip Summon face-down DEF monsters to trigger their flip effects." },
+  { title: "CARD TIP: READING THE BOARD", cardName: "Board Analysis", body: "Before making any play, count: how many cards does your opponent have in hand? How many face-downs? What's their reputation vs stability ratio? A player with high rep and low stability is desperate — they'll make risky plays. A player with balanced stats is patient. Adjust your aggression accordingly." },
+  { title: "CARD TIP: THE BREAKDOWN WINDOW", cardName: "Breakdown Mechanic", body: "When a Stereotype hits its vice threshold, it enters breakdown. During breakdown, the monster's effects invert or amplify unpredictably. Some players WANT breakdowns — Dropout and Freak archetypes have cards that benefit from the chaos. Know your opponent's archetype before pushing them to breakdown." },
+  { title: "CARD TIP: EQUIP SPELL STACKING", cardName: "Equip Spell Strategy", body: "Equip spells persist until the equipped monster is destroyed. Stack multiple equips on one monster to create an unstoppable beater — but beware: when that monster dies, you lose ALL attached equips. The risk/reward of going all-in on one monster is the fundamental tension of equip-heavy strategies." },
+  { title: "CARD TIP: DEFENDING AGAINST AGGRO", cardName: "Anti-Aggro Defense", body: "Aggro decks (especially Dropouts) want to end the game fast. Your counter: high-DEF monsters in defense mode, trap cards that punish attacks, and patience. Every turn an aggro deck doesn't kill you is a turn closer to them running out of gas. Stall, recover, counter-attack." },
+  { title: "CARD TIP: DECK BUILDING RATIOS", cardName: "Deck Construction", body: "The golden ratio: 15-18 Stereotypes, 10-12 Spells, 5-8 Traps. Too many monsters means dead draws. Too few means no board presence. Spells are your engine — card draw, buffs, removal. Traps are your insurance. Adjust ratios based on your archetype's natural strengths." },
+  { title: "CARD TIP: REPUTATION AS RESOURCE", cardName: "Reputation Economy", body: "Reputation isn't just a win condition — it's a resource. Some cards cost reputation to activate. Others give reputation on trigger. Track your rep total like you track your life points. Getting to high rep fast means nothing if you spend it all on flashy effects. Budget your clout." },
+  { title: "CARD TIP: STABILITY MANAGEMENT", cardName: "Stability Defense", body: "Stability is your lifeline. When it hits zero, bad things happen — forced breakdowns, vice triggers, potential game loss. The best stability managers are Nerds and Goodies, but every archetype needs a plan. Include at least 2-3 stability recovery cards in any deck." },
+  { title: "CARD TIP: READING FACE-DOWNS", cardName: "Face-Down Analysis", body: "When your opponent sets a card face-down, ask: what archetype are they playing? Nerds and Goodies set traps. Geeks set combo pieces. Dropouts rarely set anything — a face-down from a Dropout is either a bluff or their strongest card. Context is everything." },
+  { title: "CARD TIP: ENDGAME CLOSING", cardName: "Closing the Game", body: "You're ahead on board, ahead on rep. How do you close? Don't get greedy. Attack with everything, force trades, and maintain pressure. The biggest mistake winning players make: playing conservatively when they should be aggressive. A 70% chance to win NOW is better than a 90% chance in three turns — because those three turns give your opponent outs." },
+];
+
+const META_REPORTS: { title: string; body: string }[] = [
+  { title: "META REPORT: WEEK 1 — EARLY DAYS", body: "The meta is wide open. Every archetype is viable, every strategy untested. Reputation gains are boosted 20% and vice is disabled. This is the safest week to experiment with aggressive strategies. Expect Dropout and Prep decks to dominate early — they benefit most from the rep boost. Nerds are sleepers. Watch the patient players." },
+  { title: "META REPORT: WEEK 2 — TRYOUT TREMORS", body: "Vice is online. Loss gives +1 vice counter, wins give +100 rep. The meta is shifting toward win-streak strategies — players who can chain victories snowball hard. Counter-play: traps that interrupt attack declarations. The Permanent Reputation Modifier means this week's results echo all campaign." },
+  { title: "META REPORT: WEEK 3 — VICE UNLEASHED", body: "All vice types unlocked. Breakdowns are enabled. The meta just got dangerous. Vice gives +200 rep but costs -200 stability — high-risk players are gambling on vice-heavy builds. Conservative players are building stability walls. The parking lot environment favors aggro. Adjust your deck accordingly." },
+  { title: "META REPORT: WEEK 4 — TRAP META", body: "Trap costs reduced by 1. The meta is flooded with traps. Every face-down card is a threat. Rumor mechanics destabilize random targets. The optimal play: run trap removal spells. Players without spell/trap destruction are sitting ducks. Screenshots are circulating — trust no one." },
+  { title: "META REPORT: WEEK 5 — FORCED ADAPTATION", body: "Forced deck swap means everyone modified their builds. The meta reset — old strategies may not work. Stability and reputation are static, so this is a rebuilding week. Use it to experiment with the card you were forced to swap in. Sometimes the best discoveries come from constraints." },
+  { title: "META REPORT: WEEK 6 — PRESSURE COOKER", body: "Vice triggers doubled. All stability dropped by 200. The stress amplifier means every loss compounds. The meta favors survival — Nerds and Goodies surge in popularity. Aggro decks struggle as the environment punishes overextension. The top stability player becomes a target. Stay under the radar." },
+  { title: "META REPORT: WEEK 7 — HOMECOMING GAMBIT", body: "Reputation gains DOUBLED. Every win gives +300 rep. But stability loss on defeat is -300. High-risk window. The meta is polarized: go big or go home. Midrange strategies collapse — you're either all-in aggro or full turtle defense. There is no middle ground at homecoming." },
+  { title: "META REPORT: WEEK 8 — CONTROL WEEK", body: "Trap costs reduced by 2. The hall monitors are watching. Every trap gives +1 vice and -200 stability. The meta paradox: traps are cheap but using them hurts. Optimal play: bait your opponent into activating THEIR traps while keeping yours for emergencies. The detention shadow looms." },
+  { title: "META REPORT: WEEK 9 — THE GREAT FILTER", body: "Vice >= 2 auto-triggers. Forced minor breakdowns. The meta brutally punishes vice accumulation from previous weeks. Players who managed vice well in Acts 1-2 are rewarded. Players who didn't are in crisis mode. Stability drain is -300 per vice. Run clean or get evaluated." },
+  { title: "META REPORT: WEEK 10 — CHAIN REACTION", body: "ALL vice active. Vice gives +300 rep but -400 stability. Vice chain reactions mean one trigger cascades. The meta is nuclear — every game could end in mutual destruction. The optimal play: controlled vice management. Let your opponent chain-react while you surf the edge. Multi-player event makes this week unpredictable." },
+  { title: "META REPORT: WEEK 11 — CULLING", body: "Highest vice destroyed automatically. The meta is about sacrifice — lose your most corrupt monster to save the rest. Players with spread vice are safer than players who stacked it. Reputation gains from destruction (+200) make this a perverse economy. The cafeteria shrinks. Adapt." },
+  { title: "META REPORT: WEEK 12 — CHAOS META", body: "All modifiers randomized. Card text shuffled. Rep and stability can swap randomly. There is no meta. There is no strategy. There is only chaos. The players who thrive this week are the ones who build redundant decks with multiple win conditions. Specialists die. Generalists survive. The bell doesn't ring." },
+  { title: "META REPORT: WEEK 13 — PATH DIVERGENCE", body: "Players locked into paths. Vice, reputation, and stability modify based on path choice. The meta splinters into three sub-metas based on path selection. Path-locked buffs mean mirror matches (same path vs same path) are skill-intensive. Cross-path matchups are wildly asymmetric." },
+  { title: "META REPORT: WEEK 14 — LEADERBOARD ENDGAME", body: "Top player gets +500 rep. Low stability players see UI cracks. The meta is determined by the leaderboard — your strategy depends on your rank. Top players play conservatively to protect their lead. Bottom players play recklessly for upset potential. Mid-ranked players are the true wild cards." },
+  { title: "META REPORT: WEEK 15 — TENSION PEAK", body: "No new vice, but existing vice hits double. Stability loss is -500 per vice. The meta is about legacy — everything you built over 14 weeks determines your power level. Clean players dominate. Vice-heavy players are in survival mode. The tension amplifier makes every match feel like a final." },
+  { title: "META REPORT: WEEK 16 — FINAL META", body: "The final duel: you vs yourself. Your shadow has your deck, your vices, your stats. The only meta is self-knowledge. Win gives +1000 rep. Loss gives -1000 stability. Vice resets after. This is not about strategy. This is about whether you built something that can beat itself. Good luck. You'll need it." },
+];
+
+const LORE_TIDBITS: { title: string; body: string }[] = [
+  { title: "LORE: THE SEATING CHART", body: "Nobody knows who makes the seating chart. The administration claims it's alphabetical. It's not. The guidance counselor says it's random. It's not. The chart appears overnight, laminated and permanent, on the first day of every year. Some students swear they've seen a figure in the cafeteria at 3 AM, rearranging names with a red marker." },
+  { title: "LORE: THE FIRST TABLE CAPTAIN", body: "The table captain tradition started twenty years ago when a student named Marcus claimed the center table by arm-wrestling every challenger. He graduated. Or did he? His name still appears on the seating chart every year, assigned to the same table. The seat is always empty by day two." },
+  { title: "LORE: PARKING LOT C", body: "Parking Lot C has been condemned three times. Each time, the barriers appear and disappear. The administration says it's a safety hazard. Students say it's the only place the cameras don't reach. The asphalt has scorch marks that look like card symbols. Nobody remembers making them." },
+  { title: "LORE: THE BELL SYSTEM", body: "The school bell system was installed in 1987. It's been replaced four times. Each time, the new system develops the same glitch: on certain days, the bell rings at impossible times. 3:33 AM. 11:11 PM. During finals week. The maintenance crew logs show the system is functioning normally during these events." },
+  { title: "LORE: THE VICE ROOM", body: "There's a room in the basement that doesn't appear on any floor plan. Students who accumulate too many vices report dreaming about it — fluorescent lights, a metal desk, a stack of cards. They can't read the cards. They can't leave the room. They always wake up with one fewer vice counter than they went to sleep with." },
+  { title: "LORE: THE ORIGINAL GAME", body: "LunchTable wasn't always a card game. The original version was played with cafeteria trays — flipped, stacked, and used as tokens. The cards appeared in someone's locker in 2004. A complete set, professionally printed, with rules nobody wrote. The locker belonged to a student who'd been expelled the year before." },
+  { title: "LORE: THE HALL MONITORS", body: "Hall monitors at this school serve six-month rotations. Most last two weeks. They report hearing whispers in the empty hallways between periods. The whispers are card effects — attack declarations, summon chants, chain responses. The administration attributes this to stress. The monitors know better." },
+  { title: "LORE: THE CAFETERIA NOISE", body: "At exactly noon on Wednesdays, the cafeteria produces a sound that no recording device can capture. Students describe it differently: a hum, a ring, a voice reading names. The only consistent detail is that it sounds like cards shuffling. Three hundred students eating lunch, and underneath it all, the sound of a deck being cut." },
+  { title: "LORE: THE DROPOUT CURSE", body: "Every Dropout archetype player experiences the same phenomenon: their cards feel warm. Not metaphorically — the physical cards are measurably warmer than other archetypes. Lab tests are inconclusive. The ink is standard. The cardstock is standard. But Dropout cards run about 2.3 degrees hotter. No one talks about it." },
+  { title: "LORE: THE GUIDANCE COUNSELOR'S DOOR", body: "The guidance counselor's office has three doors. One leads to the hallway. One leads to the file room. The third door is locked and has no keyhole. Students who ask about it receive the same answer: 'That's for graduating students.' No graduating student has ever confirmed using it." },
+  { title: "LORE: THE REPUTATION BOARD", body: "The reputation leaderboard in the main hallway updates in real-time. No one maintains it. There's no computer connected to it. The display was donated by an alumnus in 1998 — a CRT monitor that somehow shows high-resolution rankings. It's never been turned off. Unplugging it does nothing. It runs on something else." },
+  { title: "LORE: THE EMPTY TABLES", body: "When a student is expelled, their chair is removed from the cafeteria. Standard procedure. What's not standard: the chair reappears the next semester, in a different position, with a different name on the seating chart. A name no one recognizes. A name that no student claims. The chair is always occupied. You just can't see by whom." },
+  { title: "LORE: THE SENIOR TRADITION", body: "Every senior class leaves something behind. Class of '04 left the card game. Class of '08 left the vice system. Class of '12 left the breakdown mechanic. Class of '16 left the seating chart that reassigns itself. Nobody asks what Class of '20 left. Because nobody remembers Class of '20." },
+  { title: "LORE: THE SUBSTITUTE TEACHER", body: "A substitute teacher arrives every third Thursday. No one requests them. No teacher is absent. They teach a class called 'Applied Social Dynamics' that doesn't exist in the curriculum. Students who attend report learning advanced card strategies. Students who skip report finding a card in their locker they didn't own before." },
+  { title: "LORE: THE YEARBOOK PHOTO", body: "The yearbook has a page that wasn't designed by the yearbook committee. Page 47. It shows a group photo of students from 1987, 2004, and the current year — all sitting at the same table, holding the same cards, wearing the same expression. The print shop says they didn't print it. It appears anyway. Every year." },
+  { title: "LORE: GRADUATION DAY", body: "Graduates report the same experience: walking through the cafeteria doors for the last time, they see their own face looking back at them from the empty table. Most assume it's a reflection. It's not. The face is sitting down. It's holding cards. It mouths something. Every graduate says the same thing: 'I couldn't read its lips.' Every graduate is lying." },
+];
+
+// Weekly recaps reference the week that just ended
+function getWeeklyRecap(weekNumber: number): { title: string; body: string } {
+  const week = CAMPAIGN_WEEKS[weekNumber - 1];
+  if (!week) {
+    return {
+      title: "WEEKLY RECAP: CAMPAIGN OVER",
+      body: "The campaign has concluded. The cafeteria is empty. The seating chart has been taken down. Or has it? Check back next semester.",
+    };
+  }
+
+  return {
+    title: `WEEKLY RECAP: WEEK ${weekNumber} — ${week.event.toUpperCase()}`,
+    body: `Week ${weekNumber} of the ${week.actName} act is complete. "${week.event}" changed the landscape: ${week.narrativeBeat} This week's modifiers were: Global [${week.modifiers.global}], Vice [${week.modifiers.vice}], Rep [${week.modifiers.reputation}], Stability [${week.modifiers.stability}], Special [${week.modifiers.special}]. ${week.bossTrigger !== "None" ? `Boss trigger "${week.bossTrigger}" was active.` : "No boss trigger this week."} Next week brings new challenges. Prepare your deck.`,
+  };
+}
+
+function getBriefingContent(weekNumber: number, dayOfWeek: number): {
+  contentType: "archetype_spotlight" | "card_tip" | "meta_report" | "lore_tidbit" | "weekly_recap";
+  title: string;
+  body: string;
+  archetype?: string;
+  cardName?: string;
+} {
+  const contentType = CONTENT_TYPE_BY_DAY[dayOfWeek] ?? "archetype_spotlight";
+
+  switch (contentType) {
+    case "archetype_spotlight": {
+      // Rotate through archetypes: week 1=dropouts, week 2=preps, etc.
+      const archetypeIndex = (weekNumber - 1) % ARCHETYPES.length;
+      const archetype = ARCHETYPES[archetypeIndex]!;
+      const spotlight = ARCHETYPE_SPOTLIGHTS[archetype];
+      return {
+        contentType,
+        title: spotlight.title,
+        body: spotlight.body,
+        archetype,
+      };
+    }
+    case "card_tip": {
+      const tipIndex = (weekNumber - 1) % CARD_TIPS.length;
+      const tip = CARD_TIPS[tipIndex]!;
+      return {
+        contentType,
+        title: tip.title,
+        body: tip.body,
+        cardName: tip.cardName,
+      };
+    }
+    case "meta_report": {
+      const reportIndex = Math.min(weekNumber - 1, META_REPORTS.length - 1);
+      const report = META_REPORTS[reportIndex]!;
+      return {
+        contentType,
+        title: report.title,
+        body: report.body,
+      };
+    }
+    case "lore_tidbit": {
+      const loreIndex = (weekNumber - 1) % LORE_TIDBITS.length;
+      const lore = LORE_TIDBITS[loreIndex]!;
+      return {
+        contentType,
+        title: lore.title,
+        body: lore.body,
+      };
+    }
+    case "weekly_recap": {
+      const recap = getWeeklyRecap(weekNumber);
+      return {
+        contentType,
+        title: recap.title,
+        body: recap.body,
+      };
+    }
+  }
+}
+
+// ── Briefing Content Validators ──────────────────────────────────
+
+const vContentType = v.union(
+  v.literal("archetype_spotlight"),
+  v.literal("card_tip"),
+  v.literal("meta_report"),
+  v.literal("lore_tidbit"),
+  v.literal("weekly_recap"),
+);
+
+const vBriefingContent = v.object({
+  _id: v.id("dailyBriefings"),
+  _creationTime: v.number(),
+  weekNumber: v.number(),
+  dayOfWeek: v.number(),
+  actNumber: v.number(),
+  contentType: vContentType,
+  title: v.string(),
+  body: v.string(),
+  archetype: v.optional(v.string()),
+  cardName: v.optional(v.string()),
+  createdAt: v.number(),
+});
+
 // ── Queries ───────────────────────────────────────────────────────
 
 export const getCampaignState = query({
@@ -636,6 +853,39 @@ export const getAgentDailyBriefing = query({
   },
 });
 
+// ── Briefing Content Queries ─────────────────────────────────────
+
+/** Returns today's generated briefing content, or null if none exists yet. */
+export const getTodaysBriefingContent = query({
+  args: {},
+  returns: v.union(vBriefingContent, v.null()),
+  handler: async (ctx) => {
+    const state = await ctx.db.query("campaignState").first();
+    if (!state || !state.isActive) return null;
+
+    return ctx.db
+      .query("dailyBriefings")
+      .withIndex("by_week_day", (q) =>
+        q.eq("weekNumber", state.weekNumber).eq("dayOfWeek", state.dayOfWeek),
+      )
+      .first();
+  },
+});
+
+/** Returns the last N generated briefings, ordered newest first. */
+export const getRecentBriefings = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(vBriefingContent),
+  handler: async (ctx, args) => {
+    const cap = Math.min(args.limit ?? 10, 50);
+    return ctx.db
+      .query("dailyBriefings")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(cap);
+  },
+});
+
 // ── Mutations ─────────────────────────────────────────────────────
 
 export const agentCheckin = mutation({
@@ -731,6 +981,13 @@ export const advanceCampaignDay = internalMutation({
       actNumber,
       lastAdvancedAt: Date.now(),
     });
+
+    // Schedule briefing generation for the new day
+    await ctx.scheduler.runAfter(0, internal.dailyBriefing.generateDailyBriefing, {
+      weekNumber,
+      dayOfWeek,
+    });
+
     return null;
   },
 });
@@ -770,5 +1027,47 @@ export const setCampaignDay = mutation({
     }
 
     return { weekNumber: args.weekNumber, dayOfWeek: args.dayOfWeek };
+  },
+});
+
+// ── Briefing Content Generation ──────────────────────────────────
+
+/** Creates a daily briefing entry for the given week/day. Idempotent. */
+export const generateDailyBriefing = internalMutation({
+  args: { weekNumber: v.number(), dayOfWeek: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { weekNumber, dayOfWeek } = args;
+
+    // Idempotent — skip if briefing already exists for this day
+    const existing = await ctx.db
+      .query("dailyBriefings")
+      .withIndex("by_week_day", (q) =>
+        q.eq("weekNumber", weekNumber).eq("dayOfWeek", dayOfWeek),
+      )
+      .first();
+
+    if (existing) return null;
+
+    // Resolve act number from campaign weeks data
+    const week = CAMPAIGN_WEEKS[weekNumber - 1];
+    const actNumber = week?.actNumber ?? Math.ceil(weekNumber / 4);
+
+    // Generate content based on day of week
+    const content = getBriefingContent(weekNumber, dayOfWeek);
+
+    await ctx.db.insert("dailyBriefings", {
+      weekNumber,
+      dayOfWeek,
+      actNumber,
+      contentType: content.contentType,
+      title: content.title,
+      body: content.body,
+      archetype: content.archetype,
+      cardName: content.cardName,
+      createdAt: Date.now(),
+    });
+
+    return null;
   },
 });

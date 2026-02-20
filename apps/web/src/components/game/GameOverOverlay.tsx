@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 
 export interface GameOverOverlayProps {
@@ -6,6 +7,8 @@ export interface GameOverOverlayProps {
   opponentLP: number;
   onRematch?: () => void;
   onExit: () => void;
+  /** Optional children rendered below the buttons (e.g., RematchOverlay). */
+  children?: ReactNode;
 }
 
 export function GameOverOverlay({
@@ -14,6 +17,7 @@ export function GameOverOverlay({
   opponentLP,
   onRematch,
   onExit,
+  children,
 }: GameOverOverlayProps) {
   // Determine result styling
   const resultConfig = {
@@ -44,7 +48,7 @@ export function GameOverOverlay({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center overflow-y-auto"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -166,6 +170,9 @@ export function GameOverOverlay({
             Exit
           </button>
         </motion.div>
+
+        {/* Children (e.g., RematchOverlay) */}
+        {children}
       </motion.div>
     </motion.div>
   );

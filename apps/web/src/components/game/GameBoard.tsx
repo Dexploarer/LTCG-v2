@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { useGameState, type Seat } from "./hooks/useGameState";
 import { useGameActions } from "./hooks/useGameActions";
 import { useAudio } from "@/components/audio/AudioProvider";
+import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 import { LPBar } from "./LPBar";
 import { PhaseBar } from "./PhaseBar";
 import { PlayerHand } from "./PlayerHand";
@@ -10,8 +11,11 @@ import { ChainPrompt } from "./ChainPrompt";
 import { CardDetailOverlay } from "./CardDetailOverlay";
 import { TributeSelector } from "./TributeSelector";
 import { AttackTargetSelector } from "./AttackTargetSelector";
+import { TargetSelector, type TargetCandidate } from "./TargetSelector";
+import { CostConfirmation, type EffectCost } from "./CostConfirmation";
 import { GraveyardBrowser } from "./GraveyardBrowser";
 import { GameOverOverlay } from "./GameOverOverlay";
+import { RematchOverlay } from "./RematchOverlay";
 import { FieldRow } from "./FieldRow";
 import { SpellTrapRow } from "./SpellTrapRow";
 import { GameMotionOverlay } from "./GameMotionOverlay";
@@ -236,12 +240,50 @@ export function GameBoard({
       .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
   })();
 
+  // Quick-play spells activatable during chain
+  const chainActivatableQuickPlays = useMemo(() => {
+    if (!isCanonicalChainPromptOpen || !Array.isArray(view?.spellTrapZone)) return [];
+    return view.spellTrapZone
+      .filter((card: any) => card?.faceDown)
+      .map((card: any) => {
+        const definition = cardLookup[card.definitionId];
+        if (!definition) return null;
+        const isSpell = definition.type === "spell" || definition.cardType === "spell";
+        const isQuickPlay = (definition as any).spellType === "quick-play" || (definition as any).spellType === "quickplay";
+        if (!isSpell || !isQuickPlay) return null;
+        return { cardId: card.cardId, name: definition.name ?? "Quick-Play Spell" };
+      })
+      .filter((entry): entry is { cardId: string; name: string } => Boolean(entry));
+  }, [isCanonicalChainPromptOpen, view?.spellTrapZone, cardLookup]);
+
+  // Current user for rematch overlay
+  const currentUser = useConvexQuery(apiAny.auth.currentUser, {}) as
+    | { _id: string }
+    | null
+    | undefined;
+
+  // Check if this is a PvP match (for rematch feature)
+  const isPvpMatch = meta?.mode === "pvp";
+
   // Selection state
   const [selectedHandCard, setSelectedHandCard] = useState<string | null>(null);
   const [selectedBoardCard, setSelectedBoardCard] = useState<string | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showTributeSelector, setShowTributeSelector] = useState(false);
   const [showAttackTargets, setShowAttackTargets] = useState(false);
+  const [showTargetSelector, setShowTargetSelector] = useState(false);
+  const [targetSelectorContext, setTargetSelectorContext] = useState<{
+    candidates: TargetCandidate[];
+    targetCount: number;
+    effectDescription: string;
+    callback: (targetIds: string[]) => void;
+  } | null>(null);
+  const [showCostConfirmation, setShowCostConfirmation] = useState(false);
+  const [costConfirmContext, setCostConfirmContext] = useState<{
+    cardName: string;
+    cost: EffectCost;
+    callback: () => void;
+  } | null>(null);
   const [showGraveyard, setShowGraveyard] = useState<{
     zone: "graveyard" | "banished";
     owner: "player" | "opponent";
@@ -411,6 +453,10 @@ export function GameBoard({
     setShowSurrenderConfirm(false);
     setPendingSummonPosition(null);
     setShowGraveyard(null);
+    setShowTargetSelector(false);
+    setTargetSelectorContext(null);
+    setShowCostConfirmation(false);
+    setCostConfirmContext(null);
   }, [isChainPromptOpen]);
 
   // Auto-advance non-interactive phases
@@ -672,8 +718,12 @@ export function GameBoard({
           result={result}
           playerLP={playerLP}
           opponentLP={opponentLP}
-          onExit={() => navigate("/story")}
-        />
+          onExit={() => navigate(isPvpMatch ? "/pvp" : "/story")}
+        >
+          {isPvpMatch && matchId && currentUser?._id && (
+            <RematchOverlay matchId={matchId} currentUserId={currentUser._id} />
+          )}
+        </GameOverOverlay>
       </AnimatePresence>
     );
   }
@@ -890,6 +940,9 @@ export function GameBoard({
         <ChainPrompt
           opponentCardName={chainOpponentCardName}
           activatableTraps={chainActivatableTraps}
+          activatableQuickPlays={chainActivatableQuickPlays}
+          chainLinks={view?.currentChain ?? []}
+          cardLookup={cardLookup}
           onActivate={handleChainActivate}
           onPass={handleChainPass}
         />
@@ -1013,6 +1066,42 @@ export function GameBoard({
           cardName=""
           onResult={(result) => actions.redemptionShoot(result)}
           onDecline={() => actions.redemptionDecline()}
+        />
+      )}
+
+      {/* Target Selector Overlay */}
+      {showTargetSelector && targetSelectorContext && (
+        <TargetSelector
+          effectDescription={targetSelectorContext.effectDescription}
+          targets={targetSelectorContext.candidates}
+          cardLookup={cardLookup}
+          targetCount={targetSelectorContext.targetCount}
+          onConfirm={(targetIds) => {
+            targetSelectorContext.callback(targetIds);
+            setShowTargetSelector(false);
+            setTargetSelectorContext(null);
+          }}
+          onCancel={() => {
+            setShowTargetSelector(false);
+            setTargetSelectorContext(null);
+          }}
+        />
+      )}
+
+      {/* Cost Confirmation Overlay */}
+      {showCostConfirmation && costConfirmContext && (
+        <CostConfirmation
+          cardName={costConfirmContext.cardName}
+          cost={costConfirmContext.cost}
+          onConfirm={() => {
+            costConfirmContext.callback();
+            setShowCostConfirmation(false);
+            setCostConfirmContext(null);
+          }}
+          onCancel={() => {
+            setShowCostConfirmation(false);
+            setCostConfirmContext(null);
+          }}
         />
       )}
     </div>

@@ -1,7 +1,7 @@
 import type { CardDefinition } from "./types/cards.js";
 import type { Command } from "./types/commands.js";
 import type { EngineEvent } from "./types/events.js";
-import type { GameState, PlayerView, Seat, BoardCard, SpellTrapCard } from "./types/state.js";
+import type { GameState, PlayerView, Seat, BoardCard, SpellTrapCard, LingeringEffect } from "./types/state.js";
 import type { EngineConfig } from "./types/config.js";
 import { DEFAULT_CONFIG } from "./types/config.js";
 import { nextPhase, opponentSeat } from "./rules/phases.js";
@@ -11,7 +11,8 @@ import { decideDeclareAttack, evolveCombat } from "./rules/combat.js";
 import { evolveVice } from "./rules/vice.js";
 import { checkStateBasedActions, drawCard } from "./rules/stateBasedActions.js";
 import { decideChainResponse } from "./rules/chain.js";
-import { resolveEffectActions, canActivateEffect, detectTriggerEffects } from "./rules/effects.js";
+import { resolveEffectActions, canActivateEffect, detectTriggerEffects, hasValidTargets, validateSelectedTargets, generateCostEvents } from "./rules/effects.js";
+import { applyContinuousEffects, removeContinuousEffectsForSource } from "./rules/continuous.js";
 import { expectDefined } from "./internal/invariant.js";
 
 const assertNever = (value: never): never => {
@@ -377,6 +378,7 @@ export function createInitialState(
     hostNormalSummonedThisTurn: false,
     awayNormalSummonedThisTurn: false,
     currentChain: [],
+    negatedLinks: [],
     currentPriorityPlayer: null,
     currentChainPasser: null,
     pendingAction: null,
@@ -504,7 +506,27 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
   if (isChainWindow) {
     if (!isChainResponder) return [];
   } else if (state.currentTurnPlayer !== seat) {
-    return [];
+    // During opponent's turn, check for set quick-play spells and set traps the player can activate
+    const opponentTurnMoves: Command[] = [];
+    const playerSpellTrapZone = seat === "host"
+      ? state.hostSpellTrapZone
+      : state.awaySpellTrapZone;
+
+    for (const setCard of playerSpellTrapZone) {
+      if (!setCard.faceDown) continue;
+
+      const setDef = state.cardLookup[setCard.definitionId];
+      if (!setDef) continue;
+
+      if (setDef.type === "spell" && setDef.spellType === "quick-play") {
+        opponentTurnMoves.push({
+          type: "ACTIVATE_SPELL",
+          cardId: setCard.cardId,
+        });
+      }
+    }
+
+    return opponentTurnMoves;
   }
 
   const moves: Command[] = [];
@@ -521,13 +543,22 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
       if (!setCard.faceDown) continue;
 
       const setDef = state.cardLookup[setCard.definitionId];
-      if (!setDef || setDef.type !== "trap") continue;
+      if (!setDef) continue;
 
-      moves.push({
-        type: "CHAIN_RESPONSE",
-        cardId: setCard.cardId,
-        pass: false,
-      });
+      // Traps and set quick-play spells can respond in chain windows
+      if (setDef.type === "trap") {
+        moves.push({
+          type: "CHAIN_RESPONSE",
+          cardId: setCard.cardId,
+          pass: false,
+        });
+      } else if (setDef.type === "spell" && setDef.spellType === "quick-play") {
+        moves.push({
+          type: "CHAIN_RESPONSE",
+          cardId: setCard.cardId,
+          pass: false,
+        });
+      }
     }
 
     return moves;
@@ -638,6 +669,64 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
         continue;
       }
 
+      // Equip spells: must have a face-up monster on own board
+      if (card.spellType === "equip") {
+        const faceUpMonsters = board.filter((c) => !c.faceDown);
+        if (faceUpMonsters.length === 0) continue;
+
+        // Generate one move per possible target
+        for (const monster of faceUpMonsters) {
+          moves.push({
+            type: "ACTIVATE_SPELL",
+            cardId,
+            targets: [monster.cardId],
+          });
+        }
+        continue;
+      }
+
+      // Ritual spells: check if player has ritual spell + monster in hand + enough tributes
+      if (card.spellType === "ritual") {
+        // Need at least one monster in hand that could be ritual summoned
+        const monstersInHand = hand.filter((hId) => {
+          if (hId === cardId) return false; // Skip the ritual spell itself
+          const def = state.cardLookup[hId];
+          return def && def.type === "stereotype";
+        });
+        if (monstersInHand.length === 0) continue;
+
+        // Need at least one face-up monster on board as tribute
+        const faceUpMonsters = board.filter((c) => !c.faceDown);
+        if (faceUpMonsters.length === 0) continue;
+
+        // Check if any combination is possible (at least one monster whose
+        // level can be met by available tributes)
+        const totalTributeLevel = faceUpMonsters.reduce((sum, c) => {
+          const def = state.cardLookup[c.definitionId];
+          return sum + (def?.level ?? 0);
+        }, 0);
+
+        const hasValidRitual = monstersInHand.some((mId) => {
+          const mDef = state.cardLookup[mId];
+          return mDef && (mDef.level ?? 0) <= totalTributeLevel;
+        });
+
+        if (!hasValidRitual) continue;
+
+        // Don't enumerate all combinations - just indicate activation is possible
+        moves.push({
+          type: "ACTIVATE_SPELL",
+          cardId,
+        });
+        continue;
+      }
+
+      // Check target availability for the spell's first effect
+      if (card.effects && card.effects.length > 0) {
+        const eff = card.effects[0];
+        if (eff && !hasValidTargets(state, eff, seat)) continue;
+      }
+
       moves.push({
         type: "ACTIVATE_SPELL",
         cardId,
@@ -651,6 +740,27 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
       const card = state.cardLookup[setCard.definitionId];
       if (!card || card.type !== "spell") continue;
 
+      // Equip spells from spell/trap zone: must have face-up monster
+      if (card.spellType === "equip") {
+        const faceUpMonsters = board.filter((c) => !c.faceDown);
+        if (faceUpMonsters.length === 0) continue;
+
+        for (const monster of faceUpMonsters) {
+          moves.push({
+            type: "ACTIVATE_SPELL",
+            cardId: setCard.cardId,
+            targets: [monster.cardId],
+          });
+        }
+        continue;
+      }
+
+      // Check target availability for the spell's first effect
+      if (card.effects && card.effects.length > 0) {
+        const eff = card.effects[0];
+        if (eff && !hasValidTargets(state, eff, seat)) continue;
+      }
+
       moves.push({
         type: "ACTIVATE_SPELL",
         cardId: setCard.cardId,
@@ -663,6 +773,12 @@ export function legalMoves(state: GameState, seat: Seat): Command[] {
 
       const card = state.cardLookup[setCard.definitionId];
       if (!card || card.type !== "trap") continue;
+
+      // Check target availability for the trap's first effect
+      if (card.effects && card.effects.length > 0) {
+        const eff = card.effects[0];
+        if (eff && !hasValidTargets(state, eff, seat)) continue;
+      }
 
       moves.push({
         type: "ACTIVATE_TRAP",
@@ -717,7 +833,17 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
         return [];
       }
     } else if (state.currentTurnPlayer !== seat) {
-      return [];
+      // Allow set quick-play spell activation during opponent's turn
+      if (command.type === "ACTIVATE_SPELL") {
+        const playerSpellTrapZone = seat === "host" ? state.hostSpellTrapZone : state.awaySpellTrapZone;
+        const setCard = playerSpellTrapZone.find((c) => c.cardId === command.cardId);
+        if (!setCard || !setCard.faceDown) return [];
+        const cardDef = state.cardLookup[setCard.definitionId];
+        if (!cardDef || cardDef.type !== "spell" || cardDef.spellType !== "quick-play") return [];
+        // Allowed — fall through to ACTIVATE_SPELL handler
+      } else {
+        return [];
+      }
     }
   }
 
@@ -750,6 +876,16 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       // When transitioning from draw phase, current player draws a card
       if (from === "draw" && to === "standby") {
         events.push(...drawCard(state, state.currentTurnPlayer));
+      }
+
+      // When entering standby phase, re-check continuous/field effects
+      if (to === "standby") {
+        // We need the state after the draw to properly compute effects.
+        // applyContinuousEffects works on the current state, but since
+        // evolve() will process these events in order, we compute against
+        // the pre-draw state. The evolve() post-processing will pick up
+        // any newly summoned monsters later.
+        events.push(...applyContinuousEffects(state));
       }
       break;
     }
@@ -833,8 +969,19 @@ export function decide(state: GameState, command: Command, seat: Seat): EngineEv
       );
       if (effectDef.type !== "ignition") break;
 
-      // Check OPT/HOPT
-      if (!canActivateEffect(state, effectDef)) break;
+      // Check OPT/HOPT and cost requirements
+      if (!canActivateEffect(state, effectDef, seat, cardId)) break;
+
+      // Check that enough valid targets exist for the effect
+      if (!hasValidTargets(state, effectDef, seat)) break;
+
+      // If targets are provided and the effect has a targetFilter, validate them
+      if (targets.length > 0 && !validateSelectedTargets(state, effectDef, seat, targets)) break;
+
+      // Generate cost payment events BEFORE the effect resolves
+      if (effectDef.cost) {
+        events.push(...generateCostEvents(state, effectDef.cost, seat, cardId));
+      }
 
       // Emit EFFECT_ACTIVATED
       events.push({
@@ -1001,6 +1148,7 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
       case "SPELL_TRAP_SET":
       case "SPELL_ACTIVATED":
       case "TRAP_ACTIVATED":
+      case "SPELL_EQUIPPED":
         newState = evolveSpellTrap(newState, event);
         break;
 
@@ -1204,6 +1352,7 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
 
       case "CHAIN_STARTED": {
         newState.currentChain = [];
+        newState.negatedLinks = [];
         newState.currentChainPasser = null;
         newState.currentPriorityPlayer = null;
         break;
@@ -1219,8 +1368,17 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
         break;
       }
 
+      case "CHAIN_LINK_NEGATED": {
+        const { negatedLinkIndex } = event;
+        if (!newState.negatedLinks.includes(negatedLinkIndex)) {
+          newState.negatedLinks = [...newState.negatedLinks, negatedLinkIndex];
+        }
+        break;
+      }
+
       case "CHAIN_RESOLVED": {
         newState.currentChain = [];
+        newState.negatedLinks = [];
         newState.currentChainPasser = null;
         newState.currentPriorityPlayer = null;
         break;
@@ -1268,6 +1426,11 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
       }
 
       case "MODIFIER_EXPIRED":
+        break;
+
+      case "COST_PAID":
+        // Marker event — actual state changes are handled by the
+        // follow-up events (CARD_DESTROYED, DAMAGE_DEALT, etc.)
         break;
 
       case "GAME_STARTED":
@@ -1323,8 +1486,230 @@ export function evolve(state: GameState, events: EngineEvent[]): GameState {
         break;
       }
 
+      case "EQUIP_DESTROYED": {
+        const { cardId } = event;
+
+        // Find and remove the equip from spell/trap zone, send to graveyard
+        // Also remove from the monster's equippedCards and reverse stat modifiers
+        for (const boardSide of ["host", "away"] as const) {
+          const spellTrapKey = boardSide === "host" ? "hostSpellTrapZone" : "awaySpellTrapZone";
+          const graveyardKey = boardSide === "host" ? "hostGraveyard" : "awayGraveyard";
+          const boardKey = boardSide === "host" ? "hostBoard" : "awayBoard";
+
+          const spellTrapZone = [...newState[spellTrapKey]];
+          const stIdx = spellTrapZone.findIndex((c) => c.cardId === cardId);
+          if (stIdx < 0) continue;
+
+          // Remove from spell/trap zone
+          spellTrapZone.splice(stIdx, 1);
+          newState = {
+            ...newState,
+            [spellTrapKey]: spellTrapZone,
+            [graveyardKey]: [...newState[graveyardKey], cardId],
+          };
+
+          // Reverse stat modifiers from the equip and remove from equippedCards
+          const equipDef = newState.cardLookup[cardId];
+          const board = [...newState[boardKey]];
+          for (let i = 0; i < board.length; i++) {
+            const monster = board[i];
+            if (!monster || !monster.equippedCards.includes(cardId)) continue;
+
+            let updatedMonster: BoardCard = {
+              ...monster,
+              equippedCards: monster.equippedCards.filter((id) => id !== cardId),
+            };
+
+            // Reverse stat boosts
+            if (equipDef?.effects) {
+              for (const eff of equipDef.effects) {
+                for (const action of eff.actions) {
+                  if (action.type === "boost_attack") {
+                    updatedMonster = {
+                      ...updatedMonster,
+                      temporaryBoosts: {
+                        ...updatedMonster.temporaryBoosts,
+                        attack: updatedMonster.temporaryBoosts.attack - action.amount,
+                      },
+                    };
+                  } else if (action.type === "boost_defense") {
+                    updatedMonster = {
+                      ...updatedMonster,
+                      temporaryBoosts: {
+                        ...updatedMonster.temporaryBoosts,
+                        defense: updatedMonster.temporaryBoosts.defense - action.amount,
+                      },
+                    };
+                  }
+                }
+              }
+            }
+
+            board[i] = updatedMonster;
+          }
+          newState = { ...newState, [boardKey]: board };
+          break; // Found and handled
+        }
+        break;
+      }
+
+      case "CONTINUOUS_EFFECT_APPLIED": {
+        const { sourceCardId, sourceSeat, targetCardId, effectType, amount } = event;
+        const field = effectType === "boost_attack" ? "attack" : "defense";
+
+        // Apply the stat boost to the target monster
+        newState = applyTemporaryBoost(newState, targetCardId, field, amount);
+
+        // Track the lingering effect
+        const newLingering: LingeringEffect = {
+          sourceCardId,
+          effectType,
+          amount,
+          targetCardId,
+          sourceSeat,
+        };
+        newState = {
+          ...newState,
+          lingeringEffects: [...newState.lingeringEffects, newLingering],
+        };
+        break;
+      }
+
+      case "CONTINUOUS_EFFECT_REMOVED": {
+        const { sourceCardId, targetCardId, effectType, amount } = event;
+        const field = effectType === "boost_attack" ? "attack" : "defense";
+
+        // Reverse the stat boost
+        newState = applyTemporaryBoost(newState, targetCardId, field, -amount);
+
+        // Remove the lingering effect entry
+        newState = {
+          ...newState,
+          lingeringEffects: newState.lingeringEffects.filter(
+            (le) =>
+              !(le.sourceCardId === sourceCardId &&
+                le.targetCardId === targetCardId &&
+                le.effectType === effectType)
+          ),
+        };
+        break;
+      }
+
+      case "RITUAL_SUMMONED": {
+        const { seat, cardId } = event;
+        const isHost = seat === "host";
+
+        // Remove ritual monster from hand
+        const handKey = isHost ? "hostHand" : "awayHand";
+        const hand = [...newState[handKey]];
+        const handIdx = hand.indexOf(cardId);
+        if (handIdx > -1) {
+          hand.splice(handIdx, 1);
+          newState = { ...newState, [handKey]: hand };
+        }
+
+        // Add to board as face-up attack position BoardCard
+        const newCard: BoardCard = {
+          cardId,
+          definitionId: cardId,
+          position: "attack",
+          faceDown: false,
+          canAttack: false,
+          hasAttackedThisTurn: false,
+          changedPositionThisTurn: false,
+          viceCounters: 0,
+          temporaryBoosts: { attack: 0, defense: 0 },
+          equippedCards: [],
+          turnSummoned: newState.turnNumber,
+        };
+
+        const boardKey = isHost ? "hostBoard" : "awayBoard";
+        newState = {
+          ...newState,
+          [boardKey]: [...newState[boardKey], newCard],
+        };
+        break;
+      }
+
       default:
         assertNever(event);
+    }
+  }
+
+  // Check for equip destruction when monsters leave the board
+  const equipDestroyEvents: EngineEvent[] = [];
+  for (const event of events) {
+    if (event.type === "CARD_DESTROYED") {
+      // Find if this card had equipped cards (check in the ORIGINAL state before evolve)
+      // We need to check both sides
+      for (const boardSide of ["host", "away"] as const) {
+        const origBoard = boardSide === "host" ? state.hostBoard : state.awayBoard;
+        const monster = origBoard.find((c) => c.cardId === event.cardId);
+        if (monster && monster.equippedCards.length > 0) {
+          for (const equipId of monster.equippedCards) {
+            equipDestroyEvents.push({
+              type: "EQUIP_DESTROYED",
+              cardId: equipId,
+              reason: "target_left",
+            });
+          }
+        }
+      }
+    }
+  }
+  if (equipDestroyEvents.length > 0) {
+    newState = evolve(newState, equipDestroyEvents);
+  }
+
+  // Check for continuous/field effect removal when source cards leave the field
+  const continuousRemovalEvents: EngineEvent[] = [];
+  for (const event of events) {
+    // Cards sent to graveyard from spell/trap zone or field
+    if (event.type === "CARD_SENT_TO_GRAVEYARD") {
+      const { cardId, from } = event;
+      if (from === "spell_trap_zone" || from === "spellTrapZone" || from === "field") {
+        continuousRemovalEvents.push(
+          ...removeContinuousEffectsForSource(state, cardId)
+        );
+      }
+    }
+    // Cards banished from spell/trap zone or field
+    if (event.type === "CARD_BANISHED") {
+      const { cardId, from } = event;
+      if (from === "spell_trap_zone" || from === "spellTrapZone" || from === "field") {
+        continuousRemovalEvents.push(
+          ...removeContinuousEffectsForSource(state, cardId)
+        );
+      }
+    }
+    // Cards returned to hand from spell/trap zone or field
+    if (event.type === "CARD_RETURNED_TO_HAND") {
+      const { cardId, from } = event;
+      if (from === "spell_trap_zone" || from === "spellTrapZone" || from === "field") {
+        continuousRemovalEvents.push(
+          ...removeContinuousEffectsForSource(state, cardId)
+        );
+      }
+    }
+  }
+  if (continuousRemovalEvents.length > 0) {
+    newState = evolve(newState, continuousRemovalEvents);
+  }
+
+  // After card removal or summoning, re-check continuous effects to apply to new monsters
+  // or clean up effects for removed monsters. Only do this if we had events that could
+  // affect the board (summons, destructions, etc.) and there are active lingering sources.
+  const boardChangingTypes = new Set([
+    "MONSTER_SUMMONED", "SPECIAL_SUMMONED", "FLIP_SUMMONED",
+    "CARD_DESTROYED", "CARD_SENT_TO_GRAVEYARD", "CARD_BANISHED",
+    "CARD_RETURNED_TO_HAND",
+    "SPELL_ACTIVATED", "TRAP_ACTIVATED",
+  ]);
+  const hadBoardChange = events.some((e) => boardChangingTypes.has(e.type));
+  if (hadBoardChange) {
+    const continuousRefreshEvents = applyContinuousEffects(newState);
+    if (continuousRefreshEvents.length > 0) {
+      newState = evolve(newState, continuousRefreshEvents);
     }
   }
 

@@ -44,9 +44,14 @@ export function decideChainResponse(
       state.currentChainPasser !== seat
     ) {
       events.push({ type: "CHAIN_RESOLVED" });
-      // Resolve LIFO (last in, first out)
-      const chain = [...state.currentChain].reverse();
-      for (const link of chain) {
+      // Resolve LIFO (last in, first out), skipping negated links
+      const negated = state.negatedLinks ?? [];
+      const chainLength = state.currentChain.length;
+      for (let i = chainLength - 1; i >= 0; i--) {
+        const link = state.currentChain[i];
+        if (!link) continue;
+        // Skip negated chain links — their effects don't resolve
+        if (negated.includes(i)) continue;
         const cardDef = state.cardLookup[link.cardId];
         if (cardDef) {
           events.push(...executeEffect(
@@ -75,13 +80,22 @@ export function decideChainResponse(
       targets: resolvedTargets,
     });
 
-    // Activate the trap (move to graveyard etc.)
-    events.push({
-      type: "TRAP_ACTIVATED",
-      seat,
-      cardId,
-      targets: [],
-    });
+    // Activate the card (trap or set quick-play spell) — move to graveyard etc.
+    if (cardDef.type === "spell" && cardDef.spellType === "quick-play") {
+      events.push({
+        type: "SPELL_ACTIVATED",
+        seat,
+        cardId,
+        targets: resolvedTargets,
+      });
+    } else {
+      events.push({
+        type: "TRAP_ACTIVATED",
+        seat,
+        cardId,
+        targets: [],
+      });
+    }
   }
 
   return events;

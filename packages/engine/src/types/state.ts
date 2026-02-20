@@ -52,9 +52,17 @@ export interface TemporaryModifier {
 
 export interface LingeringEffect {
   sourceCardId: string;
-  effectType: string;
-  affectedZone: string;
-  expiresAt?: number;
+  effectType: "boost_attack" | "boost_defense";
+  amount: number;
+  /** The card receiving the modifier */
+  targetCardId: string;
+  /** Which player controls the source card */
+  sourceSeat: Seat;
+  /** Filter criteria used by field spells to re-evaluate on standby */
+  filter?: {
+    owner?: "self" | "opponent" | "all";
+    attribute?: string;
+  };
 }
 
 export interface GameState {
@@ -86,6 +94,7 @@ export interface GameState {
   hostNormalSummonedThisTurn: boolean;
   awayNormalSummonedThisTurn: boolean;
   currentChain: ChainLink[];
+  negatedLinks: number[];
   currentPriorityPlayer: Seat | null;
   currentChainPasser: Seat | null;
   pendingAction: PendingAction | null;

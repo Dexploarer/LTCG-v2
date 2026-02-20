@@ -15,4 +15,15 @@ export type { CSVAbility } from "./effectParser.js";
 export { executeAction, findBoardCard } from "./effects/operations.js";
 export { executeEffect, findAbilityByTrigger } from "./effects/interpreter.js";
 export { decideChainResponse } from "./rules/chain.js";
-export { resolveEffectActions, canActivateEffect, detectTriggerEffects } from "./rules/effects.js";
+export {
+  resolveEffectActions,
+  canActivateEffect,
+  detectTriggerEffects,
+  getValidTargets,
+  hasValidTargets,
+  validateSelectedTargets,
+} from "./rules/effects.js";
+export {
+  applyContinuousEffects,
+  removeContinuousEffectsForSource,
+} from "./rules/continuous.js";

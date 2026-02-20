@@ -1,11 +1,13 @@
 import type { GameState, Seat, Command, EngineEvent, SpellTrapCard } from "../types/index.js";
 import { executeEffect } from "../effects/interpreter.js";
+import { hasValidTargets, validateSelectedTargets } from "./effects.js";
 import { expectDefined } from "../internal/invariant.js";
 
 function getPlayerZones(state: GameState, seat: Seat) {
   const isHost = seat === "host";
   return {
     hand: isHost ? state.hostHand : state.awayHand,
+    board: isHost ? state.hostBoard : state.awayBoard,
     spellTrapZone: isHost ? state.hostSpellTrapZone : state.awaySpellTrapZone,
     fieldSpell: isHost ? state.hostFieldSpell : state.awayFieldSpell,
     graveyard: isHost ? state.hostGraveyard : state.awayGraveyard,
@@ -60,11 +62,6 @@ export function decideActivateSpell(
   const events: EngineEvent[] = [];
   const { cardId, effectIndex, targets = [] } = command;
 
-  // Check phase (for now, only main phases)
-  if (state.currentPhase !== "main" && state.currentPhase !== "main2") {
-    return events;
-  }
-
   const zones = getPlayerZones(state, seat);
 
   // Check if card is in hand or face-down in spell/trap zone
@@ -82,10 +79,120 @@ export function decideActivateSpell(
     return events;
   }
 
+  // Quick-play spells from hand can only be activated during own main phases.
+  // Set quick-play spells follow trap-like timing (handled in chain window / opponent turn).
+  if (card.spellType === "quick-play" && inHand) {
+    if (state.currentPhase !== "main" && state.currentPhase !== "main2") {
+      return events;
+    }
+  } else if (card.spellType !== "quick-play") {
+    // Non-quick-play spells: only main phases
+    if (state.currentPhase !== "main" && state.currentPhase !== "main2") {
+      return events;
+    }
+  }
+
   // If activating from hand, check if spell/trap zone has space (unless it's a field spell)
   if (inHand && card.spellType !== "field") {
     if (zones.spellTrapZone.length >= state.config.maxSpellTrapSlots) {
       return events;
+    }
+  }
+
+  // ── Equip spell: require a face-up monster on own board as target ──
+  if (card.spellType === "equip") {
+    const faceUpMonsters = zones.board.filter((c) => !c.faceDown);
+    if (faceUpMonsters.length === 0) {
+      return events; // No valid targets
+    }
+
+    // If targets are provided, validate the target is a face-up monster on own board
+    if (targets.length > 0) {
+      const targetCardId = targets[0];
+      const targetOnBoard = faceUpMonsters.find((c) => c.cardId === targetCardId);
+      if (!targetOnBoard) return events;
+    } else {
+      // No target specified - block activation (equips require a target)
+      return events;
+    }
+  }
+
+  // ── Ritual spell: validate targets and tributes ──
+  if (card.spellType === "ritual") {
+    // targets[0] = ritual monster from hand, targets[1..n] = tributes from board
+    if (targets.length < 2) return events; // Need at least 1 ritual monster + 1 tribute
+
+    const ritualMonsterId = targets[0];
+    if (!ritualMonsterId) return events;
+    const tributeIds = targets.slice(1);
+
+    // Ritual monster must be in hand
+    if (!zones.hand.includes(ritualMonsterId)) return events;
+
+    // Ritual monster must be a stereotype (monster) card
+    const ritualMonsterDef = state.cardLookup[ritualMonsterId];
+    if (!ritualMonsterDef || ritualMonsterDef.type !== "stereotype") return events;
+
+    // Validate tribute cards are on own board and face-up
+    const faceUpMonsters = zones.board.filter((c) => !c.faceDown);
+    for (const tributeId of tributeIds) {
+      const onBoard = faceUpMonsters.find((c) => c.cardId === tributeId);
+      if (!onBoard) return events;
+    }
+
+    // Validate tribute levels sum >= ritual monster level
+    const ritualLevel = ritualMonsterDef.level ?? 0;
+    let tributeLevelSum = 0;
+    for (const tributeId of tributeIds) {
+      const tributeCard = faceUpMonsters.find((c) => c.cardId === tributeId);
+      if (!tributeCard) return events;
+      const tributeDef = state.cardLookup[tributeCard.definitionId];
+      tributeLevelSum += tributeDef?.level ?? 0;
+    }
+    if (tributeLevelSum < ritualLevel) return events;
+
+    // Emit SPELL_ACTIVATED (ritual spell goes to graveyard - normal spell behavior)
+    events.push({
+      type: "SPELL_ACTIVATED",
+      seat,
+      cardId,
+      targets,
+    });
+
+    // Destroy tributes
+    for (const tributeId of tributeIds) {
+      events.push({ type: "CARD_DESTROYED", cardId: tributeId, reason: "effect" });
+      events.push({
+        type: "CARD_SENT_TO_GRAVEYARD",
+        cardId: tributeId,
+        from: "board",
+        sourceSeat: seat,
+      });
+    }
+
+    // Emit RITUAL_SUMMONED
+    events.push({
+      type: "RITUAL_SUMMONED",
+      seat,
+      cardId: ritualMonsterId,
+      ritualSpellId: cardId,
+      tributes: tributeIds,
+    });
+
+    return events;
+  }
+
+  // Check target availability for the effect being activated
+  if (card.effects && card.effects.length > 0) {
+    const selectedEffectIndex = effectIndex ?? 0;
+    if (selectedEffectIndex >= 0 && selectedEffectIndex < card.effects.length) {
+      const eff = card.effects[selectedEffectIndex];
+      if (eff) {
+        // Block activation if not enough valid targets exist
+        if (!hasValidTargets(state, eff, seat)) return events;
+        // Validate player-chosen targets if provided
+        if (targets.length > 0 && !validateSelectedTargets(state, eff, seat, targets)) return events;
+      }
     }
   }
 
@@ -99,6 +206,31 @@ export function decideActivateSpell(
     });
   }
 
+  // ── Set quick-play: use chain mechanics like traps ──
+  if (card.spellType === "quick-play" && setCard && !inHand) {
+    const selectedEffectIndex = effectIndex ?? 0;
+    const resolvedEffectIndex =
+      Array.isArray(card.effects) && selectedEffectIndex < card.effects.length
+        ? selectedEffectIndex
+        : 0;
+
+    events.push({ type: "CHAIN_STARTED" });
+    events.push({
+      type: "CHAIN_LINK_ADDED",
+      cardId,
+      seat,
+      effectIndex: resolvedEffectIndex,
+      targets,
+    });
+    events.push({
+      type: "SPELL_ACTIVATED",
+      seat,
+      cardId,
+      targets,
+    });
+    return events;
+  }
+
   // Emit SPELL_ACTIVATED event
   events.push({
     type: "SPELL_ACTIVATED",
@@ -106,6 +238,19 @@ export function decideActivateSpell(
     cardId,
     targets,
   });
+
+  // For equip spells, emit SPELL_EQUIPPED after SPELL_ACTIVATED
+  if (card.spellType === "equip" && targets.length > 0) {
+    const targetCardId = targets[0];
+    if (targetCardId) {
+      events.push({
+        type: "SPELL_EQUIPPED",
+        seat,
+        cardId,
+        targetCardId,
+      });
+    }
+  }
 
   // Execute spell effect (if card has effects, execute the first one)
   if (card.effects && card.effects.length > 0) {
@@ -150,6 +295,17 @@ export function decideActivateTrap(
     Array.isArray(card.effects) && selectedEffectIndex < card.effects.length
       ? selectedEffectIndex
       : 0;
+
+  // Check target availability for the trap's effect
+  if (card.effects && resolvedEffectIndex < card.effects.length) {
+    const eff = card.effects[resolvedEffectIndex];
+    if (eff) {
+      // Block activation if not enough valid targets exist
+      if (!hasValidTargets(state, eff, seat)) return events;
+      // Validate player-chosen targets if provided
+      if (targets.length > 0 && !validateSelectedTargets(state, eff, seat, targets)) return events;
+    }
+  }
 
   events.push({ type: "CHAIN_STARTED" });
   events.push({
@@ -255,6 +411,37 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
           newState.awayFieldSpell = fieldCard;
         }
       }
+      // If it's an equip spell: place in spell/trap zone face-up (like continuous)
+      else if (card.spellType === "equip") {
+        // If from hand, add to spell/trap zone face-up
+        if (inHand) {
+          const handIndex = hand.indexOf(cardId);
+          if (handIndex > -1) {
+            hand.splice(handIndex, 1);
+          }
+
+          const equipCard: SpellTrapCard = {
+            cardId,
+            definitionId: cardId,
+            faceDown: false,
+            activated: true,
+          };
+          spellTrapZone.push(equipCard);
+        }
+        // If face-down, flip it face-up
+        else if (setCardIndex > -1) {
+          const setCardInZone = expectDefined(
+            spellTrapZone[setCardIndex],
+            `rules.spellsTraps.evolveSpellTrap missing set card at index ${setCardIndex}`
+          );
+
+          spellTrapZone[setCardIndex] = {
+            ...setCardInZone,
+            faceDown: false,
+            activated: true,
+          };
+        }
+      }
       // If it's a continuous spell
       else if (card.spellType === "continuous") {
         // If from hand, add to spell/trap zone face-up
@@ -357,6 +544,66 @@ export function evolveSpellTrap(state: GameState, event: EngineEvent): GameState
       } else {
         newState.awaySpellTrapZone = spellTrapZone;
         newState.awayGraveyard = graveyard;
+      }
+      break;
+    }
+
+    case "SPELL_EQUIPPED": {
+      const { seat, cardId, targetCardId } = event;
+      const isHost = seat === "host";
+
+      // Add equip cardId to the target monster's equippedCards
+      const board = isHost ? [...newState.hostBoard] : [...newState.awayBoard];
+      const targetIdx = board.findIndex((c) => c.cardId === targetCardId);
+      if (targetIdx > -1) {
+        const targetCard = expectDefined(
+          board[targetIdx],
+          `rules.spellsTraps.evolveSpellTrap missing board card at index ${targetIdx}`
+        );
+
+        // Add equip to equipped cards list
+        board[targetIdx] = {
+          ...targetCard,
+          equippedCards: [...targetCard.equippedCards, cardId],
+        };
+
+        // Apply stat modifiers from the equip spell's effects (boost_attack, boost_defense)
+        const equipDef = newState.cardLookup[cardId];
+        if (equipDef?.effects) {
+          for (const eff of equipDef.effects) {
+            for (const action of eff.actions) {
+              if (action.type === "boost_attack") {
+                const existing = board[targetIdx];
+                if (existing) {
+                  board[targetIdx] = {
+                    ...existing,
+                    temporaryBoosts: {
+                      ...existing.temporaryBoosts,
+                      attack: existing.temporaryBoosts.attack + action.amount,
+                    },
+                  };
+                }
+              } else if (action.type === "boost_defense") {
+                const existing = board[targetIdx];
+                if (existing) {
+                  board[targetIdx] = {
+                    ...existing,
+                    temporaryBoosts: {
+                      ...existing.temporaryBoosts,
+                      defense: existing.temporaryBoosts.defense + action.amount,
+                    },
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (isHost) {
+        newState.hostBoard = board;
+      } else {
+        newState.awayBoard = board;
       }
       break;
     }

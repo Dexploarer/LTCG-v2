@@ -45,10 +45,30 @@ export type EngineEvent =
   | { type: "CHAIN_STARTED" }
   | { type: "CHAIN_LINK_ADDED"; cardId: string; seat: Seat; effectIndex: number; targets?: string[] }
   | { type: "CHAIN_RESOLVED" }
+  | { type: "CHAIN_LINK_NEGATED"; seat: Seat; negatedLinkIndex: number; negatedBy: string }
   | { type: "CHAIN_PASSED"; seat: Seat }
   | { type: "PONG_OPPORTUNITY"; seat: Seat; destroyedCardId: string }
   | { type: "PONG_ATTEMPTED"; seat: Seat; destroyedCardId: string; result: "sink" | "miss" }
   | { type: "PONG_DECLINED"; seat: Seat; destroyedCardId: string }
   | { type: "REDEMPTION_OPPORTUNITY"; seat: Seat }
   | { type: "REDEMPTION_ATTEMPTED"; seat: Seat; result: "sink" | "miss" }
-  | { type: "REDEMPTION_GRANTED"; newLP: number };
+  | { type: "REDEMPTION_GRANTED"; newLP: number }
+  | { type: "COST_PAID"; seat: Seat; costType: "tribute" | "discard" | "pay_lp" | "remove_vice" | "banish"; amount: number }
+  | { type: "SPELL_EQUIPPED"; seat: Seat; cardId: string; targetCardId: string }
+  | { type: "EQUIP_DESTROYED"; cardId: string; reason: "target_left" | "effect" }
+  | { type: "RITUAL_SUMMONED"; seat: Seat; cardId: string; ritualSpellId: string; tributes: string[] }
+  | {
+      type: "CONTINUOUS_EFFECT_APPLIED";
+      sourceCardId: string;
+      sourceSeat: Seat;
+      targetCardId: string;
+      effectType: "boost_attack" | "boost_defense";
+      amount: number;
+    }
+  | {
+      type: "CONTINUOUS_EFFECT_REMOVED";
+      sourceCardId: string;
+      targetCardId: string;
+      effectType: "boost_attack" | "boost_defense";
+      amount: number;
+    };

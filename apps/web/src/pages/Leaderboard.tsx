@@ -1,398 +1,249 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
-import { toast } from "sonner";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useConvexAuth } from "convex/react";
+import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 import { TrayNav } from "@/components/layout/TrayNav";
-import { StreamWatchButton } from "../components/StreamWatchButton";
-import { StreamModal } from "../components/StreamModal";
-import { YearbookCard } from "../components/YearbookCard";
-import posthog from "@/lib/posthog";
-import {
-  CRUMPLED_PAPER, CIGGARETTE_TRAY, TAPE,
-  MILUNCHLADY_GAMER, MILUNCHLADY_CYBER, MILUNCHLADY_PREP,
-  MILUNCHLADY_GOTH, MILUNCHLADY_HYPEBEAST,
-} from "@/lib/blobUrls";
+import { RankCard } from "@/components/ranked/RankCard";
+import { TierBadge, TIER_COLORS, TIER_ORDER } from "@/components/ranked/TierBadge";
 
-type LeaderboardEntry = {
-  rank: number;
-  name: string;
-  type: "human" | "agent";
-  score: number;
-  breakdowns: number;
-  avatar?: string;
+// ── Types ────────────────────────────────────────────────────────
+
+type LeaderboardPlayer = {
+  userId: string;
+  username: string;
+  rating: number;
+  tier: string;
+  gamesPlayed: number;
+  peakRating: number;
 };
 
-const MOCK_DATA: LeaderboardEntry[] = [
-  { rank: 1, name: "ChaosAgent_001", type: "agent", score: 15420, breakdowns: 42, avatar: MILUNCHLADY_GAMER },
-  { rank: 2, name: "LunchLady_X", type: "human", score: 14200, breakdowns: 38 },
-  { rank: 3, name: "EntropyBot", type: "agent", score: 12150, breakdowns: 24, avatar: MILUNCHLADY_CYBER },
-  { rank: 4, name: "Detention_Dave", type: "human", score: 11800, breakdowns: 19 },
-  { rank: 5, name: "PaperCut_AI", type: "agent", score: 10500, breakdowns: 15, avatar: MILUNCHLADY_PREP },
-  { rank: 6, name: "SloppyJoe", type: "human", score: 9200, breakdowns: 12 },
-  { rank: 7, name: "ViceGrip", type: "human", score: 8700, breakdowns: 10 },
-  { rank: 8, name: "GlitchWitch", type: "agent", score: 8100, breakdowns: 8, avatar: MILUNCHLADY_GOTH },
-  { rank: 9, name: "HypeBeast_Bot", type: "agent", score: 7500, breakdowns: 5, avatar: MILUNCHLADY_HYPEBEAST },
-];
+type PlayerRankData = {
+  rank: number | null;
+  rating: number;
+  peakRating?: number;
+  tier: string;
+  gamesPlayed: number;
+  ratingHistory?: Array<{
+    rating: number;
+    change: number;
+    opponentRating: number;
+    result: "win" | "loss";
+    timestamp: number;
+  }>;
+};
 
-const SHARE_LABEL_DEFAULT = "Share Card";
-const SHARE_FEEDBACK_MS = 2000;
-const BABYLON_POST_LABEL_DEFAULT = "Post to Babylon";
-const BABYLON_POST_FEEDBACK_MS = 2500;
-const BABYLON_TOKEN_STORAGE_KEY = "ltcg.babylon.token";
+type TierDistribution = {
+  distribution: Record<string, number>;
+  totalPlayers: number;
+};
 
-function buildYearbookCardUrl(entry: LeaderboardEntry): string {
-  return `${window.location.origin}/leaderboard?player=${encodeURIComponent(entry.name)}`;
-}
+// ── Distribution Bar ─────────────────────────────────────────────
 
-function buildYearbookCardImageUrl(entry: LeaderboardEntry): string {
-  const params = new URLSearchParams({
-    name: entry.name,
-    rank: String(entry.rank),
-    score: String(entry.score),
-    breakdowns: String(entry.breakdowns),
-    type: entry.type,
-  });
-  return `${window.location.origin}/api/yearbook-card?${params.toString()}`;
-}
-
-function buildBabylonPostContent(entry: LeaderboardEntry): string {
-  const cardUrl = buildYearbookCardUrl(entry);
-  const imageUrl = buildYearbookCardImageUrl(entry);
-  return [
-    `LunchTable Yearbook: ${entry.name} is #${entry.rank} with ${entry.score.toLocaleString()} points and ${entry.breakdowns} breakdowns.`,
-    `Card: ${cardUrl}`,
-    `Image: ${imageUrl}`,
-    "Can you beat this run? #LunchTableTCG #Babylon",
-  ].join("\n");
-}
-
-export function Leaderboard() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"global" | "human" | "agent">("global");
-  const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
-  const [selectedPlayer, setSelectedPlayer] = useState<LeaderboardEntry | null>(null);
-  const [shareLabel, setShareLabel] = useState(SHARE_LABEL_DEFAULT);
-  const [babylonPostLabel, setBabylonPostLabel] = useState(BABYLON_POST_LABEL_DEFAULT);
-  const shareResetTimerRef = useRef<number | null>(null);
-  const babylonResetTimerRef = useRef<number | null>(null);
-  const initialSharedPlayerRef = useRef(searchParams.get("player"));
-
-  const filteredData = MOCK_DATA.filter((entry) => {
-    if (activeTab === "global") return true;
-    return entry.type === activeTab;
-  }).sort((a, b) => a.rank - b.rank); // Ensure they stay sorted by rank even if filtered
-
-  const setPlayerInQuery = useCallback(
-    (playerName: string | null) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (playerName) {
-          next.set("player", playerName);
-        } else {
-          next.delete("player");
-        }
-        return next;
-      }, { replace: true });
-    },
-    [setSearchParams],
-  );
-
-  const clearShareFeedbackLater = useCallback(() => {
-    if (shareResetTimerRef.current) {
-      window.clearTimeout(shareResetTimerRef.current);
-    }
-    shareResetTimerRef.current = window.setTimeout(() => {
-      setShareLabel(SHARE_LABEL_DEFAULT);
-    }, SHARE_FEEDBACK_MS);
-  }, []);
-
-  const clearBabylonFeedbackLater = useCallback(() => {
-    if (babylonResetTimerRef.current) {
-      window.clearTimeout(babylonResetTimerRef.current);
-    }
-    babylonResetTimerRef.current = window.setTimeout(() => {
-      setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
-    }, BABYLON_POST_FEEDBACK_MS);
-  }, []);
-
-  const openYearbookCard = useCallback(
-    (entry: LeaderboardEntry) => {
-      setSelectedPlayer(entry);
-      setPlayerInQuery(entry.name);
-      setShareLabel(SHARE_LABEL_DEFAULT);
-      setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
-    },
-    [setPlayerInQuery],
-  );
-
-  const closeYearbookCard = useCallback(() => {
-    setSelectedPlayer(null);
-    setPlayerInQuery(null);
-    setShareLabel(SHARE_LABEL_DEFAULT);
-    setBabylonPostLabel(BABYLON_POST_LABEL_DEFAULT);
-  }, [setPlayerInQuery]);
-
-  const handleShareYearbookCard = useCallback(async () => {
-    if (!selectedPlayer) return;
-
-    const shareUrl = buildYearbookCardUrl(selectedPlayer);
-    const shareText = `I made the LunchTable Yearbook leaderboard as ${selectedPlayer.name}. Can you beat this score?`;
-    let method: "native" | "clipboard" | null = null;
-
-    try {
-      if (typeof navigator.share === "function") {
-        await navigator.share({
-          title: `LunchTable Yearbook: ${selectedPlayer.name}`,
-          text: shareText,
-          url: shareUrl,
-        });
-        method = "native";
-        setShareLabel("Shared");
-        toast.success("Card shared");
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        method = "clipboard";
-        setShareLabel("Link Copied");
-        toast.success("Share link copied");
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        method = "clipboard";
-        setShareLabel("Link Copied");
-        toast.success("Share link copied");
-      } catch {
-        toast.error("Unable to share right now");
-        return;
-      }
-    }
-
-    if (method) {
-      posthog.capture("leaderboard_card_share_clicked", {
-        player_name: selectedPlayer.name,
-        player_rank: selectedPlayer.rank,
-        source_tab: activeTab,
-        method,
-      });
-      clearShareFeedbackLater();
-    }
-  }, [activeTab, clearShareFeedbackLater, selectedPlayer]);
-
-  const handlePostToBabylon = useCallback(async () => {
-    if (!selectedPlayer) return;
-
-    const content = buildBabylonPostContent(selectedPlayer);
-    const cardUrl = buildYearbookCardUrl(selectedPlayer);
-    const imageUrl = buildYearbookCardImageUrl(selectedPlayer);
-
-    let token = "";
-    try {
-      token = sessionStorage.getItem(BABYLON_TOKEN_STORAGE_KEY)?.trim() ?? "";
-    } catch {
-      token = "";
-    }
-
-    if (!token) {
-      const promptValue = window.prompt(
-        "Paste your Babylon bearer token to post directly. If you cancel, we'll copy a Babylon-ready post instead.",
-      );
-      if (promptValue && promptValue.trim()) {
-        token = promptValue.trim();
-        try {
-          sessionStorage.setItem(BABYLON_TOKEN_STORAGE_KEY, token);
-        } catch {}
-      }
-    }
-
-    if (!token) {
-      try {
-        await navigator.clipboard.writeText(content);
-        setBabylonPostLabel("Post Text Copied");
-        toast.message("Babylon post copied. Paste it in Babylon timeline.");
-        window.open("https://babylon.market", "_blank", "noopener,noreferrer");
-        posthog.capture("leaderboard_babylon_post", {
-          status: "copied_no_token",
-          player_name: selectedPlayer.name,
-          player_rank: selectedPlayer.rank,
-          source_tab: activeTab,
-          card_url: cardUrl,
-          image_url: imageUrl,
-        });
-        clearBabylonFeedbackLater();
-      } catch {
-        toast.error("Couldn't copy Babylon post text");
-      }
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/babylon-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          content,
-        }),
-      });
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok || !payload?.success) {
-        const message =
-          payload?.error?.message ||
-          payload?.error ||
-          `Babylon API request failed (${response.status})`;
-        throw new Error(message);
-      }
-
-      setBabylonPostLabel("Posted");
-      toast.success("Posted to Babylon timeline");
-      posthog.capture("leaderboard_babylon_post", {
-        status: "posted",
-        player_name: selectedPlayer.name,
-        player_rank: selectedPlayer.rank,
-        source_tab: activeTab,
-        card_url: cardUrl,
-        image_url: imageUrl,
-      });
-      clearBabylonFeedbackLater();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to post to Babylon";
-      if (/401|403|token|auth/i.test(message)) {
-        try {
-          sessionStorage.removeItem(BABYLON_TOKEN_STORAGE_KEY);
-        } catch {}
-      }
-
-      try {
-        await navigator.clipboard.writeText(content);
-        setBabylonPostLabel("Post Text Copied");
-        toast.error("Direct post failed. Copied Babylon post text instead.");
-      } catch {
-        toast.error("Direct post failed and clipboard copy also failed.");
-      }
-
-      posthog.capture("leaderboard_babylon_post", {
-        status: "failed",
-        reason: message,
-        player_name: selectedPlayer.name,
-        player_rank: selectedPlayer.rank,
-        source_tab: activeTab,
-      });
-      clearBabylonFeedbackLater();
-    }
-  }, [activeTab, clearBabylonFeedbackLater, selectedPlayer]);
-
-  useEffect(() => {
-    const sharedPlayer = searchParams.get("player");
-    if (!sharedPlayer) {
-      setSelectedPlayer(null);
-      return;
-    }
-
-    const match = MOCK_DATA.find(
-      (entry) => entry.name.toLowerCase() === sharedPlayer.toLowerCase(),
-    );
-
-    if (match) {
-      setSelectedPlayer(match);
-      return;
-    }
-
-    setSelectedPlayer(null);
-  }, [searchParams]);
-
-  useEffect(() => {
-    const firstSharedPlayer = initialSharedPlayerRef.current;
-    if (!firstSharedPlayer) return;
-
-    const match = MOCK_DATA.find(
-      (entry) => entry.name.toLowerCase() === firstSharedPlayer.toLowerCase(),
-    );
-
-    if (match) {
-      posthog.capture("leaderboard_card_share_opened", {
-        player_name: match.name,
-        player_rank: match.rank,
-      });
-    }
-
-    initialSharedPlayerRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (shareResetTimerRef.current) {
-        window.clearTimeout(shareResetTimerRef.current);
-      }
-      if (babylonResetTimerRef.current) {
-        window.clearTimeout(babylonResetTimerRef.current);
-      }
-    };
-  }, []);
+function TierDistributionBar({ data }: { data: TierDistribution }) {
+  const { distribution, totalPlayers } = data;
+  if (totalPlayers === 0) return null;
 
   return (
-    <div
-      className="min-h-screen bg-cover bg-center bg-fixed"
-      style={{ backgroundImage: `url('${CRUMPLED_PAPER}')` }}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="border-2 border-[#121212] p-4 mb-6"
+      style={{
+        backgroundColor: "#fdfdfb",
+        boxShadow: "4px 4px 0px 0px rgba(18,18,18,1)",
+      }}
     >
-      <div className="relative z-10 max-w-4xl mx-auto px-6 py-12 pb-32">
-        <h1
-          className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#121212] mb-2 text-center"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Leaderboard
-        </h1>
-        <p
-          className="text-[#121212] text-lg font-bold text-center mb-12"
-          style={{ fontFamily: "Special Elite, cursive" }}
-        >
-          Top players and agents ranked by breakdowns caused
-        </p>
+      <h3
+        className="text-xs uppercase tracking-widest text-[#121212]/50 mb-3"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        Tier Distribution ({totalPlayers} player{totalPlayers === 1 ? "" : "s"})
+      </h3>
+      <div className="flex h-6 border-2 border-[#121212] overflow-hidden">
+        {TIER_ORDER.map((tier) => {
+          const count = distribution[tier] ?? 0;
+          const pct = (count / totalPlayers) * 100;
+          if (pct === 0) return null;
+          return (
+            <div
+              key={tier}
+              className="relative group"
+              style={{
+                width: `${pct}%`,
+                backgroundColor: TIER_COLORS[tier],
+                minWidth: count > 0 ? "2px" : 0,
+              }}
+              title={`${tier}: ${count} (${pct.toFixed(1)}%)`}
+            >
+              {pct > 10 && (
+                <span
+                  className="absolute inset-0 flex items-center justify-center text-[10px] font-black uppercase"
+                  style={{
+                    fontFamily: "Outfit, sans-serif",
+                    color:
+                      tier === "platinum" || tier === "diamond"
+                        ? "#121212"
+                        : "#fff",
+                    textShadow:
+                      tier === "platinum" || tier === "diamond"
+                        ? "none"
+                        : "1px 1px 0 rgba(0,0,0,0.3)",
+                  }}
+                >
+                  {Math.round(pct)}%
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-3 mt-2">
+        {TIER_ORDER.map((tier) => {
+          const count = distribution[tier] ?? 0;
+          return (
+            <span
+              key={tier}
+              className="text-[10px] uppercase tracking-wider text-[#121212]/60"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <span
+                className="inline-block w-2 h-2 mr-1 border border-[#121212]"
+                style={{ backgroundColor: TIER_COLORS[tier] }}
+              />
+              {tier}: {count}
+            </span>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
 
-        {/* Ashtray / Graffiti Asset */}
-        <div className="absolute top-0 -right-4 md:-right-20 transform rotate-12 pointer-events-none z-30 w-48 md:w-64">
-          <img
-            src={CIGGARETTE_TRAY}
-            alt="Cigarette Tray - Loose Morals"
-            className="w-full h-auto drop-shadow-2xl"
-            style={{ filter: "contrast(1.1) brightness(0.9)" }}
-          />
-        </div>
+// ── Loading State ────────────────────────────────────────────────
 
-        {/* Watch Live Button */}
-        <div className="absolute top-0 left-0 md:-left-16 z-40">
-          <StreamWatchButton onClick={() => setIsStreamModalOpen(true)} />
-        </div>
+function LeaderboardSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="h-14 border-2 border-[#121212]/10 animate-pulse"
+          style={{ backgroundColor: i % 2 === 0 ? "#f9f9f7" : "#fdfdfb" }}
+        />
+      ))}
+    </div>
+  );
+}
 
+// ── Row Animation Variants ───────────────────────────────────────
 
-        {/* Tabs */}
-        <div className="flex justify-center gap-4 mb-8 relative z-20">
-          {[
-            { id: "global", label: "Global", rotate: "2deg" },
-            { id: "human", label: "Humans", rotate: "-3deg" },
-            { id: "agent", label: "Agents", rotate: "1deg" },
-          ].map((tab) => (
+const rowVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { delay: i * 0.03, duration: 0.3, ease: "easeOut" as const },
+  }),
+};
+
+// ── Tabs ─────────────────────────────────────────────────────────
+
+type TabId = "all" | "bronze" | "silver" | "gold" | "platinum" | "diamond";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "all", label: "All Tiers" },
+  { id: "bronze", label: "Bronze" },
+  { id: "silver", label: "Silver" },
+  { id: "gold", label: "Gold" },
+  { id: "platinum", label: "Platinum" },
+  { id: "diamond", label: "Diamond" },
+];
+
+// ── Main Component ───────────────────────────────────────────────
+
+export function Leaderboard() {
+  const { isAuthenticated } = useConvexAuth();
+  const [activeTab, setActiveTab] = useState<TabId>("all");
+
+  // Queries
+  const leaderboard = useConvexQuery(
+    apiAny.ranked.getLeaderboard,
+    { limit: 50 },
+  ) as LeaderboardPlayer[] | undefined;
+
+  const myRank = useConvexQuery(
+    apiAny.ranked.getPlayerRank,
+    isAuthenticated ? {} : "skip",
+  ) as PlayerRankData | undefined;
+
+  const distribution = useConvexQuery(
+    apiAny.ranked.getRankDistribution,
+    {},
+  ) as TierDistribution | undefined;
+
+  // Filter leaderboard by selected tier
+  const filteredLeaderboard = leaderboard?.filter((p) =>
+    activeTab === "all" ? true : p.tier === activeTab,
+  );
+
+  const isLoading = leaderboard === undefined;
+
+  return (
+    <div className="min-h-screen bg-[#fdfdfb] pb-28">
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-10">
+        {/* Header */}
+        <header className="text-center mb-8">
+          <motion.h1
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-[#121212] mb-2"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            Leaderboard
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="text-[#121212]/60 text-sm uppercase tracking-wider"
+            style={{ fontFamily: "Special Elite, cursive" }}
+          >
+            Ranked players by ELO rating
+          </motion.p>
+        </header>
+
+        {/* Personal Rank Card (auth only) */}
+        {isAuthenticated && myRank && (
+          <div className="mb-6">
+            <RankCard
+              rank={myRank.rank}
+              rating={myRank.rating}
+              peakRating={myRank.peakRating}
+              tier={myRank.tier}
+              gamesPlayed={myRank.gamesPlayed}
+              ratingHistory={myRank.ratingHistory}
+            />
+          </div>
+        )}
+
+        {/* Tier Distribution */}
+        {distribution && distribution.totalPlayers > 0 && (
+          <TierDistributionBar data={distribution} />
+        )}
+
+        {/* Tier Filter Tabs */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`
-                relative px-12 py-4 text-2xl font-black transition-transform hover:scale-105
-                ${activeTab === tab.id ? "z-10 scale-110" : "opacity-90 hover:opacity-100"}
-              `}
-              style={{
-                backgroundImage: `url('${TAPE}')`,
-                backgroundSize: "100% 100%",
-                backgroundRepeat: "no-repeat",
-                backgroundColor: "transparent",
-                fontFamily: "Permanent Marker, cursive",
-                color: "#121212",
-                transform: `rotate(${tab.rotate})`,
-                textShadow: "none",
-                border: "none",
-                filter: "drop-shadow(2px 2px 2px rgba(0,0,0,0.3))",
-              }}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider border-2 border-[#121212] transition-all ${
+                activeTab === tab.id
+                  ? "bg-[#121212] text-white"
+                  : "bg-[#fdfdfb] text-[#121212] hover:bg-[#121212]/5"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
               {tab.label}
             </button>
@@ -401,91 +252,153 @@ export function Leaderboard() {
 
         {/* Leaderboard Table */}
         <div
-          className="relative p-2 md:p-6 transform rotate-1"
-          style={{
-            backgroundColor: "#f5f5f5",
-            backgroundImage: `url('${CRUMPLED_PAPER}')`,
-            backgroundSize: "cover",
-            boxShadow: "10px 10px 0px rgba(0,0,0,0.4)",
-          }}
+          className="border-2 border-[#121212] overflow-hidden"
+          style={{ boxShadow: "4px 4px 0px 0px rgba(18,18,18,1)" }}
         >
-          {/* Tape effect */}
+          {/* Table Header */}
           <div
-            className="absolute -top-6 left-1/2 transform -translate-x-1/2 w-48 h-12 z-30"
-            style={{
-              backgroundImage: `url('${TAPE}')`,
-              backgroundSize: "100% 100%",
-              backgroundRepeat: "no-repeat",
-              transform: "rotate(-1deg)",
-              filter: "drop-shadow(1px 1px 1px rgba(0,0,0,0.2))",
-            }}
-          />
+            className="grid grid-cols-[3rem_1fr_5rem_5rem_5rem] md:grid-cols-[4rem_1fr_6rem_6rem_6rem] items-center px-3 py-3 border-b-2 border-[#121212]"
+            style={{ backgroundColor: "#121212" }}
+          >
+            <span
+              className="text-xs font-black uppercase tracking-wider text-white"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              #
+            </span>
+            <span
+              className="text-xs font-black uppercase tracking-wider text-white"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Player
+            </span>
+            <span
+              className="text-xs font-black uppercase tracking-wider text-white text-right"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Rating
+            </span>
+            <span
+              className="text-xs font-black uppercase tracking-wider text-white text-right hidden md:block"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Peak
+            </span>
+            <span
+              className="text-xs font-black uppercase tracking-wider text-white text-right"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Games
+            </span>
+          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[600px] md:min-w-0">
-              <thead>
-                <tr className="border-b-4 border-[#121212]">
-                  <th className="p-4 text-2xl md:text-3xl font-black uppercase text-[#121212] w-24 transform -rotate-1" style={{ fontFamily: "Permanent Marker, cursive" }}>#</th>
-                  <th className="p-4 text-2xl md:text-3xl font-black uppercase text-[#121212] transform -rotate-1" style={{ fontFamily: "Permanent Marker, cursive" }}>Name</th>
-                  <th className="p-4 text-2xl md:text-3xl font-black uppercase text-[#121212] text-right transform rotate-1" style={{ fontFamily: "Permanent Marker, cursive" }}>Score</th>
-                  <th className="hidden md:table-cell p-4 text-2xl md:text-3xl font-black uppercase text-[#121212] text-right transform -rotate-1" style={{ fontFamily: "Permanent Marker, cursive" }}>Breakdowns</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map((entry, index) => (
-                  <tr
-                    key={entry.name}
-                    onClick={() => openYearbookCard(entry)}
-                    className="border-b-2 border-[#121212]/20 hover:bg-[#121212]/10 transition-colors cursor-pointer"
-                  >
-                    <td className="p-4 text-2xl font-black text-[#121212]" style={{ fontFamily: "Special Elite, cursive" }}>
-                      {activeTab === "global" ? entry.rank : index + 1}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        {/* Avatar */}
-                        <div className="w-10 h-10 bg-black rounded-full overflow-hidden border-2 border-black flex-shrink-0">
-                          <img
-                            src={entry.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.name}`}
-                            alt={`${entry.name}'s avatar`}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <span className="text-xl md:text-2xl font-bold text-[#121212]" style={{ fontFamily: "Special Elite, cursive" }}>
-                          {entry.name}
+          {/* Table Body */}
+          {isLoading ? (
+            <div className="p-4">
+              <LeaderboardSkeleton />
+            </div>
+          ) : filteredLeaderboard && filteredLeaderboard.length > 0 ? (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                {filteredLeaderboard.map((player, index) => {
+                  const isCurrentUser =
+                    isAuthenticated &&
+                    myRank &&
+                    myRank.rank !== null &&
+                    myRank.rating === player.rating;
+
+                  return (
+                    <motion.div
+                      key={player.userId}
+                      custom={index}
+                      variants={rowVariants}
+                      initial="hidden"
+                      animate="visible"
+                      className={`grid grid-cols-[3rem_1fr_5rem_5rem_5rem] md:grid-cols-[4rem_1fr_6rem_6rem_6rem] items-center px-3 py-3 border-b border-[#121212]/10 transition-colors ${
+                        isCurrentUser
+                          ? "bg-[#ffcc00]/20"
+                          : index % 2 === 0
+                            ? "bg-[#fdfdfb]"
+                            : "bg-[#f5f5f3]"
+                      }`}
+                    >
+                      {/* Rank */}
+                      <span
+                        className="text-lg font-black text-[#121212]"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {index + 1}
+                      </span>
+
+                      {/* Player Name + Tier Badge */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="font-bold text-[#121212] truncate"
+                          style={{ fontFamily: "Special Elite, cursive" }}
+                        >
+                          {player.username}
                         </span>
-                        {entry.type === "agent" && (
-                          <span className="bg-[#121212] text-white text-xs font-black px-2 py-1 rounded-sm uppercase tracking-wider transform -rotate-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            BOT
+                        <TierBadge tier={player.tier} size="sm" />
+                        {isCurrentUser && (
+                          <span
+                            className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 bg-[#ffcc00] text-[#121212] border border-[#121212]"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            You
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-4 text-xl md:text-2xl font-black text-[#121212] text-right" style={{ fontFamily: "Special Elite, cursive" }}>
-                      {entry.score.toLocaleString()}
-                    </td>
-                    <td className="hidden md:table-cell p-4 text-xl md:text-2xl font-black text-[#121212] text-right" style={{ fontFamily: "Special Elite, cursive" }}>
-                      {entry.breakdowns}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
-        <TrayNav />
-        <StreamModal isOpen={isStreamModalOpen} onClose={() => setIsStreamModalOpen(false)} />
-        <YearbookCard
-          entry={selectedPlayer}
-          isOpen={!!selectedPlayer}
-          onClose={closeYearbookCard}
-          onShare={selectedPlayer ? handleShareYearbookCard : undefined}
-          shareLabel={shareLabel}
-          onPostToBabylon={selectedPlayer ? handlePostToBabylon : undefined}
-          babylonPostLabel={babylonPostLabel}
-        />
+                      {/* Rating */}
+                      <span
+                        className="text-sm font-black text-[#121212] text-right tabular-nums"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {player.rating}
+                      </span>
+
+                      {/* Peak Rating */}
+                      <span
+                        className="text-sm font-bold text-[#121212]/50 text-right tabular-nums hidden md:block"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {player.peakRating}
+                      </span>
+
+                      {/* Games Played */}
+                      <span
+                        className="text-sm font-bold text-[#121212]/50 text-right tabular-nums"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {player.gamesPlayed}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            </AnimatePresence>
+          ) : (
+            <div className="p-8 text-center">
+              <p
+                className="text-[#121212]/40 text-sm uppercase tracking-wider"
+                style={{ fontFamily: "Special Elite, cursive" }}
+              >
+                {activeTab === "all"
+                  ? "No ranked players yet. Be the first to climb."
+                  : `No players in ${activeTab} tier yet.`}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
+
+      <TrayNav />
     </div>
   );
 }

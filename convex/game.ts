@@ -80,6 +80,26 @@ const vPublicEventLogEntry = v.object({
   rationale: v.string(),
 });
 
+// ── Level formula ──────────────────────────────────────────────────
+// level 1 at 0xp, level 2 at 100xp, level 3 at 400xp, level 4 at 900xp, etc.
+const calculateLevel = (xp: number): number =>
+  Math.floor(Math.sqrt(xp / 100)) + 1;
+
+const DEFAULT_PLAYER_STATS = {
+  gold: 0,
+  xp: 0,
+  level: 1,
+  totalWins: 0,
+  totalLosses: 0,
+  pvpWins: 0,
+  pvpLosses: 0,
+  storyWins: 0,
+  currentStreak: 0,
+  bestStreak: 0,
+  totalMatchesPlayed: 0,
+  dailyLoginStreak: 0,
+} as const;
+
 const RESERVED_DECK_IDS = new Set(["undefined", "null", "skip"]);
 const normalizeDeckId = (deckId: string | undefined): string | null => {
   if (!deckId) return null;
@@ -1625,6 +1645,28 @@ async function submitActionForActor(
     }
   }
 
+  // Check if the game just ended — if so, complete PvP match processing
+  {
+    let parsedEvents: any[] = [];
+    try {
+      parsedEvents = JSON.parse(result.events);
+    } catch {
+      parsedEvents = [];
+    }
+    const gameOver = parsedEvents.some((e: any) => e.type === "GAME_ENDED");
+    if (gameOver) {
+      const lobby = await ctx.db
+        .query("pvpLobbies")
+        .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
+        .first();
+      if (lobby) {
+        await ctx.runMutation(internal.game.completePvpMatch, {
+          matchId: args.matchId,
+        });
+      }
+    }
+  }
+
   return result;
 }
 
@@ -2385,6 +2427,32 @@ export const completeStoryStage = mutation({
         completedAt: Date.now(),
       });
 
+      // Credit gold + xp to player economy
+      const totalGold = rewardGold + firstClearBonus;
+      const totalXp = rewardXp;
+      await ctx.runMutation(internal.game.addRewards, {
+        userId: requester._id as any,
+        gold: totalGold,
+        xp: totalXp,
+      });
+
+      // Update playerStats win/streak counters
+      const stats = await ctx.db
+        .query("playerStats")
+        .withIndex("by_userId", (q) => q.eq("userId", requester._id))
+        .unique();
+      if (stats) {
+        const newStreak = stats.currentStreak + 1;
+        await ctx.db.patch(stats._id, {
+          storyWins: stats.storyWins + 1,
+          totalWins: stats.totalWins + 1,
+          totalMatchesPlayed: stats.totalMatchesPlayed + 1,
+          currentStreak: newStreak,
+          bestStreak: Math.max(stats.bestStreak, newStreak),
+          lastMatchAt: Date.now(),
+        });
+      }
+
       return {
         outcome,
         starsEarned,
@@ -2410,6 +2478,20 @@ export const completeStoryStage = mutation({
           cards: [],
         },
       });
+
+      // Update playerStats loss counters and reset streak
+      const lossStats = await ctx.db
+        .query("playerStats")
+        .withIndex("by_userId", (q) => q.eq("userId", requester._id))
+        .unique();
+      if (lossStats) {
+        await ctx.db.patch(lossStats._id, {
+          totalLosses: lossStats.totalLosses + 1,
+          totalMatchesPlayed: lossStats.totalMatchesPlayed + 1,
+          currentStreak: 0,
+          lastMatchAt: Date.now(),
+        });
+      }
     }
 
     await ctx.db.patch(storyMatch._id, {
@@ -2536,5 +2618,300 @@ export const checkPvpDisconnect = internalMutation({
     }
 
     return null;
+  },
+});
+
+// ── Player Stats / Economy ──────────────────────────────────────────
+
+/**
+ * Internal query: get stats for a given userId. Returns null if no row exists.
+ */
+export const getPlayerStatsById = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+  },
+});
+
+/**
+ * Internal mutation: get-or-create pattern. Returns existing stats or inserts
+ * a fresh row with defaults and returns it.
+ */
+export const getOrCreatePlayerStats = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (existing) return existing;
+
+    const now = Date.now();
+    const newId = await ctx.db.insert("playerStats", {
+      userId: args.userId,
+      ...DEFAULT_PLAYER_STATS,
+      createdAt: now,
+    });
+    return ctx.db.get(newId);
+  },
+});
+
+/**
+ * Internal mutation: atomically add gold + xp to a player's stats and
+ * recalculate their level. Creates the stats row if it doesn't exist yet.
+ */
+export const addRewards = internalMutation({
+  args: {
+    userId: v.id("users"),
+    gold: v.number(),
+    xp: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    let stats = await ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (!stats) {
+      const now = Date.now();
+      const newId = await ctx.db.insert("playerStats", {
+        userId: args.userId,
+        ...DEFAULT_PLAYER_STATS,
+        createdAt: now,
+      });
+      stats = (await ctx.db.get(newId))!;
+    }
+
+    const newGold = stats.gold + args.gold;
+    const newXp = stats.xp + args.xp;
+    const newLevel = calculateLevel(newXp);
+
+    await ctx.db.patch(stats._id, {
+      gold: newGold,
+      xp: newXp,
+      level: newLevel,
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Internal mutation: process PvP match completion.
+ * Awards rewards, updates playerStats for winner/loser, updates clique wins,
+ * and marks the pvpLobby as ended.
+ */
+export const completePvpMatch = internalMutation({
+  args: {
+    matchId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // 1. Look up pvpLobby
+    const lobby = await ctx.db
+      .query("pvpLobbies")
+      .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
+      .first();
+    if (!lobby || lobby.status === "ended") return null;
+
+    // 2. Get match meta from component to find winner
+    const meta = await match.getMatchMeta(ctx, { matchId: args.matchId });
+    if (!meta || (meta as any)?.status !== "ended") return null;
+
+    const winnerSeat = (meta as any)?.winner as "host" | "away" | null;
+    if (!winnerSeat) return null;
+
+    // 3. Resolve userIds from match meta
+    const hostUserId = (meta as any)?.hostId;
+    const awayUserId = (meta as any)?.awayId;
+    if (!hostUserId || !awayUserId) return null;
+
+    const winnerUserId = winnerSeat === "host" ? hostUserId : awayUserId;
+    const loserUserId = winnerSeat === "host" ? awayUserId : hostUserId;
+
+    // 3b. Update ELO ratings
+    const ratingResult = await ctx.runMutation(
+      (internal as any).ranked.updateRatings,
+      { winnerId: winnerUserId, loserId: loserUserId },
+    );
+
+    // 3c. Record match history
+    await ctx.db.insert("matchHistory", {
+      matchId: args.matchId,
+      mode: "pvp",
+      winnerId: winnerUserId,
+      loserId: loserUserId,
+      winnerRatingBefore: ratingResult.winnerNewRating - ratingResult.winnerChange,
+      loserRatingBefore: ratingResult.loserNewRating - ratingResult.loserChange,
+      ratingChange: ratingResult.winnerChange,
+      timestamp: Date.now(),
+    });
+
+    // 4. Award rewards
+    // Winner base: 100 gold, 50 xp
+    let winnerXp = 50;
+
+    // 4a. Apply clique XP bonus (+10%) if winner's clique archetype matches deck archetype
+    const winnerUserForBonus = await ctx.db.get(winnerUserId) as any;
+    if (winnerUserForBonus?.cliqueId) {
+      const winnerClique = await ctx.db.get(winnerUserForBonus.cliqueId) as any;
+      if (winnerClique) {
+        // Get the winner's active deck to check archetype match
+        const winnerDeckId = winnerUserForBonus.activeDeckId;
+        if (winnerDeckId) {
+          try {
+            const deckMeta = await cards.getDeck(ctx, { deckId: winnerDeckId });
+            if (deckMeta?.archetype && winnerClique.archetype &&
+                deckMeta.archetype === winnerClique.archetype) {
+              winnerXp = Math.round(winnerXp * 1.1);
+            }
+          } catch {
+            // Deck lookup failed — skip bonus
+          }
+        }
+      }
+    }
+
+    await ctx.runMutation(internal.game.addRewards, {
+      userId: winnerUserId,
+      gold: 100,
+      xp: winnerXp,
+    });
+    // Loser: 0 gold, 10 xp (consolation)
+    await ctx.runMutation(internal.game.addRewards, {
+      userId: loserUserId,
+      gold: 0,
+      xp: 10,
+    });
+
+    // 5. Update winner's playerStats
+    const winnerStats = await ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", winnerUserId))
+      .unique();
+    if (winnerStats) {
+      const newStreak = winnerStats.currentStreak + 1;
+      await ctx.db.patch(winnerStats._id, {
+        pvpWins: winnerStats.pvpWins + 1,
+        totalWins: winnerStats.totalWins + 1,
+        totalMatchesPlayed: winnerStats.totalMatchesPlayed + 1,
+        currentStreak: newStreak,
+        bestStreak: Math.max(winnerStats.bestStreak, newStreak),
+        lastMatchAt: Date.now(),
+      });
+    }
+
+    // 6. Update loser's playerStats
+    const loserStats = await ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", loserUserId))
+      .unique();
+    if (loserStats) {
+      await ctx.db.patch(loserStats._id, {
+        pvpLosses: loserStats.pvpLosses + 1,
+        totalLosses: loserStats.totalLosses + 1,
+        totalMatchesPlayed: loserStats.totalMatchesPlayed + 1,
+        currentStreak: 0,
+        lastMatchAt: Date.now(),
+      });
+    }
+
+    // 7. Update clique totalWins if winner has a clique
+    // (reuse winnerUserForBonus fetched earlier in step 4a)
+    if (winnerUserForBonus?.cliqueId) {
+      const clique = await ctx.db.get(winnerUserForBonus.cliqueId) as any;
+      if (clique) {
+        await ctx.db.patch(clique._id, {
+          totalWins: clique.totalWins + 1,
+        });
+      }
+    }
+
+    // 8. Mark lobby as ended
+    await ctx.db.patch(lobby._id, {
+      status: "ended",
+      endedAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Public query: return the authenticated user's match history
+ * with opponent info and win/loss results.
+ */
+export const getMatchHistory = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const limit = args.limit ?? 20;
+
+    // Get matches where user was winner or loser
+    const asWinner = await ctx.db
+      .query("matchHistory")
+      .withIndex("by_winnerId", (q) => q.eq("winnerId", user._id))
+      .order("desc")
+      .take(limit);
+    const asLoser = await ctx.db
+      .query("matchHistory")
+      .withIndex("by_loserId", (q) => q.eq("loserId", user._id))
+      .order("desc")
+      .take(limit);
+
+    // Merge, sort by timestamp, take top N
+    const all = [
+      ...asWinner.map((m) => ({ ...m, result: "win" as const })),
+      ...asLoser.map((m) => ({ ...m, result: "loss" as const })),
+    ]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+
+    // Enrich with opponent username
+    const enriched = [];
+    for (const m of all) {
+      const opponentId = m.result === "win" ? m.loserId : m.winnerId;
+      const opponent = await ctx.db.get(opponentId);
+      enriched.push({
+        ...m,
+        opponentUsername: (opponent as any)?.username ?? "Unknown",
+      });
+    }
+    return enriched;
+  },
+});
+
+/**
+ * Public query: return the authenticated user's player stats.
+ * Creates a default row if one doesn't exist yet.
+ */
+export const getPlayerStats = query({
+  args: {},
+  returns: v.any(),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const stats = await ctx.db
+      .query("playerStats")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+
+    if (!stats) {
+      // Return defaults without inserting (queries can't mutate).
+      // The row will be created on first reward or via getOrCreatePlayerStats.
+      return {
+        userId: user._id,
+        ...DEFAULT_PLAYER_STATS,
+        createdAt: Date.now(),
+      };
+    }
+
+    return stats;
   },
 });

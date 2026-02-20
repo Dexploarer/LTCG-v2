@@ -1,20 +1,29 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { ChainLink } from "@/lib/convexTypes";
 
 interface ChainPromptProps {
   opponentCardName: string;
   activatableTraps: Array<{ cardId: string; name: string }>;
+  activatableQuickPlays?: Array<{ cardId: string; name: string }>;
+  chainLinks?: ChainLink[];
+  cardLookup?: Record<string, { name?: string }>;
   onActivate: (cardId: string) => void;
   onPass: () => void;
 }
 
+const TIMER_SECONDS = 10;
+
 export function ChainPrompt({
   opponentCardName,
   activatableTraps,
+  activatableQuickPlays = [],
+  chainLinks = [],
+  cardLookup = {},
   onActivate,
   onPass,
 }: ChainPromptProps) {
-  const [timeLeft, setTimeLeft] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
   const passedRef = useRef(false);
   const intervalRef = useRef<number | null>(null);
 
@@ -44,6 +53,8 @@ export function ChainPrompt({
   );
 
   useEffect(() => {
+    passedRef.current = false;
+    setTimeLeft(TIMER_SECONDS);
     intervalRef.current = window.setInterval(() => {
       setTimeLeft((prev) => {
         if (passedRef.current) return 0;
@@ -63,8 +74,8 @@ export function ChainPrompt({
     };
   }, [handlePass]);
 
-  // Timer bar width percentage
-  const timerWidth = `${(timeLeft / 5) * 100}%`;
+  const timerWidth = `${(timeLeft / TIMER_SECONDS) * 100}%`;
+  const hasResponses = activatableTraps.length > 0 || activatableQuickPlays.length > 0;
 
   return (
     <AnimatePresence>
@@ -83,68 +94,132 @@ export function ChainPrompt({
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="relative w-full paper-panel max-h-[70vh] overflow-y-auto tcg-scrollbar"
+          className="relative w-full bg-black border-t-2 border-[#121212] max-h-[75vh] overflow-y-auto tcg-scrollbar"
         >
-          <div className="p-6 space-y-6">
+          <div className="p-5 space-y-4">
             {/* Header */}
-            <div className="text-center space-y-2">
-              <h2 className="font-outfit font-black text-2xl uppercase tracking-tighter">
-                OPPONENT ACTIVATED
+            <div className="text-center space-y-1">
+              <h2
+                className="font-black text-xl uppercase tracking-tighter text-white"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                CHAIN RESPONSE
               </h2>
-              <h3 className="font-outfit font-black text-xl uppercase tracking-tighter text-[#ffcc00]">
-                {opponentCardName}
-              </h3>
               <p
-                className="font-zine text-lg text-foreground/80 italic"
+                className="text-sm text-[#ffcc00] italic"
                 style={{ fontFamily: "Special Elite, cursive" }}
               >
-                Respond?
+                Opponent activated: {opponentCardName}
               </p>
             </div>
 
-            {/* Activatable Traps List */}
-            {activatableTraps.length > 0 ? (
+            {/* Chain Links Display */}
+            {chainLinks.length > 0 && (
+              <div className="space-y-1">
+                <p
+                  className="text-[9px] uppercase tracking-widest text-white/40 font-bold"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Chain Stack ({chainLinks.length})
+                </p>
+                <div className="border-2 border-white/10 bg-white/5 p-2 space-y-1 max-h-28 overflow-y-auto tcg-scrollbar">
+                  {chainLinks.map((link, i) => {
+                    const name = cardLookup[link.cardId]?.name ?? "Unknown";
+                    const isOpponent = link.activatingPlayer !== chainLinks[0]?.activatingPlayer;
+                    return (
+                      <div
+                        key={`chain-${i}-${link.cardId}`}
+                        className="flex items-center gap-2 text-xs"
+                      >
+                        <span
+                          className="font-mono font-black text-[#ffcc00] w-5 text-center"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {chainLinks.length - i}
+                        </span>
+                        <span
+                          className={`font-bold uppercase tracking-tight ${
+                            isOpponent ? "text-red-400" : "text-white"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {name}
+                        </span>
+                        <span className="text-white/30 text-[10px]">
+                          ({isOpponent ? "OPP" : "YOU"})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Activatable Cards */}
+            {hasResponses ? (
               <div className="space-y-2">
+                {/* Counter Traps */}
                 {activatableTraps.map((trap) => (
                   <button
                     key={trap.cardId}
                     onClick={() => handleActivate(trap.cardId)}
                     className="w-full tcg-button text-sm"
                   >
-                    ACTIVATE: {trap.name}
+                    ACTIVATE TRAP: {trap.name}
+                  </button>
+                ))}
+
+                {/* Quick-Play Spells */}
+                {activatableQuickPlays.map((spell) => (
+                  <button
+                    key={spell.cardId}
+                    onClick={() => handleActivate(spell.cardId)}
+                    className="w-full tcg-button text-sm"
+                  >
+                    ACTIVATE SPELL: {spell.name}
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4">
-                <p className="font-outfit font-bold text-foreground/60">
-                  No traps available
+              <div className="text-center py-3">
+                <p
+                  className="font-bold text-white/40 text-sm"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  No responses available
                 </p>
               </div>
             )}
 
             {/* Timer Bar */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="font-outfit font-bold text-xs uppercase tracking-wider">
+                <p
+                  className="font-bold text-[10px] uppercase tracking-wider text-white/50"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
                   Auto-pass in
                 </p>
-                <span className="font-mono font-black text-lg text-[#ffcc00]">
+                <span className="font-mono font-black text-base text-[#ffcc00]">
                   {timeLeft}s
                 </span>
               </div>
-              <div className="relative h-2 bg-foreground/10 border-2 border-foreground overflow-hidden">
+              <div className="relative h-1.5 bg-white/10 border border-white/20 overflow-hidden">
                 <motion.div
                   className="absolute inset-y-0 left-0 bg-[#ffcc00]"
                   initial={{ width: "100%" }}
                   animate={{ width: timerWidth }}
-                  transition={{ duration: 0.1, ease: "linear" }}
+                  transition={{ duration: 0.3, ease: "linear" }}
                 />
               </div>
             </div>
 
             {/* Pass Button */}
-            <button onClick={handlePass} className="w-full tcg-button-primary text-sm">
+            <button
+              onClick={handlePass}
+              className="w-full bg-white/10 border-2 border-white/20 text-white font-black uppercase tracking-wider text-sm py-3 hover:bg-white/20 transition-colors"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
               PASS
             </button>
           </div>

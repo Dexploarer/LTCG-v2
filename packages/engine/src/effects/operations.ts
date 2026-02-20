@@ -471,6 +471,33 @@ function executeChangePosition(
   return events;
 }
 
+function executeNegate(
+  state: GameState,
+  activatingPlayer: Seat,
+  sourceCardId: string,
+): EngineEvent[] {
+  const chain = state.currentChain;
+  if (chain.length === 0) return [];
+
+  // Find the most recent chain link that isn't already negated and wasn't
+  // added by the same player's current negate card (i.e., skip your own link).
+  const negated = state.negatedLinks ?? [];
+  for (let i = chain.length - 1; i >= 0; i--) {
+    if (negated.includes(i)) continue;
+    // Don't negate your own chain link that contains this card
+    const link = chain[i];
+    if (link && link.cardId === sourceCardId) continue;
+    return [{
+      type: "CHAIN_LINK_NEGATED" as const,
+      seat: activatingPlayer,
+      negatedLinkIndex: i,
+      negatedBy: sourceCardId,
+    }];
+  }
+
+  return [];
+}
+
 // ── Main Operation Executor ──────────────────────────────────────
 
 /**
@@ -511,8 +538,7 @@ export function executeAction(
     case "change_position":
       return executeChangePosition(state, action, targets);
     case "negate":
-      // Negate is a no-op in simple chain mode
-      return [];
+      return executeNegate(state, activatingPlayer, sourceCardId);
     default:
       // Unknown action type, skip silently
       return [];
