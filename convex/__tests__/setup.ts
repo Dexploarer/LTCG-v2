@@ -56,3 +56,26 @@ export async function seedUser(
   await asUser.mutation(api.auth.syncUser, {});
   return asUser;
 }
+
+/**
+ * Helper: seed cards, create Alice, select a starter deck, and return context.
+ * Many integration tests need a user with an active deck + resolved user doc.
+ */
+export async function seedAliceWithDeckAndStats(
+  t: ReturnType<typeof setupTestConvex>,
+  api: any,
+) {
+  await t.mutation(api.seed.seedAll, {});
+  const asAlice = await seedUser(t, ALICE, api);
+  const starters = await t.query(api.game.getStarterDecks, {});
+  const { deckId } = await asAlice.mutation(api.game.selectStarterDeck, {
+    deckCode: starters[0]!.deckCode,
+  });
+  const aliceUser = await t.run(async (ctx: any) =>
+    ctx.db
+      .query("users")
+      .withIndex("by_privyId", (q: any) => q.eq("privyId", ALICE.subject))
+      .first(),
+  );
+  return { asAlice, aliceUser, deckId };
+}

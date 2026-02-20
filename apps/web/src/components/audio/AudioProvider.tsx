@@ -72,7 +72,7 @@ export interface AudioSettings {
 export type RepeatMode = "all" | "one" | "off";
 
 const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
-  musicVolume: 0.13,
+  musicVolume: 0.65,
   sfxVolume: 0.8,
   musicMuted: false,
   sfxMuted: false,
@@ -770,6 +770,7 @@ export function AudioControlsDock() {
     isPlaying,
     repeatMode,
     togglePlayPause,
+    resumeMusic,
     stopMusic,
     skipToNextTrack,
     skipToPreviousTrack,
@@ -789,13 +790,21 @@ export function AudioControlsDock() {
   const handlePower = useCallback(() => {
     if (hasMoved.current) return;
     setPoweredOn((v) => {
-      if (v) { stopMusic(); if (!settings.musicMuted) toggleMusicMuted(); }
-      else { if (settings.musicMuted) toggleMusicMuted(); }
+      if (v) {
+        stopMusic();
+        if (!settings.musicMuted) toggleMusicMuted();
+      } else {
+        if (settings.musicMuted) toggleMusicMuted();
+        resumeMusic();
+      }
       return !v;
     });
-  }, [hasMoved, stopMusic, toggleMusicMuted, settings.musicMuted]);
+  }, [hasMoved, stopMusic, resumeMusic, toggleMusicMuted, settings.musicMuted]);
 
-  const stopDrag = useCallback((e: React.PointerEvent) => e.stopPropagation(), []);
+  const stopDrag = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    hasMoved.current = false;
+  }, [hasMoved]);
 
   const spkr = `radial-gradient(circle,
     ${BB.main} 3px,${BB.speakerRing} 3px,${BB.speakerRing} 5px,
