@@ -252,8 +252,14 @@ export class LTCGClient {
         await new Promise((r) => setTimeout(r, 1000));
         return this.request<T>(method, path, body, 1);
       }
+      const errorMessage =
+        err instanceof Error && err.name === "AbortError"
+          ? "Request timed out"
+          : err instanceof Error
+            ? err.message
+            : "Network error";
       throw new LTCGApiError(
-        err instanceof Error ? err.message : "Network error",
+        errorMessage,
         0,
         `${method} ${path.split("?")[0]}`,
       );
@@ -275,7 +281,7 @@ export class LTCGClient {
     } else {
       const text = await res.text();
       throw new LTCGApiError(
-        `Expected JSON response, got ${contentType || "no content-type"}: ${text.slice(0, 200)}`,
+        `Expected JSON response, got ${contentType || "no content-type"}`,
         res.status,
         `${method} ${path.split("?")[0]}`,
       );
