@@ -116,10 +116,16 @@ export function useAgentSpectator(apiKey: string | null, apiUrl: string | null) 
 
   // Auto-discover active match (uses Convex user _id, not agent doc _id)
   const hostId = agent?.userId || null;
-  const autoMatch = useQuery(apiAny.game.getActiveMatchByHost, hostId ? { hostId } : "skip") as any;
+  const autoMatch = useQuery(
+    apiAny.game.getPublicActiveMatchByHost,
+    hostId ? { hostId } : "skip",
+  ) as any;
 
-  const matchId = overrideMatchId ?? (autoMatch?._id as string) ?? null;
-  const seat: Seat = overrideSeat ?? (autoMatch?.hostId === hostId ? "host" : "away");
+  const autoSeat = clampSeat(autoMatch?.seat);
+  const matchId =
+    overrideMatchId ??
+    (typeof autoMatch?.matchId === "string" ? autoMatch.matchId : null);
+  const seat: Seat = overrideSeat ?? autoSeat ?? "host";
   const matchArgs = matchId ? { matchId, seat } : "skip";
 
   const matchState = useQuery(apiAny.game.getSpectatorView, matchArgs) as PublicSpectatorView | null | undefined;

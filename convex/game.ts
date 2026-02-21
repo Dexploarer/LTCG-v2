@@ -79,6 +79,17 @@ const vPublicEventLogEntry = v.object({
   summary: v.string(),
   rationale: v.string(),
 });
+const vActiveMatchSummary = v.object({
+  matchId: v.string(),
+  seat: v.union(v.literal("host"), v.literal("away")),
+  status: v.union(v.literal("waiting"), v.literal("active"), v.literal("ended")),
+  mode: v.union(v.literal("pvp"), v.literal("story")),
+  createdAt: v.number(),
+  startedAt: v.union(v.number(), v.null()),
+  endedAt: v.union(v.number(), v.null()),
+  winner: v.union(v.literal("host"), v.literal("away"), v.null()),
+  endReason: v.union(v.string(), v.null()),
+});
 
 // ── Level formula ──────────────────────────────────────────────────
 // level 1 at 0xp, level 2 at 100xp, level 3 at 400xp, level 4 at 900xp, etc.
@@ -1531,6 +1542,35 @@ function resolveSeatForUser(meta: any, userId: string): "host" | "away" | null {
   return null;
 }
 
+function toActiveMatchSummary(meta: any, requesterUserId?: string) {
+  if (!meta || !requesterUserId) return null;
+
+  const seat = resolveSeatForUser(meta, requesterUserId);
+  if (!seat) return null;
+
+  const status =
+    meta.status === "waiting" || meta.status === "active" || meta.status === "ended"
+      ? meta.status
+      : null;
+  const mode = meta.mode === "pvp" || meta.mode === "story" ? meta.mode : null;
+  if (!status || !mode) return null;
+  if (typeof meta._id !== "string" || typeof meta.createdAt !== "number") {
+    return null;
+  }
+
+  return {
+    matchId: meta._id,
+    seat,
+    status,
+    mode,
+    createdAt: meta.createdAt,
+    startedAt: typeof meta.startedAt === "number" ? meta.startedAt : null,
+    endedAt: typeof meta.endedAt === "number" ? meta.endedAt : null,
+    winner: meta.winner === "host" || meta.winner === "away" ? meta.winner : null,
+    endReason: typeof meta.endReason === "string" ? meta.endReason : null,
+  };
+}
+
 async function requireMatchParticipant(
   ctx: any,
   matchId: string,
@@ -2272,14 +2312,60 @@ export const getPublicEventsAsActor = internalQuery({
 
 export const getLatestSnapshotVersion = query({
   args: { matchId: v.string() },
-  returns: v.any(),
-  handler: async (ctx, args) => match.getLatestSnapshotVersion(ctx, args),
+  returns: v.union(v.number(), v.null()),
+  handler: async (ctx, args) => {
+    let userId: string;
+    try {
+      userId = (await requireUser(ctx))._id;
+    } catch {
+      return null;
+    }
+
+    try {
+      await requireMatchParticipant(ctx, args.matchId, undefined, userId);
+    } catch {
+      return null;
+    }
+
+    return await match.getLatestSnapshotVersion(ctx, args);
+  },
 });
 
 export const getActiveMatchByHost = query({
   args: { hostId: v.string() },
-  returns: v.union(v.any(), v.null()),
-  handler: async (ctx, args) => match.getActiveMatchByHost(ctx, args),
+  returns: v.union(vActiveMatchSummary, v.null()),
+  handler: async (ctx, args) => {
+    let userId: string;
+    try {
+      userId = (await requireUser(ctx))._id;
+    } catch {
+      return null;
+    }
+
+    const activeMatch = await match.getActiveMatchByHost(ctx, args);
+    return toActiveMatchSummary(activeMatch, userId);
+  },
+});
+
+export const getPublicActiveMatchByHost = query({
+  args: { hostId: v.string() },
+  returns: v.union(vActiveMatchSummary, v.null()),
+  handler: async (ctx, args) => {
+    const activeMatch = await match.getActiveMatchByHost(ctx, args);
+    return toActiveMatchSummary(activeMatch, args.hostId);
+  },
+});
+
+export const getActiveMatchByHostAsActor = internalQuery({
+  args: {
+    hostId: v.string(),
+    actorUserId: v.id("users"),
+  },
+  returns: v.union(vActiveMatchSummary, v.null()),
+  handler: async (ctx, args) => {
+    const activeMatch = await match.getActiveMatchByHost(ctx, { hostId: args.hostId });
+    return toActiveMatchSummary(activeMatch, args.actorUserId);
+  },
 });
 
 // ── Public Spectator Queries (no auth) ─────────────────────────────
@@ -2318,22 +2404,16 @@ export const getSpectatorEventsPaginated = query({
   args: { matchId: v.string(), seat: vSeat, paginationOpts: paginationOptsValidator },
   returns: v.any(),
   handler: async (ctx, { matchId, seat, paginationOpts }) => {
-    // Components don't support .paginate() so we fetch via getRecentEvents
-    // and manually slice to simulate cursor-based pagination.
-    const allEvents = await match.getRecentEvents(ctx, { matchId, sinceVersion: 0 });
-    const batches = Array.isArray(allEvents) ? allEvents : [];
-    // Reverse to newest-first (getRecentEvents returns asc order)
-    const desc = [...batches].reverse();
-    const numItems = (paginationOpts as any)?.numItems ?? 20;
-    const cursor = (paginationOpts as any)?.cursor;
-    const startIdx = cursor ? parseInt(cursor, 10) : 0;
-    const page = desc.slice(startIdx, startIdx + numItems);
-    const endIdx = startIdx + page.length;
-    const isDone = endIdx >= desc.length;
+    const pageResult = await match.getRecentEventsPaginated(ctx, {
+      matchId,
+      paginationOpts,
+    });
+    const batches = Array.isArray(pageResult?.page) ? pageResult.page : [];
     return {
-      page: buildPublicEventLog({ batches: page, agentSeat: seat }),
-      isDone,
-      continueCursor: isDone ? null : String(endIdx),
+      page: buildPublicEventLog({ batches, agentSeat: seat }),
+      isDone: pageResult?.isDone === true,
+      continueCursor:
+        typeof pageResult?.continueCursor === "string" ? pageResult.continueCursor : null,
     };
   },
 });

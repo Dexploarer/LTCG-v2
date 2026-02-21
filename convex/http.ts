@@ -736,33 +736,36 @@ corsRoute({
 		const agent = await authenticateAgent(ctx, request);
 		if (!agent) return errorResponse("Unauthorized", 401);
 
-		const activeMatch = await ctx.runQuery(api.game.getActiveMatchByHost, {
+		const activeMatch = await ctx.runQuery(internalApi.game.getActiveMatchByHostAsActor, {
 			hostId: agent.userId,
+			actorUserId: agent.userId,
 		});
 
 		if (!activeMatch) {
 			return jsonResponse({ matchId: null, status: null });
 		}
 
-		let seat: MatchSeat;
+		let hostId: string | null = null;
+		let awayId: string | null = null;
 		try {
-			({ seat } = await resolveMatchAndSeat(
-				ctx,
-				agent.userId,
-				activeMatch._id,
-			));
-		} catch (e: any) {
-			return errorResponse(e.message, 422);
+			const meta = await ctx.runQuery(internal.game.getMatchMetaAsActor, {
+				matchId: activeMatch.matchId,
+				actorUserId: agent.userId,
+			});
+			hostId = (meta as any)?.hostId ?? null;
+			awayId = (meta as any)?.awayId ?? null;
+		} catch {
+			// Redacted summary is still enough for this route when metadata lookup fails.
 		}
 
 		return jsonResponse({
-			matchId: activeMatch._id,
+			matchId: activeMatch.matchId,
 			status: activeMatch.status,
 			mode: activeMatch.mode,
 			createdAt: activeMatch.createdAt,
-			hostId: (activeMatch as any).hostId,
-			awayId: (activeMatch as any).awayId,
-			seat,
+			hostId,
+			awayId,
+			seat: activeMatch.seat,
 		});
 	},
 });

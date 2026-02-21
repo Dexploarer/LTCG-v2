@@ -1500,12 +1500,35 @@ describe("submitAction and match views", () => {
     expect(JSON.parse(malformedBatch.command)).toEqual({ type: "UNKNOWN" });
   });
 
-  test("getLatestSnapshotVersion returns number", async () => {
+  test("getLatestSnapshotVersion returns null without auth", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
     const { matchId } = await createActivePvpMatch(t);
 
     const version = await t.query(api.game.getLatestSnapshotVersion, {
+      matchId,
+    });
+    expect(version).toBeNull();
+  });
+
+  test("getLatestSnapshotVersion returns null for authenticated non-participant", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { matchId } = await createActivePvpMatch(t);
+    const { asUser: asCharlie } = await seedUserWithDeck(t, CHARLIE);
+
+    const version = await asCharlie.query(api.game.getLatestSnapshotVersion, {
+      matchId,
+    });
+    expect(version).toBeNull();
+  });
+
+  test("getLatestSnapshotVersion returns number for participant", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asAlice, matchId } = await createActivePvpMatch(t);
+
+    const version = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId,
     });
     expect(typeof version).toBe("number");
@@ -1564,20 +1587,45 @@ describe("spectator queries (no auth)", () => {
     ).rejects.toThrow();
   });
 
-  test("getSpectatorEventsPaginated returns pagination shape", async () => {
+  test("getSpectatorEventsPaginated returns at most numItems and cursor advances", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
     const { matchId } = await createActivePvpMatch(t);
 
-    const result = await t.query(api.game.getSpectatorEventsPaginated, {
+    await t.runInComponent("lunchtable_tcg_match", async (ctx: any) => {
+      for (let i = 0; i < 12; i += 1) {
+        await ctx.db.insert("matchEvents", {
+          matchId: matchId as any,
+          version: 700_000 + i,
+          events: JSON.stringify([{ type: "TURN_ENDED" }]),
+          command: JSON.stringify({ type: "ADVANCE_PHASE" }),
+          seat: i % 2 === 0 ? "host" : "away",
+          createdAt: Date.now() + i,
+        });
+      }
+    });
+
+    const first = await t.query(api.game.getSpectatorEventsPaginated, {
       matchId,
       seat: "host",
-      paginationOpts: { numItems: 10, cursor: null },
+      paginationOpts: { numItems: 5, cursor: null },
     });
-    expect(result).toBeTruthy();
-    expect(Array.isArray(result.page)).toBe(true);
-    expect(typeof result.isDone).toBe("boolean");
-    expect("continueCursor" in result).toBe(true);
+    expect(first).toBeTruthy();
+    expect(Array.isArray(first.page)).toBe(true);
+    expect(first.page.length).toBeLessThanOrEqual(5);
+    expect(first.isDone).toBe(false);
+    expect(typeof first.continueCursor).toBe("string");
+
+    const second = await t.query(api.game.getSpectatorEventsPaginated, {
+      matchId,
+      seat: "host",
+      paginationOpts: { numItems: 5, cursor: first.continueCursor },
+    });
+    expect(Array.isArray(second.page)).toBe(true);
+    expect(second.page.length).toBeLessThanOrEqual(5);
+    if (!second.isDone) {
+      expect(second.continueCursor).not.toBe(first.continueCursor);
+    }
   });
 });
 
@@ -1629,12 +1677,11 @@ describe("setActiveDeck (extended)", () => {
 // ── Section 13: getActiveMatchByHost and getOpenPrompt ──────────────
 
 describe("getActiveMatchByHost and getOpenPrompt", () => {
-  test("returns active match for host", async () => {
+  test("getActiveMatchByHost returns null without auth", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
-    const { matchId } = await createActivePvpMatch(t);
+    await createActivePvpMatch(t);
 
-    // Get the host user ID
     const hostUser = await t.run(async (ctx) => {
       return ctx.db
         .query("users")
@@ -1647,13 +1694,83 @@ describe("getActiveMatchByHost and getOpenPrompt", () => {
     const activeMatch = await t.query(api.game.getActiveMatchByHost, {
       hostId: hostUser!._id,
     });
-    expect(activeMatch).toBeTruthy();
+    expect(activeMatch).toBeNull();
   });
 
-  test("returns null for unknown host", async () => {
+  test("getActiveMatchByHost returns null for authenticated non-participant", async () => {
     const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    await createActivePvpMatch(t);
+    const { asUser: asCharlie } = await seedUserWithDeck(t, CHARLIE);
 
-    const activeMatch = await t.query(api.game.getActiveMatchByHost, {
+    const hostUser = await t.run(async (ctx) => {
+      return ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) =>
+          q.eq("privyId", ALICE.subject),
+        )
+        .first();
+    });
+
+    const activeMatch = await asCharlie.query(api.game.getActiveMatchByHost, {
+      hostId: hostUser!._id,
+    });
+    expect(activeMatch).toBeNull();
+  });
+
+  test("getActiveMatchByHost returns redacted summary for participant", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asAlice, matchId } = await createActivePvpMatch(t);
+
+    const hostUser = await t.run(async (ctx) => {
+      return ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) =>
+          q.eq("privyId", ALICE.subject),
+        )
+        .first();
+    });
+
+    const activeMatch = await asAlice.query(api.game.getActiveMatchByHost, {
+      hostId: hostUser!._id,
+    });
+    expect(activeMatch).not.toBeNull();
+    expect(activeMatch!.matchId).toBe(matchId);
+    expect(activeMatch!.seat).toBe("host");
+    expect(Object.prototype.hasOwnProperty.call(activeMatch as any, "hostDeck")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(activeMatch as any, "awayDeck")).toBe(false);
+  });
+
+  test("getPublicActiveMatchByHost returns redacted summary without auth", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { matchId } = await createActivePvpMatch(t);
+
+    const hostUser = await t.run(async (ctx) => {
+      return ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) =>
+          q.eq("privyId", ALICE.subject),
+        )
+        .first();
+    });
+
+    const activeMatch = await t.query((api as any).game.getPublicActiveMatchByHost, {
+      hostId: hostUser!._id,
+    });
+    expect(activeMatch).not.toBeNull();
+    expect(activeMatch.matchId).toBe(matchId);
+    expect(activeMatch.seat).toBe("host");
+    expect(Object.prototype.hasOwnProperty.call(activeMatch as any, "hostDeck")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(activeMatch as any, "awayDeck")).toBe(false);
+  });
+
+  test("getPublicActiveMatchByHost returns null for unknown host", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+
+    const activeMatch = await t.query((api as any).game.getPublicActiveMatchByHost, {
       hostId: "unknown-host-id",
     });
     expect(activeMatch).toBeNull();
@@ -1906,7 +2023,7 @@ describe("PvP end-to-end flow", () => {
       redemptionEnabled: true,
     });
     await asBob.mutation(api.game.joinPvpLobby, { matchId: lobby.matchId });
-    const latestVersion = await t.query(api.game.getLatestSnapshotVersion, {
+    const latestVersion = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId: lobby.matchId,
     });
 
@@ -1999,7 +2116,7 @@ describe("AI turn resilience", () => {
       stageNumber: 1,
     });
 
-    const latestVersion = await t.query(api.game.getLatestSnapshotVersion, {
+    const latestVersion = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId: battle.matchId,
     });
 
@@ -2019,7 +2136,7 @@ describe("AI turn resilience", () => {
       });
     });
 
-    const versionAfterCorruption = await t.query(api.game.getLatestSnapshotVersion, {
+    const versionAfterCorruption = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId: battle.matchId,
     });
     expect(versionAfterCorruption).toBe(latestVersion + 999);
@@ -2197,7 +2314,7 @@ describe("multi-action game sequences", () => {
       }
 
       // Verify version advanced
-      const version = await t.query(api.game.getLatestSnapshotVersion, {
+      const version = await asAlice.query(api.game.getLatestSnapshotVersion, {
         matchId,
       });
       expect(version).toBeGreaterThanOrEqual(3);
@@ -2276,7 +2393,7 @@ describe("multi-action game sequences", () => {
     await t.mutation(api.seed.seedAll, {});
     const { asAlice, matchId } = await createActivePvpMatch(t);
 
-    const versionBefore = await t.query(api.game.getLatestSnapshotVersion, {
+    const versionBefore = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId,
     });
 
@@ -2286,7 +2403,7 @@ describe("multi-action game sequences", () => {
       seat: "host",
     });
 
-    const versionAfter = await t.query(api.game.getLatestSnapshotVersion, {
+    const versionAfter = await asAlice.query(api.game.getLatestSnapshotVersion, {
       matchId,
     });
     expect(versionAfter).toBeGreaterThan(versionBefore);
@@ -3340,10 +3457,10 @@ describe("getOpenPrompt and getActiveMatchByHost extended", () => {
     expect(prompt).toBeNull();
   });
 
-  test("getActiveMatchByHost returns match after PvP join", async () => {
+  test("getActiveMatchByHost returns summary after PvP join for participant", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
-    const { matchId } = await createActivePvpMatch(t);
+    const { asAlice, matchId } = await createActivePvpMatch(t);
 
     // Get Alice's userId
     const aliceUser = await t.run(async (ctx) => {
@@ -3353,17 +3470,19 @@ describe("getOpenPrompt and getActiveMatchByHost extended", () => {
         .first();
     });
 
-    const activeMatch = await t.query(api.game.getActiveMatchByHost, {
+    const activeMatch = await asAlice.query(api.game.getActiveMatchByHost, {
       hostId: aliceUser!._id,
     });
     expect(activeMatch).toBeTruthy();
+    expect(activeMatch!.matchId).toBe(matchId);
   });
 
   test("getActiveMatchByHost returns null for unknown hostId", async () => {
     const t = setupTestConvex();
     await t.mutation(api.seed.seedAll, {});
+    const { asUser: asAlice } = await seedUserWithDeck(t, ALICE);
 
-    const activeMatch = await t.query(api.game.getActiveMatchByHost, {
+    const activeMatch = await asAlice.query(api.game.getActiveMatchByHost, {
       hostId: "unknown-user-id",
     });
     expect(activeMatch).toBeNull();
