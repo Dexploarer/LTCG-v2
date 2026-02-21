@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireUser } from "./auth";
 import { getTelegramMiniAppDeepLink } from "./telegramLinks";
@@ -504,7 +504,10 @@ export const notifyUserMatchTransition = internalAction({
     const chainEvent = events.find((event) => event?.type === "CHAIN_STARTED");
     if (!phaseEvent && !endedEvent && !chainEvent) return null;
 
-    const matchMeta = await ctx.runQuery(api.game.getMatchMeta, { matchId: args.matchId });
+    const matchMeta = await ctx.runQuery(internalApi.game.getMatchMetaAsActor, {
+      matchId: args.matchId,
+      actorUserId: args.userId,
+    });
     const statusText = String((matchMeta as any)?.status ?? "updated").toUpperCase();
     const deepLink = getTelegramMiniAppDeepLink(args.matchId);
 

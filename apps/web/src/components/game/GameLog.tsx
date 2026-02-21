@@ -37,7 +37,7 @@ const COMMAND_LABELS: Record<string, { label: string; type: LogEntry["type"] }> 
 // Cycle through bubble images
 const BUBBLE_IMAGES = [BUBBLE_SPEECH, BUBBLE_BURST, BUBBLE_WAVY];
 
-function parseLogEntries(batches: EventBatch[], mySeat: Seat): LogEntry[] {
+export function parseLogEntries(batches: EventBatch[], mySeat: Seat): LogEntry[] {
   const entries: LogEntry[] = [];
   let bubbleIdx = 0;
 

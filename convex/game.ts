@@ -1527,6 +1527,65 @@ function resolveSeatForUser(meta: any, userId: string): "host" | "away" | null {
   return null;
 }
 
+const HIDDEN_SETUP_COMMAND_TYPES = new Set(["SET_MONSTER", "SET_SPELL_TRAP"]);
+
+function normalizeSeat(value: unknown): "host" | "away" | null {
+  if (value === "host" || value === "away") return value;
+  return null;
+}
+
+function normalizeCommandForViewer(
+  commandJson: unknown,
+  batchSeat: "host" | "away" | null,
+  viewerSeat: "host" | "away",
+): string {
+  if (typeof commandJson !== "string") {
+    return JSON.stringify({ type: "UNKNOWN" });
+  }
+
+  try {
+    const parsed = JSON.parse(commandJson) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return JSON.stringify({ type: "UNKNOWN" });
+    }
+
+    const commandType = typeof (parsed as Record<string, unknown>).type === "string"
+      ? String((parsed as Record<string, unknown>).type)
+      : "";
+    if (!commandType) {
+      return JSON.stringify({ type: "UNKNOWN" });
+    }
+
+    if (
+      batchSeat &&
+      batchSeat !== viewerSeat &&
+      HIDDEN_SETUP_COMMAND_TYPES.has(commandType)
+    ) {
+      return JSON.stringify({ type: commandType });
+    }
+
+    return commandJson;
+  } catch {
+    return JSON.stringify({ type: "UNKNOWN" });
+  }
+}
+
+function redactRecentEventCommands(
+  batches: any[],
+  viewerSeat: "host" | "away",
+) {
+  return batches.map((batch) => {
+    const command = normalizeCommandForViewer(
+      (batch as any)?.command,
+      normalizeSeat((batch as any)?.seat),
+      viewerSeat,
+    );
+
+    if ((batch as any)?.command === command) return batch;
+    return { ...batch, command };
+  });
+}
+
 async function requireMatchParticipant(
   ctx: any,
   matchId: string,
@@ -1586,12 +1645,31 @@ export const __test = {
   assertActorMatchesAuthenticatedUser,
   requireMatchParticipant,
   assertStoryMatchRequesterAuthorized,
+  normalizeCommandForViewer,
+  redactRecentEventCommands,
 };
 
 async function requireSeatOwnership(
   ctx: any,
   matchId: string,
   seat: "host" | "away",
+  actorUserId: string,
+) {
+  const { meta, seat: resolvedSeat } = await requireMatchParticipation(
+    ctx,
+    matchId,
+    actorUserId,
+  );
+  if (resolvedSeat !== seat) {
+    throw new ConvexError("You can only access your own seat.");
+  }
+
+  return meta;
+}
+
+async function requireMatchParticipation(
+  ctx: any,
+  matchId: string,
   actorUserId: string,
 ) {
   const meta = await match.getMatchMeta(ctx, { matchId });
@@ -1603,11 +1681,8 @@ async function requireSeatOwnership(
   if (!resolvedSeat) {
     throw new ConvexError("You are not a participant in this match.");
   }
-  if (resolvedSeat !== seat) {
-    throw new ConvexError("You can only access your own seat.");
-  }
 
-  return meta;
+  return { meta, seat: resolvedSeat };
 }
 
 async function submitActionForActor(
@@ -2143,13 +2218,43 @@ export const getOpenPromptAsActor = internalQuery({
 export const getMatchMeta = query({
   args: { matchId: v.string() },
   returns: v.any(),
-  handler: async (ctx, args) => match.getMatchMeta(ctx, args),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const { meta } = await requireMatchParticipation(ctx, args.matchId, user._id);
+    return meta;
+  },
+});
+
+export const getMatchMetaAsActor = internalQuery({
+  args: {
+    matchId: v.string(),
+    actorUserId: v.id("users"),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const { meta } = await requireMatchParticipation(
+      ctx,
+      args.matchId,
+      args.actorUserId,
+    );
+    return meta;
+  },
 });
 
 export const getRecentEvents = query({
   args: { matchId: v.string(), sinceVersion: v.number() },
   returns: v.any(),
-  handler: async (ctx, args) => match.getRecentEvents(ctx, args),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const { seat: viewerSeat } = await requireMatchParticipation(
+      ctx,
+      args.matchId,
+      user._id,
+    );
+    const batches = await match.getRecentEvents(ctx, args);
+    const normalizedBatches = Array.isArray(batches) ? batches : [];
+    return redactRecentEventCommands(normalizedBatches, viewerSeat);
+  },
 });
 
 export const getPublicEventsAsActor = internalQuery({

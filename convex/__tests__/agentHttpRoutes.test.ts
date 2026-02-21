@@ -25,4 +25,12 @@ describe("agent HTTP routes", () => {
       /path:\s*"\/api\/agent\/game\/view"[\s\S]*?ctx\.runQuery\(\s*internal\.game\.getPlayerViewAsActor\s*,\s*\{[\s\S]*?actorUserId:\s*agent\.userId/,
     );
   });
+
+  it("resolves agent match metadata through internal getMatchMetaAsActor", () => {
+    const httpSource = readSource("convex/http.ts");
+
+    expect(httpSource).toMatch(
+      /resolveMatchAndSeat[\s\S]*?ctx\.runQuery\(\s*internalApi\.game\.getMatchMetaAsActor\s*,\s*\{[\s\S]*?actorUserId:\s*agentUserId/,
+    );
+  });
 });
