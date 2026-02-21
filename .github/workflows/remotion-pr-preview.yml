@@ -98,7 +98,7 @@ jobs:
             --props="$PROPS_JSON"
 
       - name: Upload preview artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: remotion-pr-preview-${{ github.event.pull_request.number }}
           path: |
