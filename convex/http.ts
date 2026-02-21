@@ -138,7 +138,6 @@ export async function resolveMatchAndSeat(
 ) {
 	const meta = await ctx.runQuery(api.game.getMatchMeta, {
 		matchId,
-		actorUserId: agentUserId,
 	});
 	if (!meta) {
 		throw new Error("Match not found");
@@ -382,18 +381,19 @@ corsRoute({
 			return errorResponse("command must be an object.");
 		}
 
-		const normalizedCommand = normalizeGameCommand(parsedCommand);
-		if (!isPlainObject(normalizedCommand)) {
-			return errorResponse("command must be an object after normalization.");
-		}
+			const normalizedCommand = normalizeGameCommand(parsedCommand);
+			if (!isPlainObject(normalizedCommand)) {
+				return errorResponse("command must be an object after normalization.");
+			}
 
-		try {
-			const result = await ctx.runMutation(api.game.submitAction, {
-				matchId,
-				command: JSON.stringify(normalizedCommand),
-				seat: resolvedSeat,
-				// HTTP actions are unauthenticated; pass actorUserId so submitAction doesn't require session auth.
-				actorUserId: agent.userId,
+			try {
+				// Agent HTTP routes do not run with Convex auth context; enforce seat
+				// ownership with explicit actorUserId via internal actor-scoped mutation.
+				const result = await ctx.runMutation(internal.game.submitActionAsActor, {
+					matchId,
+					command: JSON.stringify(normalizedCommand),
+					seat: resolvedSeat,
+					actorUserId: agent.userId,
 				expectedVersion:
 					typeof expectedVersion === "number"
 						? Number(expectedVersion)
@@ -431,13 +431,16 @@ corsRoute({
 			));
 		} catch (e: any) {
 			return errorResponse(e.message, 422);
-		}
+			}
 
-		try {
-			const view = await ctx.runQuery(api.game.getPlayerView, {
-				matchId,
-				seat,
-			});
+			try {
+				// Keep view reads actor-scoped for the same reason as submitAction:
+				// HTTP routes are unauthenticated at the Convex mutation/query layer.
+				const view = await ctx.runQuery(internal.game.getPlayerViewAsActor, {
+					matchId,
+					seat,
+					actorUserId: agent.userId,
+				});
 			if (!view) return errorResponse("Match state not found", 404);
 			// getPlayerView returns a JSON string — parse before wrapping
 			const parsed = typeof view === "string" ? JSON.parse(view) : view;

@@ -19,7 +19,6 @@ describe("resolveMatchAndSeat", () => {
     expect(runQuery).toHaveBeenCalledTimes(1);
     expect(runQuery.mock.calls[0]![1]).toEqual({
       matchId: "match_1",
-      actorUserId: "host_user",
     });
   });
 
