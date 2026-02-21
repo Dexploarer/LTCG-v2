@@ -81,6 +81,7 @@ export async function runStoryStageScenario(args: {
   timelinePath: string;
   chapterId?: string;
   stageNumber?: number;
+  maxDurationMs?: number;
 }): Promise<{ matchId: string; completion: any }> {
   const chapters = await args.client.getChapters();
   if (!chapters?.length) throw new Error("No chapters available.");
@@ -104,8 +105,16 @@ export async function runStoryStageScenario(args: {
   let steps = 0;
   let staleTicks = 0;
   let lastSig = "";
+  const startedAtMs = Date.now();
+  const maxDurationMs =
+    Number.isFinite(args.maxDurationMs) && Number(args.maxDurationMs) > 0
+      ? Number(args.maxDurationMs)
+      : 60000;
 
   while (steps < MAX_STEPS) {
+    if (Date.now() - startedAtMs > maxDurationMs) {
+      throw new Error(`story stage timed out after ${maxDurationMs}ms`);
+    }
     const view = (await args.client.getView({ matchId })) as PlayerView | null;
     if (!view) throw new Error("No player view returned.");
 
@@ -161,4 +170,3 @@ export async function runStoryStageScenario(args: {
 
   return { matchId, completion };
 }
-

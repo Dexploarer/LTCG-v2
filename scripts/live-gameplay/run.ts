@@ -99,6 +99,7 @@ async function withRetries<T>(args: {
 
 async function runScenario<T>(
   scenario: string,
+  timeoutMs: number,
   fn: () => Promise<T>,
 ): Promise<{ result: T | null; scenarioResult: LiveGameplayScenarioResult }> {
   const startedAt = new Date().toISOString();
@@ -109,7 +110,25 @@ async function runScenario<T>(
   let matchId: string | undefined;
 
   try {
-    const result = await fn();
+    const result = await (() => {
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return fn();
+      }
+      return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error(`scenario "${scenario}" timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        fn()
+          .then((value) => {
+            clearTimeout(timer);
+            resolve(value);
+          })
+          .catch((error) => {
+            clearTimeout(timer);
+            reject(error);
+          });
+      });
+    })();
     if (result && typeof result === "object" && "matchId" in (result as any)) {
       const id = (result as any).matchId;
       if (typeof id === "string") matchId = id;
@@ -177,6 +196,9 @@ async function main() {
   const retryDelayMs = getNumberFlag(flags, "retry-delay-ms") ?? 500;
   const retryMaxDelayMs = getNumberFlag(flags, "retry-max-delay-ms") ?? 8000;
   const timeoutMs = getNumberFlag(flags, "timeout-ms") ?? 5000;
+  const scenarioTimeoutMs =
+    getNumberFlag(flags, "scenario-timeout-ms") ??
+    Number(process.env.LTCG_SCENARIO_TIMEOUT_MS ?? 60000);
   const run = await prepareRunArtifacts(runId);
   const startedAt = new Date().toISOString();
   const startMs = Date.now();
@@ -240,11 +262,6 @@ async function main() {
     await writeSkipReport(message, apiUrl);
     console.warn(`[live-gameplay] ${message}`);
     return;
-  }
-
-  if (!apiUrl) {
-    console.error("Missing API url. Provide --api-url or set LTCG_API_URL (a .convex.site URL).");
-    process.exit(1);
   }
 
   const webUrl =
@@ -342,12 +359,13 @@ async function main() {
 
   const scenarios: LiveGameplayScenarioResult[] = [];
 
-  const coreStory = await runScenario("story_stage_1", async () => {
+  const coreStory = await runScenario("story_stage_1", scenarioTimeoutMs, async () => {
     const { matchId, completion } = await runStoryStageScenario({
       client,
       cardLookup,
       timelinePath: run.timelinePath,
       stageNumber: 1,
+      maxDurationMs: scenarioTimeoutMs,
     });
     await appendTimeline(run.timelinePath, { type: "note", message: `story_completion ${JSON.stringify(completion)}` });
     return { matchId };
@@ -357,11 +375,12 @@ async function main() {
     await observer.screenshot("failure_story_stage_1");
   }
 
-  const coreDuel = await runScenario("quick_duel", async () => {
+  const coreDuel = await runScenario("quick_duel", scenarioTimeoutMs, async () => {
     const { matchId, finalStatus } = await runQuickDuelScenario({
       client,
       cardLookup,
       timelinePath: run.timelinePath,
+      maxDurationMs: scenarioTimeoutMs,
     });
     await appendTimeline(run.timelinePath, { type: "note", message: `duel_status ${JSON.stringify(finalStatus)}` });
     return { matchId };
@@ -371,7 +390,7 @@ async function main() {
     await observer.screenshot("failure_quick_duel");
   }
 
-  const publicViewConsistency = await runScenario("public_view_consistency", async () => {
+  const publicViewConsistency = await runScenario("public_view_consistency", scenarioTimeoutMs, async () => {
     let matchId =
       coreDuel.result &&
       typeof coreDuel.result === "object" &&
@@ -398,7 +417,7 @@ async function main() {
     await observer.screenshot("failure_public_view_consistency");
   }
 
-  const invalidSeatAction = await runScenario("invalid_seat_action_rejected", async () =>
+  const invalidSeatAction = await runScenario("invalid_seat_action_rejected", scenarioTimeoutMs, async () =>
     runInvalidSeatActionScenario({
       client,
       timelinePath: run.timelinePath,
@@ -425,13 +444,14 @@ async function main() {
       if (!chapterId || !stageNumber) break;
 
       const name = `story_stage_${i + 2}`;
-      const stageRes = await runScenario(name, async () => {
+      const stageRes = await runScenario(name, scenarioTimeoutMs, async () => {
         const { matchId } = await runStoryStageScenario({
           client,
           cardLookup,
           timelinePath: run.timelinePath,
           chapterId,
           stageNumber,
+          maxDurationMs: scenarioTimeoutMs,
         });
         return { matchId };
       });

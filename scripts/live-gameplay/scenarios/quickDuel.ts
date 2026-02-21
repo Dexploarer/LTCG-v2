@@ -59,6 +59,7 @@ export async function runQuickDuelScenario(args: {
   client: LtcgAgentApiClient;
   cardLookup: CardLookup;
   timelinePath: string;
+  maxDurationMs?: number;
 }): Promise<{ matchId: string; finalStatus: any }> {
   const start = await args.client.startDuel();
   const matchId = String((start as any).matchId ?? "");
@@ -72,8 +73,16 @@ export async function runQuickDuelScenario(args: {
 
   let steps = 0;
   let lastSig = "";
+  const startedAtMs = Date.now();
+  const maxDurationMs =
+    Number.isFinite(args.maxDurationMs) && Number(args.maxDurationMs) > 0
+      ? Number(args.maxDurationMs)
+      : 60000;
 
   while (steps < MAX_STEPS) {
+    if (Date.now() - startedAtMs > maxDurationMs) {
+      throw new Error(`quick duel timed out after ${maxDurationMs}ms`);
+    }
     const view = (await args.client.getView({ matchId })) as PlayerView | null;
     if (!view) throw new Error("No player view returned.");
 
@@ -112,4 +121,3 @@ export async function runQuickDuelScenario(args: {
   const finalStatus = await args.client.getMatchStatus(matchId);
   return { matchId, finalStatus };
 }
-

@@ -32,6 +32,8 @@ Artifacts are written to `artifacts/live-gameplay/<runId>/`.
 - `LTCG_LIVE_REQUIRED=1` (optional): fail the run if no API URL is configured (default is skip).
   - The suite also skips by default if the API URL is configured but not reachable.
   - Skip runs still emit `report.json` with `status: "skip"` and `skipReason`.
+- `LTCG_SCENARIO_TIMEOUT_MS` (optional): per-scenario wall-clock timeout in milliseconds (default `60000`).
+  - Prevents non-terminating live scenarios from hanging CI/local runs.
 
 ## Local Validation
 
@@ -47,6 +49,12 @@ bun run dev:web
 LTCG_API_URL="https://<deployment>.convex.site" \
 LTCG_WEB_URL="http://localhost:3334" \
 bun run test:live:core
+```
+
+Optional CLI override:
+
+```bash
+bun run test:live:core -- --scenario-timeout-ms=60000
 ```
 
 API-only mode:
