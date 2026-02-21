@@ -22,7 +22,7 @@ jobs:
           fi
           echo "enabled=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ steps.live_gameplay_config.outputs.enabled == 'true' }}
 
       - uses: oven-sh/setup-bun@v2
