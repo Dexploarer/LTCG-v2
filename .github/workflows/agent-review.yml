@@ -33,7 +33,7 @@ jobs:
     outputs:
       category: ${{ steps.classify.outputs.category }}
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         id: classify
         with:
           script: |
@@ -157,7 +157,7 @@ jobs:
       - name: Extract verdict
         id: extract
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Poll for the review comment
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create check run
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const verdict = '${{ needs.review-pr.outputs.verdict }}' || 'REQUEST_CHANGES';
@@ -233,7 +233,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for other checks
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
@@ -293,7 +293,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Close PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             await github.rest.pulls.update({
@@ -394,7 +394,7 @@ jobs:
 
       - name: Upsert PR comment
         if: github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.fork == false
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SUMMARY_PATH: ${{ runner.temp }}/agent-trust-summary.json
         with:

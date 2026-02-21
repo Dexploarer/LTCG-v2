@@ -119,7 +119,7 @@ jobs:
 
       - name: Upsert PR comment
         if: ${{ github.event.pull_request.head.repo.fork == false }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           OUTPUT_FILE: ${{ steps.props.outputs.output_file }}
           STILL_FILE: ${{ steps.props.outputs.still_file }}
