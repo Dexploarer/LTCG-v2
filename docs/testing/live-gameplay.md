@@ -31,6 +31,7 @@ Artifacts are written to `artifacts/live-gameplay/<runId>/`.
 - `LTCG_SOAK_STAGES` (optional): stages to run in `soak` suite (default `10`).
 - `LTCG_LIVE_REQUIRED=1` (optional): fail the run if no API URL is configured (default is skip).
   - The suite also skips by default if the API URL is configured but not reachable.
+  - Skip runs still emit `report.json` with `status: "skip"` and `skipReason`.
 
 ## Local Validation
 
@@ -71,5 +72,7 @@ Per run:
 - `artifacts/live-gameplay/<runId>/report.json`
 - `artifacts/live-gameplay/<runId>/timeline.ndjson`
 - `artifacts/live-gameplay/<runId>/*.png` (only on failure)
+
+`report.json` includes `status` (`pass`, `fail`, or `skip`) and a `skipReason` when status is `skip`.
 
 `timeline.ndjson` is append-only and intended for automation and CI attachment.

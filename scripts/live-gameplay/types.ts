@@ -29,6 +29,7 @@ export type LiveGameplayReport = {
   runId: string;
   suite: LiveGameplaySuite;
   status: LiveGameplayStatus;
+  skipReason?: string;
   apiUrl: string;
   webUrl?: string;
   startedAt: string;
@@ -37,4 +38,3 @@ export type LiveGameplayReport = {
   scenarios: LiveGameplayScenarioResult[];
   artifacts: LiveGameplayArtifact[];
 };
-

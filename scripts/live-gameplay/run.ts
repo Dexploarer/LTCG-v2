@@ -168,11 +168,18 @@ async function runScenario<T>(
 async function main() {
   const flags = parseArgv(process.argv.slice(2));
   const suite = (getStringFlag(flags, "suite") ?? (process.env.LTCG_SUITE ?? "core")) as LiveGameplaySuite;
+  const runId =
+    getStringFlag(flags, "run-id") ??
+    process.env.LTCG_RUN_ID ??
+    `${Date.now()}`;
 
   const retries = getNumberFlag(flags, "retries") ?? 0;
   const retryDelayMs = getNumberFlag(flags, "retry-delay-ms") ?? 500;
   const retryMaxDelayMs = getNumberFlag(flags, "retry-max-delay-ms") ?? 8000;
   const timeoutMs = getNumberFlag(flags, "timeout-ms") ?? 5000;
+  const run = await prepareRunArtifacts(runId);
+  const startedAt = new Date().toISOString();
+  const startMs = Date.now();
 
   const apiUrl =
     getStringFlag(flags, "api-url") ??
@@ -180,6 +187,31 @@ async function main() {
     process.env.LTCG_CONVEX_SITE_URL ??
     deriveConvexSiteUrlFromCloudUrl(process.env.VITE_CONVEX_URL) ??
     null;
+
+  const writeSkipReport = async (message: string, reportApiUrl: string) => {
+    await appendTimeline(run.timelinePath, {
+      type: "note",
+      message: `run_start suite=${suite}`,
+    });
+    await appendTimeline(run.timelinePath, {
+      type: "note",
+      message: `run_skip reason=${message}`,
+    });
+
+    const report: LiveGameplayReport = {
+      runId,
+      suite,
+      status: "skip",
+      skipReason: message,
+      apiUrl: reportApiUrl,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - startMs,
+      scenarios: [],
+      artifacts: defaultArtifactsForRun(run),
+    };
+    await writeReport(run.reportPath, report);
+  };
 
   // Explicit environment gate:
   // - If no API URL is configured, skip by default (exit 0) so local/CI runs
@@ -193,6 +225,7 @@ async function main() {
     if (required) {
       throw new Error(message);
     }
+    await writeSkipReport(message, "unconfigured");
     console.warn(`[live-gameplay] ${message}`);
     return;
   }
@@ -204,6 +237,7 @@ async function main() {
     if (required) {
       throw new Error(message);
     }
+    await writeSkipReport(message, apiUrl);
     console.warn(`[live-gameplay] ${message}`);
     return;
   }
@@ -219,15 +253,6 @@ async function main() {
     null;
 
   const noBrowser = Boolean(flags["no-browser"]) || process.env.LTCG_NO_BROWSER === "1";
-
-  const runId =
-    getStringFlag(flags, "run-id") ??
-    process.env.LTCG_RUN_ID ??
-    `${Date.now()}`;
-
-  const run = await prepareRunArtifacts(runId);
-  const startedAt = new Date().toISOString();
-  const startMs = Date.now();
 
   await appendTimeline(run.timelinePath, {
     type: "note",
