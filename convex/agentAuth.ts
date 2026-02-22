@@ -4,7 +4,7 @@ import { components } from "./_generated/api";
 import { LTCGCards } from "@lunchtable/cards";
 import { LTCGMatch } from "@lunchtable/match";
 import { createInitialState, DEFAULT_CONFIG, buildCardLookup } from "@lunchtable/engine";
-import { buildMatchSeed, makeRng } from "./agentSeed";
+import { buildDeckSeedPart, buildMatchSeed, makeRng } from "./agentSeed";
 import { DECK_RECIPES } from "./cardData";
 import {
   buildAIDeck,
@@ -125,10 +125,8 @@ export const agentStartBattle = mutation({
       "cpu",
       args.chapterId,
       stageNum,
-      playerDeck.length,
-      finalAiDeck.length,
-      playerDeck[0],
-      finalAiDeck[0],
+      buildDeckSeedPart(playerDeck),
+      buildDeckSeedPart(finalAiDeck),
     ]);
     const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
@@ -190,10 +188,8 @@ export const agentStartDuel = mutation({
       "agentStartDuel",
       user._id,
       "cpu",
-      playerDeck.length,
-      aiDeck.length,
-      playerDeck[0],
-      aiDeck[0],
+      buildDeckSeedPart(playerDeck),
+      buildDeckSeedPart(aiDeck),
     ]);
     const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
@@ -281,10 +277,8 @@ export const agentJoinMatch = mutation({
       "agentJoinMatch",
       hostId,
       agentUserId,
-      hostDeck.length,
-      awayDeck.length,
-      hostDeck[0],
-      awayDeck[0],
+      buildDeckSeedPart(hostDeck),
+      buildDeckSeedPart(awayDeck),
     ]);
     const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 

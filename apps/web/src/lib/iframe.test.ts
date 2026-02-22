@@ -36,6 +36,7 @@ function installFakeWindow() {
 describe("iframe protocol", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
@@ -85,5 +86,26 @@ describe("iframe protocol", () => {
       },
       "*",
     );
+  });
+
+  it("rejects opaque origins by default", () => {
+    const env = installFakeWindow();
+    const handler = vi.fn();
+    onHostMessage(handler);
+
+    env.dispatch("null", { type: "START_MATCH", mode: "pvp" });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("accepts opaque origins only when explicitly enabled", () => {
+    vi.stubEnv("VITE_MILAIDY_ALLOW_OPAQUE_ORIGINS", "true");
+    const envWindow = installFakeWindow();
+    const handler = vi.fn();
+    onHostMessage(handler);
+
+    envWindow.dispatch("null", { type: "START_MATCH", mode: "pvp" });
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });

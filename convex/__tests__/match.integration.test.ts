@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, test } from "vitest";
 import { api } from "../_generated/api";
-import { buildMatchSeed } from "../agentSeed";
+import { buildDeckSeedPart, buildMatchSeed } from "../agentSeed";
 import { ALICE, BOB, seedUser, setupTestConvex } from "./setup.test-helpers";
 
 function expandDeckCards(cards: Array<{ cardDefinitionId: string; quantity: number }>): string[] {
@@ -59,10 +59,8 @@ describe("match.startMatch", () => {
       "convex.match.startMatch",
       meta.hostId,
       meta.awayId,
-      meta.hostDeck.length,
-      meta.awayDeck.length,
-      meta.hostDeck[0],
-      meta.awayDeck[0],
+      buildDeckSeedPart(meta.hostDeck),
+      buildDeckSeedPart(meta.awayDeck),
     ]);
     const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
 

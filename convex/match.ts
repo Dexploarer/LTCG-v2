@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./auth";
-import { buildMatchSeed, makeRng } from "./agentSeed";
+import { buildDeckSeedPart, buildMatchSeed, makeRng } from "./agentSeed";
 
 const match: any = new LTCGMatch(components.lunchtable_tcg_match as any);
 const cards: any = new LTCGCards(components.lunchtable_tcg_cards as any);
@@ -102,10 +102,8 @@ export const startMatch = mutation({
       "convex.match.startMatch",
       meta.hostId,
       meta.awayId,
-      hostDeck.length,
-      awayDeck.length,
-      hostDeck[0],
-      awayDeck[0],
+      buildDeckSeedPart(hostDeck),
+      buildDeckSeedPart(awayDeck),
     ]);
     const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
     const initialState = createInitialState(

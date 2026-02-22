@@ -23,3 +23,11 @@ export const buildMatchSeed = (
 	const values = parts.map((value) => String(value ?? "")).join("|");
 	return buildDeterministicSeed(values);
 };
+
+export const buildDeckSeedPart = (
+	deck: ReadonlyArray<string> | null | undefined,
+): string => {
+	if (!Array.isArray(deck) || deck.length === 0) return "0:0";
+	const normalized = deck.map((cardId) => String(cardId)).join(",");
+	return `${deck.length}:${buildDeterministicSeed(normalized)}`;
+};

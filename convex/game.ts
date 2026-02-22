@@ -137,6 +137,12 @@ const buildMatchSeed = (parts: Array<string | number | null | undefined>): numbe
   return buildDeterministicSeed(values);
 };
 
+const buildDeckSeedPart = (deck: ReadonlyArray<string> | null | undefined): string => {
+  if (!Array.isArray(deck) || deck.length === 0) return "0:0";
+  const normalized = deck.map((cardId) => String(cardId)).join(",");
+  return `${deck.length}:${buildDeterministicSeed(normalized)}`;
+};
+
 const resolveDefaultStarterDeckCode = () => {
   const configured = STARTER_DECKS.find((deck) => DECK_RECIPES[deck.deckCode]);
   if (configured?.deckCode) return configured.deckCode;
@@ -148,6 +154,9 @@ const CARD_LOOKUP_CACHE_TTL_MS = 60_000;
 const AI_TURN_QUEUE_DEDUPE_MS = 5_000;
 const PVP_JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PVP_JOIN_CODE_LENGTH = 6;
+const PVP_JOIN_ATTEMPT_WINDOW_MS = 60_000;
+const PVP_JOIN_ATTEMPT_LIMIT = 12;
+const pvpJoinAttemptsByUser = new Map<string, number[]>();
 
 let cachedCardDefinitions: any[] | null = null;
 let cachedCardLookup: Record<string, any> | null = null;
@@ -229,10 +238,25 @@ async function claimQueuedAITurn(ctx: any, matchId: string): Promise<boolean> {
 function generateJoinCode() {
   let code = "";
   for (let index = 0; index < PVP_JOIN_CODE_LENGTH; index += 1) {
-    const randomIndex = Math.floor(Math.random() * PVP_JOIN_CODE_CHARS.length);
+    const randomIndex = secureRandomIndex(PVP_JOIN_CODE_CHARS.length);
     code += PVP_JOIN_CODE_CHARS[randomIndex] ?? "A";
   }
   return code;
+}
+
+function secureRandomIndex(maxExclusive: number): number {
+  if (!Number.isFinite(maxExclusive) || maxExclusive <= 1) return 0;
+  const bytes = new Uint32Array(1);
+  const maxUint32 = 0x1_0000_0000;
+  const biasLimit = Math.floor(maxUint32 / maxExclusive) * maxExclusive;
+
+  while (true) {
+    crypto.getRandomValues(bytes);
+    const value = bytes[0] ?? 0;
+    if (value < biasLimit) {
+      return value % maxExclusive;
+    }
+  }
 }
 
 async function generateUniqueJoinCode(ctx: any): Promise<string> {
@@ -245,6 +269,20 @@ async function generateUniqueJoinCode(ctx: any): Promise<string> {
     if (!existing) return candidate;
   }
   throw new ConvexError("Failed to generate a unique join code. Please try again.");
+}
+
+function enforceJoinCodeAttemptRateLimit(userId: string): void {
+  const now = Date.now();
+  const windowStart = now - PVP_JOIN_ATTEMPT_WINDOW_MS;
+  const existingAttempts = pvpJoinAttemptsByUser.get(userId) ?? [];
+  const recentAttempts = existingAttempts.filter((attemptedAt) => attemptedAt >= windowStart);
+
+  if (recentAttempts.length >= PVP_JOIN_ATTEMPT_LIMIT) {
+    throw new ConvexError("Too many join code attempts. Please wait a moment and try again.");
+  }
+
+  recentAttempts.push(now);
+  pvpJoinAttemptsByUser.set(userId, recentAttempts);
 }
 
 function normalizePvpLobbySummary(row: any) {
@@ -338,10 +376,8 @@ async function joinPvpLobbyInternal(ctx: any, args: { matchId: string; awayUserI
     "pvpLobbyJoin",
     (meta as any).hostId,
     args.awayUserId,
-    hostDeck.length,
-    awayDeck.length,
-    hostDeck[0],
-    awayDeck[0],
+    buildDeckSeedPart(hostDeck),
+    buildDeckSeedPart(awayDeck),
   ]);
   const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
@@ -922,6 +958,7 @@ export const joinPvpLobbyByCode = mutation({
   returns: vPvpJoinResult,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    enforceJoinCodeAttemptRateLimit(String(user._id));
     const normalizedCode = args.joinCode.trim().toUpperCase();
     if (!normalizedCode || normalizedCode.length !== PVP_JOIN_CODE_LENGTH) {
       throw new ConvexError("Join code must be a 6-character code.");
@@ -1312,10 +1349,8 @@ export const startStoryBattle = mutation({
       "host",
       args.chapterId,
       stageNum,
-      playerDeck.length,
-      aiDeck.length,
-      playerDeck[0],
-      aiDeck[0],
+      buildDeckSeedPart(playerDeck),
+      buildDeckSeedPart(aiDeck),
     ]);
     const firstPlayer: "host" | "away" = seed % 2 === 0 ? "host" : "away";
 
@@ -1593,6 +1628,9 @@ export const __test = {
   requireMatchParticipant,
   assertStoryMatchRequesterAuthorized,
   resolveLegacyCommandPayload,
+  resetPvpJoinCodeRateLimiter: () => {
+    pvpJoinAttemptsByUser.clear();
+  },
 };
 
 async function requireSeatOwnership(

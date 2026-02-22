@@ -13,8 +13,6 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3334", // LTCG dev server (self-embed testing)
   "https://milaidy.app", // Production
   "https://app.milaidy.xyz", // Alternative domain
-  "file://", // Electron file:// origin
-  "null", // Some Electron/embedded contexts use "null" origin
 ];
 
 export type IframeChatMessage = {
@@ -65,6 +63,10 @@ export type HostToGame =
 function isAllowedOrigin(origin: string): boolean {
   const customOrigin = import.meta.env.VITE_MILAIDY_ORIGIN as string | undefined;
   if (customOrigin && origin === customOrigin) return true;
+  const allowOpaqueOrigins = (import.meta.env.VITE_MILAIDY_ALLOW_OPAQUE_ORIGINS as string | undefined) === "true";
+  if (allowOpaqueOrigins && (origin === "null" || origin === "file://")) {
+    return true;
+  }
   return ALLOWED_ORIGINS.includes(origin);
 }
 

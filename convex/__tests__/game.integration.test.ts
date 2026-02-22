@@ -8,7 +8,7 @@ import {
   normalizeFirstClearBonus,
   __test as gameTestHelpers,
 } from "../game";
-import { buildMatchSeed } from "../agentSeed";
+import { buildDeckSeedPart, buildMatchSeed } from "../agentSeed";
 
 // ═══════════════════════════════════════════════════════════════════════
 // game.ts integration tests
@@ -16,6 +16,10 @@ import { buildMatchSeed } from "../agentSeed";
 // PvP lobby lifecycle, match presence — all against a real in-process
 // Convex backend with components.
 // ═══════════════════════════════════════════════════════════════════════
+
+beforeEach(() => {
+  gameTestHelpers.resetPvpJoinCodeRateLimiter();
+});
 
 // ── Card Queries ─────────────────────────────────────────────────────
 
@@ -735,6 +739,22 @@ describe("PvP join flow", () => {
     await expect(
       asBob.mutation(api.game.joinPvpLobbyByCode, { joinCode: "AB" }),
     ).rejects.toThrow(/6-character code/);
+  });
+
+  test("joinPvpLobbyByCode rate limits repeated attempts", async () => {
+    const t = setupTestConvex();
+    await t.mutation(api.seed.seedAll, {});
+    const { asUser: asBob } = await seedUserWithDeck(t, BOB);
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await expect(
+        asBob.mutation(api.game.joinPvpLobbyByCode, { joinCode: "ZZZZZZ" }),
+      ).rejects.toThrow(/No waiting lobby found/);
+    }
+
+    await expect(
+      asBob.mutation(api.game.joinPvpLobbyByCode, { joinCode: "ZZZZZZ" }),
+    ).rejects.toThrow(/Too many join code attempts/);
   });
 
   test("join already-active lobby rejects (CHARLIE)", async () => {
@@ -3505,10 +3525,8 @@ describe("deterministic start + legacy command resolution", () => {
       "pvpLobbyJoin",
       meta.hostId,
       meta.awayId,
-      meta.hostDeck.length,
-      meta.awayDeck.length,
-      meta.hostDeck[0],
-      meta.awayDeck[0],
+      buildDeckSeedPart(meta.hostDeck),
+      buildDeckSeedPart(meta.awayDeck),
     ]);
     const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
     expect(hostView.currentTurnPlayer).toBe(expectedFirstPlayer);
@@ -3551,10 +3569,8 @@ describe("deterministic start + legacy command resolution", () => {
       "agentJoinMatch",
       String(meta.hostId),
       String(bobUser!._id),
-      meta.hostDeck.length,
-      meta.awayDeck.length,
-      meta.hostDeck[0],
-      meta.awayDeck[0],
+      buildDeckSeedPart(meta.hostDeck),
+      buildDeckSeedPart(meta.awayDeck),
     ]);
     const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
     expect(hostView.currentTurnPlayer).toBe(expectedFirstPlayer);

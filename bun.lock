@@ -9,6 +9,7 @@
         "@lunchtable/engine": "workspace:*",
         "@lunchtable/guilds": "workspace:*",
         "@lunchtable/match": "workspace:*",
+        "@lunchtable/plugin-ltcg": "workspace:*",
         "@lunchtable/story": "workspace:*",
         "@sentry/node": "^10.38.0",
         "convex": "^1.31.6",

@@ -56,12 +56,27 @@ type PackType = keyof typeof PACK_TYPES;
 function pickRarity(weights: Record<string, number>): string {
   const entries = Object.entries(weights).filter(([_, w]) => w > 0);
   const total = entries.reduce((sum, [_, w]) => sum + w, 0);
-  let roll = Math.random() * total;
+  let roll = secureRandomIndex(total);
   for (const [rarity, weight] of entries) {
     roll -= weight;
-    if (roll <= 0) return rarity;
+    if (roll < 0) return rarity;
   }
   return entries[entries.length - 1]![0];
+}
+
+function secureRandomIndex(maxExclusive: number): number {
+  if (!Number.isFinite(maxExclusive) || maxExclusive <= 1) return 0;
+  const bytes = new Uint32Array(1);
+  const maxUint32 = 0x1_0000_0000;
+  const biasLimit = Math.floor(maxUint32 / maxExclusive) * maxExclusive;
+
+  while (true) {
+    crypto.getRandomValues(bytes);
+    const value = bytes[0] ?? 0;
+    if (value < biasLimit) {
+      return value % maxExclusive;
+    }
+  }
 }
 
 // ── Shared pack-rolling logic ──────────────────────────────────────
@@ -94,7 +109,7 @@ async function rollPackCards(
     const rarity = pickRarity(pack.rarityWeights);
     // Fall back to common pool, then to all cards if the rarity pool is empty
     const pool = cardsByRarity[rarity] ?? cardsByRarity["common"] ?? allCards;
-    const card = pool[Math.floor(Math.random() * pool.length)];
+    const card = pool[secureRandomIndex(pool.length)];
     if (card) {
       // Grant card to user's inventory via the cards component client
       await cards.cards.addCardsToInventory(ctx, {

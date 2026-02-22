@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildDeterministicSeed, buildMatchSeed, makeRng } from "./agentSeed";
+import {
+	buildDeckSeedPart,
+	buildDeterministicSeed,
+	buildMatchSeed,
+	makeRng,
+} from "./agentSeed";
 
 describe("agent seed helpers", () => {
 	it("builds deterministic seeds from string input", () => {
@@ -14,6 +19,14 @@ describe("agent seed helpers", () => {
 		const a = buildMatchSeed(["agentStartDuel", 1, 2, "deckA"]);
 		const b = buildMatchSeed(["agentStartDuel", 1, 2, "deckA"]);
 		expect(a).toBe(b);
+	});
+
+	it("builds deck seed parts that change with card order/content", () => {
+		const base = buildDeckSeedPart(["a", "b", "c"]);
+		const reordered = buildDeckSeedPart(["b", "a", "c"]);
+		const changed = buildDeckSeedPart(["a", "b", "d"]);
+		expect(base).not.toBe(reordered);
+		expect(base).not.toBe(changed);
 	});
 
 	it("produces stable RNG sequence for a seed", () => {

@@ -35,9 +35,24 @@ function generateInviteCode() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let code = "";
   for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(secureRandomIndex(chars.length));
   }
   return code;
+}
+
+function secureRandomIndex(maxExclusive: number): number {
+  if (!Number.isFinite(maxExclusive) || maxExclusive <= 1) return 0;
+  const bytes = new Uint32Array(1);
+  const maxUint32 = 0x1_0000_0000;
+  const biasLimit = Math.floor(maxUint32 / maxExclusive) * maxExclusive;
+
+  while (true) {
+    crypto.getRandomValues(bytes);
+    const value = bytes[0] ?? 0;
+    if (value < biasLimit) {
+      return value % maxExclusive;
+    }
+  }
 }
 
 export const createInvite = mutation({
