@@ -274,6 +274,7 @@ export interface MatchStatus {
   hostId?: string | null;
   awayId?: string | null;
   seat?: "host" | "away";
+  latestVersion?: number | null;
 }
 
 export interface MatchActive {

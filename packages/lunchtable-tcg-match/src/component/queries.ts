@@ -21,6 +21,8 @@ const vMatch = v.object({
   isAIOpponent: v.boolean(),
   createdAt: v.number(),
   startedAt: v.optional(v.number()),
+  startSeed: v.optional(v.number()),
+  startingSeat: v.optional(v.union(v.literal("host"), v.literal("away"))),
   endedAt: v.optional(v.number()),
 });
 

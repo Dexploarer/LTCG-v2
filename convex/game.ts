@@ -371,6 +371,8 @@ async function joinPvpLobbyInternal(ctx: any, args: { matchId: string; awayUserI
   await match.startMatch(ctx, {
     matchId: args.matchId,
     initialState: JSON.stringify(initialState),
+    startSeed: seed,
+    startingSeat: firstPlayer,
     configAllowlist: {
       pongEnabled: lobby.pongEnabled === true,
       redemptionEnabled: lobby.redemptionEnabled === true,
@@ -1342,6 +1344,8 @@ export const startStoryBattle = mutation({
     await match.startMatch(ctx, {
       matchId,
       initialState: JSON.stringify(initialState),
+      startSeed: seed,
+      startingSeat: firstPlayer,
     });
 
     // Link match to story context in host-layer table
@@ -1957,11 +1961,19 @@ async function submitActionForActor(
     typeof rawView === "string" ? rawView : null,
   );
 
+  const resolvedExpectedVersion =
+    typeof args.expectedVersion === "number"
+      ? args.expectedVersion
+      : await match.getLatestSnapshotVersion(ctx, { matchId: args.matchId });
+  if (typeof resolvedExpectedVersion !== "number") {
+    throw new ConvexError("submitAction expectedVersion is required");
+  }
+
   const result = await match.submitAction(ctx, {
     matchId: args.matchId,
     command: resolvedCommand,
     seat: args.seat,
-    expectedVersion: args.expectedVersion,
+    expectedVersion: resolvedExpectedVersion,
   });
 
   // Schedule AI turn only if: game is active, it's an AI match, and
@@ -2355,10 +2367,17 @@ export const executeAITurn = internalMutation({
       }
 
       try {
+        const expectedVersion = await match.getLatestSnapshotVersion(ctx, {
+          matchId: args.matchId,
+        });
+        if (typeof expectedVersion !== "number") {
+          return null;
+        }
         await match.submitAction(ctx, {
           matchId: args.matchId,
           command: JSON.stringify({ type: "CHAIN_RESPONSE", pass: true }),
           seat: aiSeat,
+          expectedVersion,
         });
       } catch {
         return null;
@@ -2377,10 +2396,17 @@ export const executeAITurn = internalMutation({
     const command = pickAICommand(view, cardLookup);
 
     try {
+      const expectedVersion = await match.getLatestSnapshotVersion(ctx, {
+        matchId: args.matchId,
+      });
+      if (typeof expectedVersion !== "number") {
+        return null;
+      }
       await match.submitAction(ctx, {
         matchId: args.matchId,
         command: JSON.stringify(command),
         seat: aiSeat,
+        expectedVersion,
       });
     } catch {
       return null;
@@ -3049,10 +3075,17 @@ export const checkPvpDisconnect = internalMutation({
     // One player is stale → auto-surrender them
     const disconnectedSeat: "host" | "away" = hostStale ? "host" : "away";
     try {
+      const expectedVersion = await match.getLatestSnapshotVersion(ctx, {
+        matchId: args.matchId,
+      });
+      if (typeof expectedVersion !== "number") {
+        return null;
+      }
       await match.submitAction(ctx, {
         matchId: args.matchId,
         command: JSON.stringify({ type: "SURRENDER" }),
         seat: disconnectedSeat,
+        expectedVersion,
       });
     } catch {
       // Match may have already ended

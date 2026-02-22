@@ -3512,6 +3512,9 @@ describe("deterministic start + legacy command resolution", () => {
     ]);
     const expectedFirstPlayer = seed % 2 === 0 ? "host" : "away";
     expect(hostView.currentTurnPlayer).toBe(expectedFirstPlayer);
+    expect(typeof meta.startSeed).toBe("number");
+    expect(meta.startSeed).toBe(seed);
+    expect(meta.startingSeat).toBe(expectedFirstPlayer);
   });
 
   test("agentJoinMatch_deterministic_first_player", async () => {

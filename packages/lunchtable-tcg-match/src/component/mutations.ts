@@ -135,6 +135,18 @@ export function haveSameCardCounts(a: string[], b: string[]): boolean {
   return true;
 }
 
+export function assertExpectedVersion(
+  latestVersion: number,
+  expectedVersion: unknown,
+): asserts expectedVersion is number {
+  if (typeof expectedVersion !== "number" || !Number.isFinite(expectedVersion)) {
+    throw new Error("submitAction expectedVersion is required");
+  }
+  if (latestVersion !== expectedVersion) {
+    throw new Error("submitAction version mismatch; state updated by another action.");
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -398,6 +410,8 @@ export const startMatch = mutation({
   args: {
     matchId: v.id("matches"),
     initialState: v.string(), // JSON-serialized GameState from engine
+    startSeed: v.number(),
+    startingSeat: seatValidator,
     configAllowlist: v.optional(configAllowlistValidator),
   },
   returns: v.null(),
@@ -441,11 +455,16 @@ export const startMatch = mutation({
       parsedInitialState,
       args.configAllowlist,
     );
+    if (parsedInitialState.currentTurnPlayer !== args.startingSeat) {
+      throw new Error("initialState.currentTurnPlayer does not match startingSeat");
+    }
 
     // Transition match to active
     await ctx.db.patch(args.matchId, {
       status: "active",
       startedAt: Date.now(),
+      startSeed: args.startSeed,
+      startingSeat: args.startingSeat,
     });
 
     // Persist the initial snapshot at version 0
@@ -505,7 +524,7 @@ export const submitAction = mutation({
     matchId: v.id("matches"),
     command: v.string(), // JSON-serialized Command
     seat: seatValidator,
-    expectedVersion: v.optional(v.number()),
+    expectedVersion: v.number(),
     cardLookup: v.optional(v.string()), // JSON-serialized Record<string, CardDefinition>
   },
   returns: v.object({
@@ -547,9 +566,7 @@ export const submitAction = mutation({
       );
     }
 
-    if (args.expectedVersion !== undefined && latestSnapshot.version !== args.expectedVersion) {
-      throw new Error("submitAction version mismatch; state updated by another action.");
-    }
+    assertExpectedVersion(latestSnapshot.version, args.expectedVersion);
 
     // -----------------------------------------------------------------------
     // 3. Deserialize state

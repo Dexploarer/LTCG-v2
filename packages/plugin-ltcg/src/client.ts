@@ -141,20 +141,29 @@ export class LTCGClient {
     expectedVersion?: number,
   ): Promise<unknown> {
     const resolvedSeat = seat ?? this.seat;
+    let resolvedVersion = expectedVersion;
+    if (typeof resolvedVersion !== "number") {
+      const status = await this.getMatchStatus(matchId);
+      if (typeof status.latestVersion !== "number") {
+        throw new LTCGApiError(
+          "Missing latestVersion for action submission.",
+          422,
+          "/api/agent/game/action",
+        );
+      }
+      resolvedVersion = status.latestVersion;
+    }
+
     const payload: {
       matchId: string;
       command: GameCommand;
       seat?: MatchActive["seat"];
-      expectedVersion?: number;
-    } = { matchId, command };
+      expectedVersion: number;
+    } = { matchId, command, expectedVersion: resolvedVersion };
 
     if (resolvedSeat) {
       payload.seat = resolvedSeat;
     }
-    if (typeof expectedVersion === "number") {
-      payload.expectedVersion = expectedVersion;
-    }
-
     return this.post("/api/agent/game/action", payload);
   }
 

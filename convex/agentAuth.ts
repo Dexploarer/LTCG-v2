@@ -155,6 +155,8 @@ export const agentStartBattle = mutation({
     await match.startMatch(ctx, {
       matchId,
       initialState: JSON.stringify(initialState),
+      startSeed: seed,
+      startingSeat: firstPlayer,
     });
 
     // Link match to story context
@@ -220,6 +222,8 @@ export const agentStartDuel = mutation({
     await match.startMatch(ctx, {
       matchId,
       initialState: JSON.stringify(initialState),
+      startSeed: seed,
+      startingSeat: firstPlayer,
     });
 
     return { matchId };
@@ -313,6 +317,8 @@ export const agentJoinMatch = mutation({
     await match.startMatch(ctx, {
       matchId: args.matchId,
       initialState: JSON.stringify(initialState),
+      startSeed: seed,
+      startingSeat: firstPlayer,
       configAllowlist: lobby
         ? {
             pongEnabled: lobby.pongEnabled === true,

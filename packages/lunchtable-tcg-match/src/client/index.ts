@@ -74,6 +74,8 @@ export class LTCGMatch {
     args: {
       matchId: string;
       initialState: string;
+      startSeed: number;
+      startingSeat: "host" | "away";
       configAllowlist?: {
         pongEnabled?: boolean;
         redemptionEnabled?: boolean;
@@ -83,6 +85,8 @@ export class LTCGMatch {
     return await ctx.runMutation(this.component.mutations.startMatch, {
       matchId: args.matchId as any,
       initialState: args.initialState,
+      startSeed: args.startSeed,
+      startingSeat: args.startingSeat,
       configAllowlist: args.configAllowlist,
     });
   }
@@ -103,7 +107,7 @@ export class LTCGMatch {
       command: string;
       seat: "host" | "away";
       cardLookup?: string;
-      expectedVersion?: number;
+      expectedVersion: number;
     }
   ) {
     return await ctx.runMutation(this.component.mutations.submitAction, {

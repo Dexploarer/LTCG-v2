@@ -352,8 +352,8 @@ corsRoute({
 		if (!matchId || !command) {
 			return errorResponse("matchId and command are required.");
 		}
-		if (expectedVersion !== undefined && typeof expectedVersion !== "number") {
-			return errorResponse("expectedVersion must be a number.");
+		if (typeof expectedVersion !== "number") {
+			return errorResponse("expectedVersion is required and must be a number.");
 		}
 
 		let resolvedSeat: MatchSeat;
@@ -395,10 +395,7 @@ corsRoute({
 					command: JSON.stringify(normalizedCommand),
 					seat: resolvedSeat,
 					actorUserId: agent.userId,
-				expectedVersion:
-					typeof expectedVersion === "number"
-						? Number(expectedVersion)
-						: undefined,
+				expectedVersion: Number(expectedVersion),
 			});
 			return jsonResponse(result);
 		} catch (e: any) {
@@ -705,6 +702,9 @@ corsRoute({
 			const storyCtx = await ctx.runQuery(api.game.getStoryMatchContext, {
 				matchId,
 			});
+      const latestVersion = await ctx.runQuery(api.game.getLatestSnapshotVersion, {
+        matchId,
+      });
 
 			return jsonResponse({
 				matchId,
@@ -720,6 +720,7 @@ corsRoute({
 				stageNumber: storyCtx?.stageNumber ?? null,
 				outcome: storyCtx?.outcome ?? null,
 				starsEarned: storyCtx?.starsEarned ?? null,
+        latestVersion: typeof latestVersion === "number" ? latestVersion : null,
 			});
 		} catch (e: any) {
 			return errorResponse(e.message, 422);
@@ -1863,12 +1864,22 @@ async function handleTelegramCallbackQuery(
       const command = parseJsonObject(tokenPayload.commandJson);
       if (!command) throw new Error("Action payload is invalid.");
 
+      const expectedVersion =
+        typeof tokenPayload.expectedVersion === "number"
+          ? tokenPayload.expectedVersion
+          : await ctx.runQuery(internalApi.game.getLatestSnapshotVersion, {
+              matchId: tokenPayload.matchId,
+            });
+      if (typeof expectedVersion !== "number") {
+        throw new Error("Unable to determine expected version for action.");
+      }
+
       await ctx.runMutation(internalApi.game.submitActionWithClientForUser, {
         userId,
         matchId: tokenPayload.matchId,
         command: JSON.stringify(command),
         seat: tokenPayload.seat,
-        expectedVersion: tokenPayload.expectedVersion ?? undefined,
+        expectedVersion,
         client: "telegram",
       });
       await ctx.runMutation(internalApi.telegram.deleteTelegramActionToken, { token });

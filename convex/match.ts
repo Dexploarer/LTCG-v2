@@ -122,6 +122,8 @@ export const startMatch = mutation({
     return match.startMatch(ctx, {
       matchId: args.matchId,
       initialState: JSON.stringify(initialState),
+      startSeed: seed,
+      startingSeat: firstPlayer,
     });
   },
 });
@@ -131,7 +133,7 @@ export const submitAction = mutation({
     matchId: v.string(),
     command: v.string(),
     seat: seatValidator,
-    expectedVersion: v.optional(v.number()),
+    expectedVersion: v.number(),
     cardLookup: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
