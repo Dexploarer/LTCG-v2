@@ -171,13 +171,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     Cliques
                   </Link>
                   <Link
-                    to="/studio"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Studio
-                  </Link>
-                  <Link
                     to="/agent-dev"
                     activeProps={{ className: 'font-semibold text-stone-100' }}
                     className="text-sm text-stone-400"

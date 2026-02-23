@@ -25,7 +25,6 @@ const ROUTE_LABELS: Record<string, string> = {
   token: "$LUNCH",
   "agent-dev": "Agent Dev",
   duel: "Duel",
-  studio: "Studio",
 };
 
 const ROUTE_ACCENT: Record<string, string> = {

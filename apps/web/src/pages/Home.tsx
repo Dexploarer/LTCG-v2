@@ -12,10 +12,9 @@ import { SpeechBubble } from "@/components/ui/SpeechBubble";
 import { SpeedLines } from "@/components/ui/SpeedLines";
 import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
 import { ComicImpactText } from "@/components/ui/ComicImpactText";
-import { StickerBadge } from "@/components/ui/StickerBadge";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
-  STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG, TTG_BG, PVP_BG,
+  STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG, PVP_BG,
   TAPE, CIGGARETTE_TRAY,
 } from "@/lib/blobUrls";
 
@@ -274,19 +273,6 @@ export function Home() {
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
         </Panel>
 
-        <Panel
-          title="LunchTable TTG"
-          subtitle="Create worlds, agents, maps, and campaigns"
-          bgImage={TTG_BG}
-          bgContain
-          onClick={() => goTo("/studio?tab=overview", false)}
-          impactWord="CREATE!"
-        >
-          <div className="text-4xl mb-3">&#9881;</div>
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
-            <StickerBadge label="COMING SOON" variant="stamp" pulse />
-          </div>
-        </Panel>
       </motion.div>
 
       {isEmbedded && (

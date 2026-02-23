@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchRouteImport } from './routes/watch'
 import { Route as TokenRouteImport } from './routes/token'
 import { Route as TermsRouteImport } from './routes/terms'
-import { Route as StudioRouteImport } from './routes/studio'
 import { Route as StreamOverlayRouteImport } from './routes/stream-overlay'
 import { Route as StoryRouteImport } from './routes/story'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -48,11 +47,6 @@ const TokenRoute = TokenRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StudioRoute = StudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StreamOverlayRoute = StreamOverlayRouteImport.update({
@@ -179,7 +173,6 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
   '/stream-overlay': typeof StreamOverlayRoute
-  '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
   '/watch': typeof WatchRoute
@@ -206,7 +199,6 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
   '/stream-overlay': typeof StreamOverlayRoute
-  '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
   '/watch': typeof WatchRoute
@@ -234,7 +226,6 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
   '/stream-overlay': typeof StreamOverlayRoute
-  '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
   '/watch': typeof WatchRoute
@@ -263,7 +254,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/story'
     | '/stream-overlay'
-    | '/studio'
     | '/terms'
     | '/token'
     | '/watch'
@@ -290,7 +280,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/story'
     | '/stream-overlay'
-    | '/studio'
     | '/terms'
     | '/token'
     | '/watch'
@@ -317,7 +306,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/story'
     | '/stream-overlay'
-    | '/studio'
     | '/terms'
     | '/token'
     | '/watch'
@@ -345,7 +333,6 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   StoryRoute: typeof StoryRouteWithChildren
   StreamOverlayRoute: typeof StreamOverlayRoute
-  StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
   TokenRoute: typeof TokenRoute
   WatchRoute: typeof WatchRoute
@@ -373,13 +360,6 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/studio': {
-      id: '/studio'
-      path: '/studio'
-      fullPath: '/studio'
-      preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/stream-overlay': {
@@ -580,7 +560,6 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   StoryRoute: StoryRouteWithChildren,
   StreamOverlayRoute: StreamOverlayRoute,
-  StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
   TokenRoute: TokenRoute,
   WatchRoute: WatchRoute,
