@@ -30,3 +30,6 @@ export const buildDeckFingerprint = (
 	const serialized = deck.map((value) => String(value ?? "")).join(",");
 	return `${deck.length}:${serialized}`;
 };
+
+// Backwards-compatible alias used by newer integration tests.
+export const buildDeckSeedPart = buildDeckFingerprint;
