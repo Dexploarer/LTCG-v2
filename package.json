@@ -11,6 +11,7 @@
   "scripts": {
     "setup:env": "bash scripts/setup-dev-env.sh",
     "setup:agent-auth": "bash scripts/setup-dev-agent-auth.sh",
+    "setup:worktree:auto": "bash scripts/run-worktree-automation.sh",
     "build": "cd apps/web-tanstack && bun run build && cd ../.. && bun run check:bundle-metrics",
     "build:web:tanstack": "cd apps/web-tanstack && bun run build",
     "build:web:legacy": "cd apps/web && bun run build",
