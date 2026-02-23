@@ -29,6 +29,9 @@ type EventBatch = {
 type CatalogCard = {
   _id: string
   name: string
+  cardType: string
+  attack?: number
+  defense?: number
 }
 
 type BoardCard = {
@@ -282,14 +285,29 @@ function resolveCardLabel(args: {
   instanceDefinitions: Record<string, string>
   cardNamesById: Map<string, string>
 }): string {
-  const resolvedDefinition =
-    args.definitionId ?? args.instanceDefinitions[args.cardId] ?? args.cardId
+  const resolvedDefinition = resolveDefinitionId({
+    cardId: args.cardId,
+    definitionId: args.definitionId,
+    instanceDefinitions: args.instanceDefinitions,
+  })
 
   if (resolvedDefinition === 'hidden') {
     return 'Hidden card'
   }
 
+  if (!resolvedDefinition) {
+    return args.cardId
+  }
+
   return args.cardNamesById.get(resolvedDefinition) ?? resolvedDefinition
+}
+
+function resolveDefinitionId(args: {
+  cardId: string
+  definitionId: string | null
+  instanceDefinitions: Record<string, string>
+}): string | null {
+  return args.definitionId ?? args.instanceDefinitions[args.cardId] ?? null
 }
 
 export const Route = createFileRoute('/play/$matchId')({
@@ -387,6 +405,16 @@ function PlayRoute() {
     return map
   }, [catalogCards.data])
 
+  const cardTypesById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const card of (catalogCards.data ?? []) as CatalogCard[]) {
+      if (typeof card._id === 'string' && typeof card.cardType === 'string') {
+        map.set(card._id, card.cardType)
+      }
+    }
+    return map
+  }, [catalogCards.data])
+
   const chainPrompt = useMemo(
     () => parseChainPromptData((openPrompt.data ?? null) as OpenPrompt | null),
     [openPrompt.data],
@@ -396,6 +424,112 @@ function PlayRoute() {
     () => ((recentEvents.data as EventBatch[] | undefined) ?? []).slice(-30).reverse(),
     [recentEvents.data],
   )
+
+  const handActionRows = useMemo(() => {
+    if (!parsedView) return []
+
+    return parsedView.hand.map((cardId) => {
+      const definitionId = resolveDefinitionId({
+        cardId,
+        definitionId: null,
+        instanceDefinitions: parsedView.instanceDefinitions,
+      })
+      return {
+        cardId,
+        definitionId,
+        name: resolveCardLabel({
+          cardId,
+          definitionId,
+          instanceDefinitions: parsedView.instanceDefinitions,
+          cardNamesById,
+        }),
+        cardType: definitionId ? cardTypesById.get(definitionId) ?? null : null,
+      }
+    })
+  }, [cardNamesById, cardTypesById, parsedView])
+
+  const boardActionRows = useMemo(() => {
+    if (!parsedView) return []
+
+    return parsedView.board
+      .map((card, index) => {
+        const cardId = card.cardId
+        if (!cardId) return null
+        const definitionId = resolveDefinitionId({
+          cardId,
+          definitionId: card.definitionId ?? null,
+          instanceDefinitions: parsedView.instanceDefinitions,
+        })
+        return {
+          key: `${cardId}-${index}`,
+          cardId,
+          definitionId,
+          position: card.position ?? null,
+          name: resolveCardLabel({
+            cardId,
+            definitionId,
+            instanceDefinitions: parsedView.instanceDefinitions,
+            cardNamesById,
+          }),
+        }
+      })
+      .filter((row): row is { key: string; cardId: string; definitionId: string | null; position: string | null; name: string } => row != null)
+  }, [cardNamesById, parsedView])
+
+  const opponentTargetRows = useMemo(() => {
+    if (!parsedView) return []
+
+    return parsedView.opponentBoard
+      .map((card, index) => {
+        const cardId = card.cardId
+        if (!cardId) return null
+        const definitionId = resolveDefinitionId({
+          cardId,
+          definitionId: card.definitionId ?? null,
+          instanceDefinitions: parsedView.instanceDefinitions,
+        })
+        return {
+          key: `${cardId}-${index}`,
+          cardId,
+          name: resolveCardLabel({
+            cardId,
+            definitionId,
+            instanceDefinitions: parsedView.instanceDefinitions,
+            cardNamesById,
+          }),
+        }
+      })
+      .filter((row): row is { key: string; cardId: string; name: string } => row != null)
+  }, [cardNamesById, parsedView])
+
+  const spellTrapActionRows = useMemo(() => {
+    if (!parsedView) return []
+
+    return parsedView.spellTrapZone
+      .map((card, index) => {
+        const cardId = card.cardId
+        if (!cardId) return null
+        const definitionId = resolveDefinitionId({
+          cardId,
+          definitionId: card.definitionId ?? null,
+          instanceDefinitions: parsedView.instanceDefinitions,
+        })
+        return {
+          key: `${cardId}-${index}`,
+          cardId,
+          definitionId,
+          faceDown: card.faceDown === true,
+          name: resolveCardLabel({
+            cardId,
+            definitionId,
+            instanceDefinitions: parsedView.instanceDefinitions,
+            cardNamesById,
+          }),
+          cardType: definitionId ? cardTypesById.get(definitionId) ?? null : null,
+        }
+      })
+      .filter((row): row is { key: string; cardId: string; definitionId: string | null; faceDown: boolean; name: string; cardType: string | null } => row != null)
+  }, [cardNamesById, cardTypesById, parsedView])
 
   const submitCommand = async (command: Record<string, unknown>, successMessage: string) => {
     if (!seat) {
@@ -645,6 +779,234 @@ function PlayRoute() {
                     }),
                   )}
                 />
+              </div>
+            )}
+          </article>
+
+          <article className="rounded border border-stone-700/40 p-3 text-sm">
+            <h2 className="text-xs uppercase tracking-wide text-stone-400">Action builders</h2>
+            {!parsedView ? (
+              <p className="mt-2 text-stone-400">Loading action context…</p>
+            ) : (
+              <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                <div className="rounded border border-stone-700/40 p-2">
+                  <p className="text-[11px] uppercase tracking-wide text-stone-400">From hand</p>
+                  {handActionRows.length === 0 ? (
+                    <p className="mt-2 text-xs text-stone-500">No cards in hand.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {handActionRows.map((row) => (
+                        <li key={row.cardId} className="rounded border border-stone-700/40 p-2">
+                          <p className="text-xs text-stone-200">{row.name}</p>
+                          <p className="text-[11px] text-stone-500">
+                            {row.cardType ?? 'unknown type'}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {row.cardType === 'stereotype' ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    void submitCommand(
+                                      { type: 'SUMMON', cardId: row.cardId, position: 'attack' },
+                                      `SUMMON attack submitted for ${row.name}.`,
+                                    )
+                                  }}
+                                  disabled={actionBusy}
+                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                                >
+                                  Summon ATK
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    void submitCommand(
+                                      { type: 'SUMMON', cardId: row.cardId, position: 'defense' },
+                                      `SUMMON defense submitted for ${row.name}.`,
+                                    )
+                                  }}
+                                  disabled={actionBusy}
+                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                                >
+                                  Summon DEF
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    void submitCommand(
+                                      { type: 'SET_MONSTER', cardId: row.cardId },
+                                      `SET_MONSTER submitted for ${row.name}.`,
+                                    )
+                                  }}
+                                  disabled={actionBusy}
+                                  className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                                >
+                                  Set Monster
+                                </button>
+                              </>
+                            ) : null}
+
+                            {(row.cardType === 'spell' || row.cardType === 'trap') ? (
+                              <button
+                                onClick={() => {
+                                  void submitCommand(
+                                    { type: 'SET_SPELL_TRAP', cardId: row.cardId },
+                                    `SET_SPELL_TRAP submitted for ${row.name}.`,
+                                  )
+                                }}
+                                disabled={actionBusy}
+                                className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                              >
+                                Set Spell/Trap
+                              </button>
+                            ) : null}
+
+                            {row.cardType === 'spell' ? (
+                              <button
+                                onClick={() => {
+                                  void submitCommand(
+                                    { type: 'ACTIVATE_SPELL', cardId: row.cardId },
+                                    `ACTIVATE_SPELL submitted for ${row.name}.`,
+                                  )
+                                }}
+                                disabled={actionBusy}
+                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
+                              >
+                                Activate Spell
+                              </button>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded border border-stone-700/40 p-2">
+                  <p className="text-[11px] uppercase tracking-wide text-stone-400">Board controls</p>
+                  {boardActionRows.length === 0 ? (
+                    <p className="mt-2 text-xs text-stone-500">No monsters on board.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {boardActionRows.map((row) => (
+                        <li key={row.key} className="rounded border border-stone-700/40 p-2">
+                          <p className="text-xs text-stone-200">{row.name}</p>
+                          <p className="text-[11px] text-stone-500">
+                            {row.position ? `Position: ${row.position}` : 'Position unknown'}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <button
+                              onClick={() => {
+                                void submitCommand(
+                                  { type: 'CHANGE_POSITION', cardId: row.cardId },
+                                  `CHANGE_POSITION submitted for ${row.name}.`,
+                                )
+                              }}
+                              disabled={actionBusy}
+                              className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                            >
+                              Change Position
+                            </button>
+                            <button
+                              onClick={() => {
+                                void submitCommand(
+                                  { type: 'FLIP_SUMMON', cardId: row.cardId },
+                                  `FLIP_SUMMON submitted for ${row.name}.`,
+                                )
+                              }}
+                              disabled={actionBusy}
+                              className="rounded border border-stone-600 px-2 py-1 text-[11px] disabled:opacity-50"
+                            >
+                              Flip Summon
+                            </button>
+                            <button
+                              onClick={() => {
+                                void submitCommand(
+                                  { type: 'DECLARE_ATTACK', attackerId: row.cardId },
+                                  `Direct attack submitted for ${row.name}.`,
+                                )
+                              }}
+                              disabled={actionBusy}
+                              className="rounded border border-amber-700/60 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-50"
+                            >
+                              Direct Attack
+                            </button>
+                          </div>
+                          {opponentTargetRows.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {opponentTargetRows.map((target) => (
+                                <button
+                                  key={`${row.cardId}-target-${target.key}`}
+                                  onClick={() => {
+                                    void submitCommand(
+                                      {
+                                        type: 'DECLARE_ATTACK',
+                                        attackerId: row.cardId,
+                                        targetId: target.cardId,
+                                      },
+                                      `Attack submitted: ${row.name} -> ${target.name}.`,
+                                    )
+                                  }}
+                                  disabled={actionBusy}
+                                  className="rounded border border-stone-700/60 px-2 py-1 text-[11px] text-stone-200 disabled:opacity-50"
+                                >
+                                  Attack {target.name}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded border border-stone-700/40 p-2 lg:col-span-2">
+                  <p className="text-[11px] uppercase tracking-wide text-stone-400">
+                    Spell/Trap zone controls
+                  </p>
+                  {spellTrapActionRows.length === 0 ? (
+                    <p className="mt-2 text-xs text-stone-500">No spell/trap cards in zone.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {spellTrapActionRows.map((row) => (
+                        <li key={row.key} className="rounded border border-stone-700/40 p-2">
+                          <p className="text-xs text-stone-200">{row.name}</p>
+                          <p className="text-[11px] text-stone-500">
+                            {row.cardType ?? 'unknown type'} · {row.faceDown ? 'set' : 'face up'}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {row.cardType === 'spell' ? (
+                              <button
+                                onClick={() => {
+                                  void submitCommand(
+                                    { type: 'ACTIVATE_SPELL', cardId: row.cardId },
+                                    `ACTIVATE_SPELL submitted for ${row.name}.`,
+                                  )
+                                }}
+                                disabled={actionBusy}
+                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
+                              >
+                                Activate Spell
+                              </button>
+                            ) : null}
+                            {row.cardType === 'trap' ? (
+                              <button
+                                onClick={() => {
+                                  void submitCommand(
+                                    { type: 'ACTIVATE_TRAP', cardId: row.cardId },
+                                    `ACTIVATE_TRAP submitted for ${row.name}.`,
+                                  )
+                                }}
+                                disabled={actionBusy}
+                                className="rounded border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 disabled:opacity-50"
+                              >
+                                Activate Trap
+                              </button>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
           </article>
