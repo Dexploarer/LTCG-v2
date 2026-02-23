@@ -44,8 +44,9 @@ bun run --cwd apps/web-tanstack type-check
 - `/token` now includes the migrated Solana token info entry point.
 - `/watch` now fetches and displays live retake.tv stream status.
 - `/collection`, `/decks`, `/decks/$deckId`, `/onboarding`, `/profile`, `/settings` now exist as migrated route shells.
-- `/pvp` now supports ranked queue status and join/leave controls.
+- `/pvp` now supports PvP lobby create/join/cancel flows and join-by-code.
 - `/duel` route shell is in place for board migration.
 - `/story` + `/story/$chapterId` now support chapter/stage browsing and story battle start actions.
 - `/play/$matchId` now loads match meta/snapshot/story context (board rendering still pending).
 - `/cliques`, `/studio`, `/agent-dev` route shells are now migrated.
+- `/stream-overlay` now resolves an agent/match and renders spectator+chat diagnostics for capture migration.

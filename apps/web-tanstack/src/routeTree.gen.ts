@@ -13,6 +13,7 @@ import { Route as WatchRouteImport } from './routes/watch'
 import { Route as TokenRouteImport } from './routes/token'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as StreamOverlayRouteImport } from './routes/stream-overlay'
 import { Route as StoryRouteImport } from './routes/story'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PvpRouteImport } from './routes/pvp'
@@ -51,6 +52,11 @@ const TermsRoute = TermsRouteImport.update({
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StreamOverlayRoute = StreamOverlayRouteImport.update({
+  id: '/stream-overlay',
+  path: '/stream-overlay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StoryRoute = StoryRouteImport.update({
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
+  '/stream-overlay': typeof StreamOverlayRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
+  '/stream-overlay': typeof StreamOverlayRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/pvp': typeof PvpRoute
   '/settings': typeof SettingsRoute
   '/story': typeof StoryRouteWithChildren
+  '/stream-overlay': typeof StreamOverlayRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/token': typeof TokenRoute
@@ -243,6 +252,7 @@ export interface FileRouteTypes {
     | '/pvp'
     | '/settings'
     | '/story'
+    | '/stream-overlay'
     | '/studio'
     | '/terms'
     | '/token'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/pvp'
     | '/settings'
     | '/story'
+    | '/stream-overlay'
     | '/studio'
     | '/terms'
     | '/token'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/pvp'
     | '/settings'
     | '/story'
+    | '/stream-overlay'
     | '/studio'
     | '/terms'
     | '/token'
@@ -319,6 +331,7 @@ export interface RootRouteChildren {
   PvpRoute: typeof PvpRoute
   SettingsRoute: typeof SettingsRoute
   StoryRoute: typeof StoryRouteWithChildren
+  StreamOverlayRoute: typeof StreamOverlayRoute
   StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
   TokenRoute: typeof TokenRoute
@@ -354,6 +367,13 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stream-overlay': {
+      id: '/stream-overlay'
+      path: '/stream-overlay'
+      fullPath: '/stream-overlay'
+      preLoaderRoute: typeof StreamOverlayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/story': {
@@ -538,6 +558,7 @@ const rootRouteChildren: RootRouteChildren = {
   PvpRoute: PvpRoute,
   SettingsRoute: SettingsRoute,
   StoryRoute: StoryRouteWithChildren,
+  StreamOverlayRoute: StreamOverlayRoute,
   StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
   TokenRoute: TokenRoute,

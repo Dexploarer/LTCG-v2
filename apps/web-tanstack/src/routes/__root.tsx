@@ -157,6 +157,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     Watch
                   </Link>
                   <Link
+                    to="/stream-overlay"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    Overlay
+                  </Link>
+                  <Link
                     to="/cliques"
                     activeProps={{ className: 'font-semibold text-stone-100' }}
                     className="text-sm text-stone-400"
