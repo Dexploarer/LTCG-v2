@@ -86,6 +86,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     About
                   </Link>
                   <Link
+                    to="/watch"
+                    activeProps={{ className: 'font-semibold text-stone-100' }}
+                    className="text-sm text-stone-400"
+                  >
+                    Watch
+                  </Link>
+                  <Link
                     to="/token"
                     activeProps={{ className: 'font-semibold text-stone-100' }}
                     className="text-sm text-stone-400"
