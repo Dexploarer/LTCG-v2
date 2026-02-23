@@ -13,9 +13,12 @@
     "target": "ES2022",
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
+    "customConditions": ["@convex-dev/component-source"],
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "@/*": ["./src/legacy/*"],
+      "@convex-generated-api": ["../../convex/_generated/api"]
     },
     "noEmit": true
   }

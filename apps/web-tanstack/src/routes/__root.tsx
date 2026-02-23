@@ -1,49 +1,94 @@
 /// <reference types="vite/client" />
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   HeadContent,
-  Link,
   Scripts,
   createRootRouteWithContext,
-} from '@tanstack/react-router'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { ConvexProvider } from 'convex/react'
-import * as React from 'react'
-import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary'
-import { NotFound } from '~/components/NotFound'
-import appCss from '~/styles/app.css?url'
-import type { RouterContext } from '~/routerContext'
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import * as Sentry from "@sentry/react";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
+import { PostHogProvider } from "posthog-js/react";
+import * as React from "react";
+import { Toaster } from "sonner";
+import { DefaultCatchBoundary } from "~/components/DefaultCatchBoundary";
+import { NotFound } from "~/components/NotFound";
+import type { RouterContext } from "~/routerContext";
+import appCss from "~/styles/app.css?url";
+import legacyCss from "~/styles/legacy.css?url";
+import { AudioContextGate, AudioControlsDock, AudioProvider, useAudio } from "@/components/audio/AudioProvider";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { PrivyAuthProvider } from "@/components/auth/PrivyAuthProvider";
+import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
+import { Breadcrumb, BreadcrumbSpacer } from "@/components/layout/Breadcrumb";
+import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
+import { usePrivyAuthForConvex } from "@/hooks/auth/usePrivyAuthForConvex";
+import { useIframeMode } from "@/hooks/useIframeMode";
+import { getAudioContextFromPath } from "@/lib/audio/routeContext";
+import { enableDiscordUrlMappingsForActivity } from "@/lib/discordUrlMappings";
+import { sendChatToHost } from "@/lib/iframe";
+import posthog from "@/lib/posthog";
+
+const convexUrl = ((import.meta.env.VITE_CONVEX_URL as string | undefined) ?? "").trim();
+const convexClient = new ConvexReactClient(convexUrl || "https://example.invalid");
+const convexSiteUrl = convexUrl.replace(".convex.cloud", ".convex.site").replace(/\/$/, "");
+
+let sentryInitialized = false;
+
+function ensureSentryInit() {
+  if (sentryInitialized) return;
+  sentryInitialized = true;
+
+  const dsn = ((import.meta.env.VITE_SENTRY_DSN as string | undefined) ?? "").trim();
+  if (!dsn) return;
+
+  Sentry.init({
+    dsn,
+    integrations: [
+      Sentry.replayIntegration(),
+      Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+    ],
+    enableLogs: true,
+    tracesSampleRate: 1.0,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+  });
+}
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "LunchTable: School of Hard Knocks" },
       {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      { title: 'LunchTable TCG' },
-      {
-        name: 'description',
-        content:
-          'LunchTable TCG web client powered by TanStack Start and Convex.',
+        name: "description",
+        content: "LunchTable TCG web client powered by TanStack Start and Convex.",
       },
     ],
     links: [
-      { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: '/favicon.ico' },
+      { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: legacyCss },
+      { rel: "icon", href: "/favicon.ico" },
     ],
   }),
   errorComponent: DefaultCatchBoundary,
   notFoundComponent: () => <NotFound />,
   shellComponent: RootDocument,
-})
+});
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { queryClient, convexQueryClient, convexConfigured } =
-    Route.useRouteContext()
+  ensureSentryInit();
+
+  const { queryClient } = Route.useRouteContext();
+
+  React.useEffect(() => {
+    enableDiscordUrlMappingsForActivity();
+  }, []);
 
   return (
     <html>
@@ -51,163 +96,133 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <QueryClientProvider client={queryClient}>
-          <ConvexProvider client={convexQueryClient.convexClient}>
-            <div className="p-4 flex flex-col gap-4">
-              <header className="flex items-center justify-between border-b border-stone-700/30 pb-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Link
-                    to="/"
-                    activeProps={{ className: 'font-bold' }}
-                    activeOptions={{ exact: true }}
-                    className="text-lg"
-                  >
-                    LunchTable TCG
-                  </Link>
-                  <Link
-                    to="/cards"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Cards
-                  </Link>
-                  <Link
-                    to="/collection"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Collection
-                  </Link>
-                  <Link
-                    to="/decks"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Decks
-                  </Link>
-                  <Link
-                    to="/pvp"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    PvP
-                  </Link>
-                  <Link
-                    to="/duel"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Duel
-                  </Link>
-                  <Link
-                    to="/play/$matchId"
-                    params={{ matchId: 'demo-match' }}
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Play
-                  </Link>
-                  <Link
-                    to="/story"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Story
-                  </Link>
-                  <Link
-                    to="/leaderboard"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Leaderboard
-                  </Link>
-                  <Link
-                    to="/onboarding"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Onboarding
-                  </Link>
-                  <Link
-                    to="/profile"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Profile
-                  </Link>
-                  <Link
-                    to="/settings"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Settings
-                  </Link>
-                  <Link
-                    to="/about"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    About
-                  </Link>
-                  <Link
-                    to="/watch"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Watch
-                  </Link>
-                  <Link
-                    to="/stream-overlay"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Overlay
-                  </Link>
-                  <Link
-                    to="/cliques"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Cliques
-                  </Link>
-                  <Link
-                    to="/agent-dev"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Agent
-                  </Link>
-                  <Link
-                    to="/token"
-                    activeProps={{ className: 'font-semibold text-stone-100' }}
-                    className="text-sm text-stone-400"
-                  >
-                    Token
-                  </Link>
-                </div>
-                <span
-                  className={`text-xs uppercase tracking-wide ${
-                    convexConfigured ? 'text-emerald-400' : 'text-amber-400'
-                  }`}
-                >
-                  {convexConfigured ? 'Convex connected' : 'Convex not configured'}
-                </span>
-              </header>
-              {children}
-              <footer className="flex items-center gap-4 border-t border-stone-700/30 pt-3 text-xs text-stone-400">
-                <Link to="/privacy" activeProps={{ className: 'text-stone-200' }}>
-                  Privacy
-                </Link>
-                <Link to="/terms" activeProps={{ className: 'text-stone-200' }}>
-                  Terms
-                </Link>
-              </footer>
-            </div>
-            <TanStackRouterDevtools position="bottom-right" />
-            <Scripts />
-          </ConvexProvider>
-        </QueryClientProvider>
+        <Sentry.ErrorBoundary fallback={({ error, resetError }) => (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-[#fdfdfb] px-6">
+            <h1
+              className="text-4xl font-black uppercase tracking-tighter text-[#121212] mb-4"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Something Broke
+            </h1>
+            <p
+              className="text-[#121212]/60 text-sm mb-6 max-w-md text-center"
+              style={{ fontFamily: "Special Elite, cursive" }}
+            >
+              {error instanceof Error ? error.message : "The cafeteria just exploded. Our janitors have been notified."}
+            </p>
+            <button onClick={resetError} className="tcg-button px-6 py-3">
+              Try Again
+            </button>
+          </div>
+        )}>
+          <QueryClientProvider client={queryClient}>
+            <PostHogProvider client={posthog}>
+              <PrivyAuthProvider>
+                <ConvexProviderWithAuth client={convexClient} useAuth={usePrivyAuthForConvex}>
+                  <AudioProvider>
+                    <LegacyRuntime>{children}</LegacyRuntime>
+                  </AudioProvider>
+                </ConvexProviderWithAuth>
+              </PrivyAuthProvider>
+            </PostHogProvider>
+          </QueryClientProvider>
+        </Sentry.ErrorBoundary>
+        <Analytics />
+        <SpeedInsights />
+        <TanStackRouterDevtools position="bottom-right" />
+        <Scripts />
       </body>
     </html>
-  )
+  );
+}
+
+function LegacyRuntime({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { setContextKey } = useAudio();
+
+  const {
+    isEmbedded,
+    authToken,
+    agentId,
+    isApiKey,
+    startMatchCommand,
+    clearStartMatchCommand,
+    chatState,
+    chatEvent,
+  } = useIframeMode();
+
+  useTelegramAuth();
+
+  React.useEffect(() => {
+    setContextKey(getAudioContextFromPath(location.pathname));
+  }, [location.pathname, setContextKey]);
+
+  React.useEffect(() => {
+    if (!startMatchCommand) return;
+
+    if (startMatchCommand.matchId) {
+      navigate({ to: "/play/$matchId", params: { matchId: startMatchCommand.matchId } as never });
+      clearStartMatchCommand();
+      return;
+    }
+
+    if (startMatchCommand.mode === "pvp") {
+      navigate({ to: "/pvp" });
+      clearStartMatchCommand();
+      return;
+    }
+
+    if (startMatchCommand.chapterId) {
+      navigate({ to: "/story/$chapterId", params: { chapterId: startMatchCommand.chapterId } as never });
+      clearStartMatchCommand();
+      return;
+    }
+
+    navigate({ to: "/story" });
+    clearStartMatchCommand();
+  }, [clearStartMatchCommand, navigate, startMatchCommand]);
+
+  if (isApiKey && authToken) {
+    return (
+      <>
+        <AudioContextGate context="play" />
+        <AgentSpectatorView
+          apiKey={authToken}
+          apiUrl={convexSiteUrl}
+          agentId={agentId}
+          hostChatState={chatState}
+          hostChatEvent={chatEvent}
+          onSendChat={(text, matchId) =>
+            sendChatToHost({
+              text,
+              matchId,
+              agentId: agentId ?? undefined,
+            })
+          }
+        />
+        <AudioControlsDock />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {!isEmbedded && <Breadcrumb />}
+      {!isEmbedded && <BreadcrumbSpacer />}
+      <React.Suspense fallback={null}>{children}</React.Suspense>
+      <RouteAwareAudioDock pathname={location.pathname} />
+      <Toaster richColors position="top-right" />
+    </>
+  );
+}
+
+function RouteAwareAudioDock({ pathname }: { pathname: string }) {
+  if (pathname.startsWith("/play/")) return null;
+  if (pathname.startsWith("/stream-overlay")) return null;
+  return <AudioControlsDock />;
+}
+
+export function Protected({ children }: { children: React.ReactNode }) {
+  return <AuthGuard>{children}</AuthGuard>;
 }

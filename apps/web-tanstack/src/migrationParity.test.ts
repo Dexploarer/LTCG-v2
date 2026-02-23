@@ -5,13 +5,14 @@ import { describe, expect, it } from "vitest";
 const repoRoot = process.cwd();
 const routesDir = path.join(repoRoot, "apps/web-tanstack/src/routes");
 const routeTreeFile = path.join(repoRoot, "apps/web-tanstack/src/routeTree.gen.ts");
+const rootRouteFile = path.join(routesDir, "__root.tsx");
 
 function readRoute(name: string) {
   return readFileSync(path.join(routesDir, name), "utf8");
 }
 
 describe("tanstack migration parity", () => {
-  it("keeps legacy route surface plus new cards routes", () => {
+  it("keeps required route surface", () => {
     const expectedRouteFiles = [
       "__root.tsx",
       "index.tsx",
@@ -45,7 +46,7 @@ describe("tanstack migration parity", () => {
     }
   });
 
-  it("includes all required app paths in generated route tree", () => {
+  it("includes required app paths in generated route tree", () => {
     const source = readFileSync(routeTreeFile, "utf8");
     const expectedPaths = [
       "/",
@@ -79,95 +80,74 @@ describe("tanstack migration parity", () => {
     }
   });
 
-  it("preserves required gameplay/data integrations across migrated routes", () => {
-    const requiredByRoute: Record<string, string[]> = {
-      "agent-dev.tsx": [
-        "api.game.getStarterDecks",
-        "api.game.selectStarterDeck",
-      ],
-      "cliques.tsx": [
-        "api.cliques.ensureMyCliqueAssignment",
-        "api.cliques.getCliqueDashboard",
-      ],
-      "collection.tsx": [
-        "api.game.getCatalogCards",
-        "api.game.getUserCardCounts",
-      ],
-      "decks.tsx": [
-        "api.game.createDeck",
-        "api.game.getUserDecks",
-        "api.game.setActiveDeck",
-      ],
-      "decks.$deckId.tsx": [
-        "api.game.getDeckWithCards",
-        "api.game.getCatalogCards",
-        "api.game.saveDeck",
-      ],
-      "duel.tsx": [
-        "api.game.createPvpLobby",
-        "api.game.joinPvpLobby",
-      ],
-      "leaderboard.tsx": [
-        "api.ranked.getLeaderboard",
-        "api.ranked.getRankDistribution",
-        "api.ranked.getPlayerRank",
-      ],
-      "onboarding.tsx": [
-        "api.auth.setUsername",
-        "api.auth.setAvatarPath",
-        "api.game.getStarterDecks",
-        "api.game.selectStarterDeck",
-      ],
-      "play.$matchId.tsx": [
-        "api.game.getMatchMeta",
-        "api.game.getPlayerView",
-        "api.game.getLegalMoves",
-        "api.game.getRecentEvents",
-        "api.game.getOpenPrompt",
-        "api.game.submitAction",
-      ],
-      "profile.tsx": [
-        "api.auth.currentUser",
-        "api.game.getUserDecks",
-      ],
-      "pvp.tsx": [
-        "api.game.listOpenPvpLobbies",
-        "api.game.getMyPvpLobby",
-        "api.game.createPvpLobby",
-        "api.game.joinPvpLobby",
-        "api.game.joinPvpLobbyByCode",
-        "api.game.cancelPvpLobby",
-      ],
-      "settings.tsx": [
-        "api.auth.currentUser",
-        "api.auth.setUsername",
-        "api.auth.setAvatarPath",
-      ],
-      "story.$chapterId.tsx": [
-        "api.game.getChapterStages",
-        "api.game.getMyOpenStoryLobby",
-        "api.game.startStoryBattle",
-        "api.game.startStoryBattleForAgent",
-      ],
-      "stream-overlay.tsx": [
-        "api.game.getPublicActiveMatchByHost",
-        "api.game.getSpectatorView",
-        "api.game.getSpectatorEventsPaginated",
-        "api.streamChat.getRecentStreamMessages",
-      ],
-      "watch.tsx": ["getLiveStreams"],
-    };
+  it("wires legacy public and protected page wrappers", () => {
+    const publicRoutes: Array<[string, string]> = [
+      ["index.tsx", "@/pages/Home"],
+      ["about.tsx", "@/pages/About"],
+      ["agent-dev.tsx", "@/pages/AgentDev"],
+      ["leaderboard.tsx", "@/pages/Leaderboard"],
+      ["watch.tsx", "@/pages/Watch"],
+      ["stream-overlay.tsx", "@/pages/StreamOverlay"],
+      ["privacy.tsx", "@/pages/Privacy"],
+      ["terms.tsx", "@/pages/Terms"],
+      ["token.tsx", "@/pages/Token"],
+      ["discord-callback.tsx", "@/pages/DiscordCallback"],
+    ];
 
-    for (const [routeFile, signatures] of Object.entries(requiredByRoute)) {
+    const protectedRoutes: Array<[string, string]> = [
+      ["onboarding.tsx", "@/pages/Onboarding"],
+      ["collection.tsx", "@/pages/Collection"],
+      ["decks.tsx", "@/pages/Decks"],
+      ["decks.$deckId.tsx", "@/pages/DeckBuilder"],
+      ["story.tsx", "@/pages/Story"],
+      ["story.$chapterId.tsx", "@/pages/StoryChapter"],
+      ["pvp.tsx", "@/pages/Pvp"],
+      ["duel.tsx", "@/pages/Duel"],
+      ["play.$matchId.tsx", "@/pages/Play"],
+      ["cliques.tsx", "@/pages/Cliques"],
+      ["profile.tsx", "@/pages/Profile"],
+      ["settings.tsx", "@/pages/Settings"],
+    ];
+
+    for (const [routeFile, pageImport] of publicRoutes) {
       const source = readRoute(routeFile);
-      for (const signature of signatures) {
-        expect(source, `${routeFile} missing ${signature}`).toContain(signature);
-      }
+      expect(source).toContain(pageImport);
+      expect(source).not.toContain("<Protected>");
+    }
+
+    for (const [routeFile, pageImport] of protectedRoutes) {
+      const source = readRoute(routeFile);
+      expect(source).toContain(pageImport);
+      expect(source).toContain("<Protected>");
     }
   });
 
-  it("does not ship obvious placeholder copy in migrated routes", () => {
+  it("keeps runtime bootstrap integrations in root shell", () => {
+    const source = readFileSync(rootRouteFile, "utf8");
+
+    const requiredSignatures = [
+      "Sentry.init",
+      "PostHogProvider",
+      "PrivyAuthProvider",
+      "ConvexProviderWithAuth",
+      "usePrivyAuthForConvex",
+      "AudioProvider",
+      "useIframeMode",
+      "useTelegramAuth",
+      "sendChatToHost",
+      "AgentSpectatorView",
+      "Breadcrumb",
+      "AudioControlsDock",
+    ];
+
+    for (const signature of requiredSignatures) {
+      expect(source).toContain(signature);
+    }
+  });
+
+  it("does not ship migration diagnostic placeholder copy in production routes", () => {
     const routeFiles = [
+      "index.tsx",
       "about.tsx",
       "agent-dev.tsx",
       "cliques.tsx",
@@ -188,7 +168,13 @@ describe("tanstack migration parity", () => {
       "watch.tsx",
     ];
 
-    const blockedPhrases = ["todo", "coming soon"];
+    const blockedPhrases = [
+      "main launchpad for story",
+      "ops + diagnostics",
+      "add <code>vite_convex_url",
+      "query-param compatible overlay route",
+      "migration",
+    ];
 
     for (const routeFile of routeFiles) {
       const source = readRoute(routeFile).toLowerCase();
