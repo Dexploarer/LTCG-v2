@@ -95,6 +95,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 </span>
               </header>
               {children}
+              <footer className="flex items-center gap-4 border-t border-stone-700/30 pt-3 text-xs text-stone-400">
+                <Link to="/privacy" activeProps={{ className: 'text-stone-200' }}>
+                  Privacy
+                </Link>
+                <Link to="/terms" activeProps={{ className: 'text-stone-200' }}>
+                  Terms
+                </Link>
+              </footer>
             </div>
             <TanStackRouterDevtools position="bottom-right" />
             <Scripts />

@@ -40,3 +40,4 @@ bun run --cwd apps/web-tanstack type-check
 - `/cards/$cardId` loads details via `api.cards.getCard`.
 - `/leaderboard` loads ranked data from `api.ranked.getLeaderboard` and `api.ranked.getRankDistribution`.
 - `/about` includes the first converted static marketing/about route.
+- `/privacy` and `/terms` are now converted into TanStack legal pages.

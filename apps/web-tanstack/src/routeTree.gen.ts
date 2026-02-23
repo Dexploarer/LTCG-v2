@@ -9,12 +9,24 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as CardsRouteImport } from './routes/cards'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CardsCardIdRouteImport } from './routes/cards.$cardId'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
@@ -46,6 +58,8 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/cards': typeof CardsRouteWithChildren
   '/leaderboard': typeof LeaderboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/cards/$cardId': typeof CardsCardIdRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +67,8 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/cards': typeof CardsRouteWithChildren
   '/leaderboard': typeof LeaderboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/cards/$cardId': typeof CardsCardIdRoute
 }
 export interface FileRoutesById {
@@ -61,14 +77,38 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/cards': typeof CardsRouteWithChildren
   '/leaderboard': typeof LeaderboardRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/cards/$cardId': typeof CardsCardIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/cards' | '/leaderboard' | '/cards/$cardId'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/cards'
+    | '/leaderboard'
+    | '/privacy'
+    | '/terms'
+    | '/cards/$cardId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/cards' | '/leaderboard' | '/cards/$cardId'
-  id: '__root__' | '/' | '/about' | '/cards' | '/leaderboard' | '/cards/$cardId'
+  to:
+    | '/'
+    | '/about'
+    | '/cards'
+    | '/leaderboard'
+    | '/privacy'
+    | '/terms'
+    | '/cards/$cardId'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/cards'
+    | '/leaderboard'
+    | '/privacy'
+    | '/terms'
+    | '/cards/$cardId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,10 +116,26 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   CardsRoute: typeof CardsRouteWithChildren
   LeaderboardRoute: typeof LeaderboardRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leaderboard': {
       id: '/leaderboard'
       path: '/leaderboard'
@@ -133,6 +189,8 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   CardsRoute: CardsRouteWithChildren,
   LeaderboardRoute: LeaderboardRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
