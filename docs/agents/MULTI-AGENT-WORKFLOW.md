@@ -89,5 +89,5 @@ ls reference/frontend/hooks/hooks/YOUR_DOMAIN/
 # /convex-components - for backend API
 # /frontend-patterns - for React patterns
 
-# 4. Build in apps/web/ following reference patterns
+# 4. Build in apps/web-tanstack/ following reference patterns
 ```
