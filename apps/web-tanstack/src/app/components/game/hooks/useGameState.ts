@@ -124,17 +124,17 @@ export function parsePlayerView(
   const opponentSeat: Seat = mySeat === "host" ? "away" : "host";
 
   const players = normalizePlayers(parsed.players);
-  const legacyLifePoints = normalizeLifePointMap(parsed.lifePoints);
+  const compatibilityLifePointsBySeat = normalizeSeatLifePointMapForCompatibility(parsed.lifePoints);
 
   const lifePoints =
     toFiniteNumber(parsed.lifePoints) ??
     lifeFromPlayers(players, mySeat) ??
-    legacyLifePoints?.[mySeat] ??
+    compatibilityLifePointsBySeat?.[mySeat] ??
     8000;
   const opponentLifePoints =
     toFiniteNumber(parsed.opponentLifePoints) ??
     lifeFromPlayers(players, opponentSeat) ??
-    legacyLifePoints?.[opponentSeat] ??
+    compatibilityLifePointsBySeat?.[opponentSeat] ??
     8000;
 
   const phase = asPhase(parsed.currentPhase) ?? "draw";
@@ -318,7 +318,9 @@ function normalizePlayers(value: unknown): PlayerView["players"] {
   };
 }
 
-function normalizeLifePointMap(value: unknown): Record<Seat, number> | null {
+function normalizeSeatLifePointMapForCompatibility(
+  value: unknown,
+): Record<Seat, number> | null {
   if (!isRecord(value)) return null;
   const host = toFiniteNumber(value.host);
   const away = toFiniteNumber(value.away);

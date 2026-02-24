@@ -20,6 +20,7 @@ import type {
   StoryNextStageResponse,
   StoryProgress,
 } from "./types.js";
+import { normalizePlayerViewForCompatibility } from "./compat/playerView.js";
 
 // ── Error class ──────────────────────────────────────────────────
 
@@ -169,7 +170,8 @@ export class LTCGClient {
     }
 
     const qs = query.join("&");
-    return this.get(`/api/agent/game/view?${qs}`);
+    const view = await this.get<PlayerView>(`/api/agent/game/view?${qs}`);
+    return normalizePlayerViewForCompatibility(view);
   }
 
   /** GET /api/agent/game/match-status — get match metadata */
