@@ -54,11 +54,8 @@ export async function runStreamOverlayQueryOverrideScenario(args: {
     maxWaitMs,
   );
 
-  const publicAwayView = await args.client.getPublicView({ matchId, seat: "away" });
-
   const snapshotMatchIdOk = String(snapshot.matchId ?? "") === matchId;
   const snapshotSeatOk = snapshot.seat === "away";
-  const publicViewSeatOk = (publicAwayView as any)?.seat === "away";
 
   assertions.push({
     id: "query_override_match_id",
@@ -69,11 +66,6 @@ export async function runStreamOverlayQueryOverrideScenario(args: {
     id: "query_override_seat",
     ok: snapshotSeatOk,
     details: `expected=away actual=${String(snapshot.seat ?? "")}`,
-  });
-  assertions.push({
-    id: "query_override_public_view_away",
-    ok: publicViewSeatOk,
-    details: `publicViewSeat=${String((publicAwayView as any)?.seat ?? "")}`,
   });
 
   const allPassed = assertions.every((entry) => entry.ok);

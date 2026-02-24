@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { StreamOverlayParams } from "@/lib/streamOverlayParams";
 import { StreamOverlay } from "./StreamOverlay";
@@ -37,9 +38,10 @@ describe("StreamOverlay", () => {
   });
 
   it("shows selector-required state when no apiKey, hostId, or matchId is provided", () => {
-    const html = renderToStaticMarkup(<StreamOverlay />);
+    const html = renderToStaticMarkup(createElement(StreamOverlay));
     expect(html).toContain("Missing apiKey, hostId, or matchId parameter");
     expect(useStreamOverlayMock).toHaveBeenCalledWith({
+      apiUrl: null,
       apiKey: null,
       hostId: null,
       matchId: null,
@@ -54,10 +56,11 @@ describe("StreamOverlay", () => {
       loading: true,
     });
 
-    const html = renderToStaticMarkup(<StreamOverlay />);
+    const html = renderToStaticMarkup(createElement(StreamOverlay));
     expect(html).toContain("Connecting...");
     expect(html).not.toContain("Missing apiKey, hostId, or matchId parameter");
     expect(useStreamOverlayMock).toHaveBeenCalledWith({
+      apiUrl: null,
       apiKey: null,
       hostId: "user_123",
       matchId: null,
@@ -72,9 +75,10 @@ describe("StreamOverlay", () => {
       error: "overlay error",
     });
 
-    const html = renderToStaticMarkup(<StreamOverlay />);
+    const html = renderToStaticMarkup(createElement(StreamOverlay));
     expect(html).toContain("overlay error");
     expect(useStreamOverlayMock).toHaveBeenCalledWith({
+      apiUrl: null,
       apiKey: "ltcg_key",
       hostId: null,
       matchId: "match_9",

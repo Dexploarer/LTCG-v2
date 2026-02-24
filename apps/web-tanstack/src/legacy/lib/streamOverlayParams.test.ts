@@ -26,9 +26,10 @@ describe("normalizeStreamOverlaySeat", () => {
 describe("parseStreamOverlayParams", () => {
   it("parses and trims selector params", () => {
     const params = new URLSearchParams(
-      "apiKey=ltcg_key_1&hostId=user_42&matchId=match_7&seat=away",
+      "apiUrl=https://example.convex.site&apiKey=ltcg_key_1&hostId=user_42&matchId=match_7&seat=away",
     );
     expect(parseStreamOverlayParams(params)).toEqual({
+      apiUrl: "https://example.convex.site",
       apiKey: "ltcg_key_1",
       hostId: "user_42",
       matchId: "match_7",
@@ -39,6 +40,7 @@ describe("parseStreamOverlayParams", () => {
   it("normalizes empty values to null", () => {
     const params = new URLSearchParams("apiKey=%20%20&hostId=&matchId=&seat=");
     expect(parseStreamOverlayParams(params)).toEqual({
+      apiUrl: null,
       apiKey: null,
       hostId: null,
       matchId: null,

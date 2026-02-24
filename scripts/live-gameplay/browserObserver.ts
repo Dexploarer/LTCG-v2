@@ -23,6 +23,7 @@ function normalizeQueryValue(value: string | null | undefined) {
 }
 
 export type BrowserOverlayQuery = {
+  apiUrl?: string | null;
   apiKey?: string | null;
   hostId?: string | null;
   matchId?: string | null;
@@ -38,6 +39,7 @@ export type BrowserObserver = {
 
 export async function createBrowserObserver(args: {
   webUrl: string;
+  apiUrl?: string | null;
   apiKey: string;
   artifactsDir: string;
   timelinePath: string;
@@ -52,9 +54,11 @@ export async function createBrowserObserver(args: {
 
   async function open(query?: BrowserOverlayQuery) {
     const params = new URLSearchParams();
+    const apiUrl = normalizeQueryValue(query?.apiUrl) ?? normalizeQueryValue(args.apiUrl);
     const apiKey = normalizeQueryValue(query?.apiKey) ?? args.apiKey;
     const hostId = normalizeQueryValue(query?.hostId);
     const matchId = normalizeQueryValue(query?.matchId);
+    if (apiUrl) params.set("apiUrl", apiUrl);
     if (apiKey) params.set("apiKey", apiKey);
     if (hostId) params.set("hostId", hostId);
     if (matchId) params.set("matchId", matchId);

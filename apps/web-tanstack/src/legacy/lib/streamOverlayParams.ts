@@ -1,6 +1,7 @@
 export type StreamOverlaySeat = "host" | "away";
 
 export type StreamOverlayParams = {
+  apiUrl: string | null;
   apiKey: string | null;
   hostId: string | null;
   matchId: string | null;
@@ -22,6 +23,7 @@ export function normalizeStreamOverlaySeat(value: string | null): StreamOverlayS
 
 export function parseStreamOverlayParams(params: URLSearchParams): StreamOverlayParams {
   return {
+    apiUrl: normalizeText(params.get("apiUrl")),
     apiKey: normalizeText(params.get("apiKey")),
     hostId: normalizeText(params.get("hostId")),
     matchId: normalizeText(params.get("matchId")),

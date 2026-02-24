@@ -15,7 +15,7 @@
  */
 
 import { useSearchParams } from "@/router/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStreamOverlay, type StreamChatMessage } from "@/hooks/useStreamOverlay";
 import { parseStreamOverlayParams } from "@/lib/streamOverlayParams";
 import { FieldRow } from "@/components/game/FieldRow";
@@ -23,18 +23,24 @@ import { SpellTrapRow } from "@/components/game/SpellTrapRow";
 import { LPBar } from "@/components/game/LPBar";
 import { PhaseBar } from "@/components/game/PhaseBar";
 import type { BoardCard, Phase } from "@/components/game/types";
-import type { PublicEventLogEntry } from "@/hooks/useAgentSpectator";
+import type { PublicEventLogEntry, PublicSpectatorView } from "@/hooks/useAgentSpectator";
 import type { CardDefinition } from "@/lib/convexTypes";
 import type { SpectatorSpellTrapCard } from "@/lib/spectatorAdapter";
+import { ConvexHttpClient } from "convex/browser";
+import { apiAny } from "@/lib/convexHelpers";
 
 const MAX_LP = 4000;
 const TICKER_COUNT = 5;
 const noop = () => {};
 
+function toConvexCloudUrl(url: string) {
+  return url.replace(".convex.site", ".convex.cloud");
+}
+
 export function StreamOverlay() {
   const [params] = useSearchParams();
   const overlayParams = parseStreamOverlayParams(params);
-  const { apiKey, hostId, matchId } = overlayParams;
+  const { apiUrl, apiKey, hostId, matchId, seat } = overlayParams;
 
   const {
     loading,
@@ -50,14 +56,78 @@ export function StreamOverlay() {
     opponentSpellTraps,
   } = useStreamOverlay(overlayParams);
 
+  const [fallbackMatchState, setFallbackMatchState] = useState<PublicSpectatorView | null>(null);
+
+  useEffect(() => {
+    if (matchState) {
+      setFallbackMatchState(null);
+      return;
+    }
+    if (!apiUrl || !matchId) {
+      setFallbackMatchState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const normalizedApiUrl = apiUrl.replace(/\/$/, "");
+    const convexCloudUrl = toConvexCloudUrl(normalizedApiUrl);
+    const requestedSeat = seat === "away" ? "away" : "host";
+
+    (async () => {
+      try {
+        const client = new ConvexHttpClient(convexCloudUrl);
+        const view = await client.query(
+          apiAny.game.getSpectatorView,
+          { matchId, seat: requestedSeat },
+        );
+        if (cancelled) return;
+        if (view) {
+          setFallbackMatchState(view as PublicSpectatorView);
+          return;
+        }
+      } catch {
+        // Fall through to actor-scoped fallback when possible.
+      }
+
+      if (!apiKey || cancelled) {
+        if (!cancelled) setFallbackMatchState(null);
+        return;
+      }
+
+      const query = new URLSearchParams({ matchId, seat: requestedSeat });
+      try {
+        const response = await fetch(
+          `${normalizedApiUrl}/api/agent/game/public-view?${query.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        if (!response.ok || cancelled) return;
+        const payload = (await response.json()) as PublicSpectatorView;
+        if (!cancelled) setFallbackMatchState(payload);
+      } catch {
+        if (!cancelled) setFallbackMatchState(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, apiKey, matchId, matchState, seat]);
+
+  const effectiveMatchState = matchState ?? fallbackMatchState;
+
   // Expose snapshot hook for browserObserver compatibility.
   useEffect(() => {
     (window as any).render_spectator_to_text = () =>
-      matchState ? JSON.stringify(matchState) : null;
+      effectiveMatchState ? JSON.stringify(effectiveMatchState) : null;
     return () => {
       delete (window as any).render_spectator_to_text;
     };
-  }, [matchState]);
+  }, [effectiveMatchState]);
 
   if (!apiKey && !hostId && !matchId) {
     return (
@@ -83,9 +153,9 @@ export function StreamOverlay() {
     );
   }
 
-  const phase = (matchState?.phase ?? "draw") as Phase;
+  const phase = (effectiveMatchState?.phase ?? "draw") as Phase;
   const recentEvents = timeline.slice(-TICKER_COUNT);
-  const hasMatch = !!matchState;
+  const hasMatch = !!effectiveMatchState;
 
   return (
     <OverlayShell>
@@ -103,7 +173,7 @@ export function StreamOverlay() {
           </div>
           {hasMatch && (
             <span className="font-['Outfit'] font-black text-white/25 text-[10px] uppercase tracking-wider">
-              T{matchState.turnNumber}
+              T{effectiveMatchState.turnNumber}
             </span>
           )}
         </div>
@@ -114,7 +184,7 @@ export function StreamOverlay() {
           <div className="flex-1 flex flex-col min-w-0">
             {hasMatch ? (
               <GameBoardPanel
-                matchState={matchState}
+                matchState={effectiveMatchState}
                 agentName={agentName}
                 phase={phase}
                 cardLookup={cardLookup}

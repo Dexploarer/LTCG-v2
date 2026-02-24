@@ -51,8 +51,14 @@ export interface StreamOverlayData {
 const CONVEX_SITE_URL = (import.meta.env.VITE_CONVEX_URL ?? "")
   .replace(".convex.cloud", ".convex.site");
 
+function normalizeApiUrl(value: string | null) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/\/$/, "");
+  return trimmed.length > 0 ? trimmed.replace(".convex.cloud", ".convex.site") : null;
+}
+
 export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData {
-  const apiUrl = CONVEX_SITE_URL || null;
+  const apiUrl = normalizeApiUrl(params.apiUrl) ?? normalizeApiUrl(CONVEX_SITE_URL) ?? null;
   const { agent, matchState, timeline, error, loading } = useAgentSpectator({
     apiKey: params.apiKey,
     apiUrl,
@@ -91,8 +97,10 @@ export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData
     [matchState],
   );
 
+  const shouldWaitForCards = !params.apiUrl;
+
   return {
-    loading: loading || !cardsLoaded,
+    loading: loading || (shouldWaitForCards && !cardsLoaded),
     error,
     agentName: agent?.name ?? null,
     agentId: agentDocId,

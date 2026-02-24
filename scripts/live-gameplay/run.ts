@@ -360,6 +360,7 @@ async function main() {
     try {
       observer = await createBrowserObserver({
         webUrl,
+        apiUrl,
         apiKey: reg.apiKey,
         artifactsDir: run.runDir,
         timelinePath: run.timelinePath,
