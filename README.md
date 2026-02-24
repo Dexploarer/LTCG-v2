@@ -7,7 +7,7 @@ White-label trading card game built for both humans and ElizaOS agents. Embedded
 | Layer | Tech |
 |-------|------|
 | Runtime | Bun 1.3.5 |
-| Frontend | Vite 6 + React 19.2 + React Router 7 |
+| Frontend | TanStack Start + React 19 + TanStack Router |
 | Styling | Tailwind CSS 4 |
 | Backend | Convex 1.31.6 (white-label components) |
 | Auth | Privy 3.12 |
@@ -41,7 +41,6 @@ bun run dev
 # Or run individually:
 bun run dev:convex  # Backend only
 bun run dev:web     # Frontend only (port 3334)
-bun run dev:rpg     # RPG frontend (port 3340)
 ```
 
 The setup script is idempotent and also builds local workspace packages required by Convex components.
@@ -88,7 +87,7 @@ set +a
 For local automation and agent-driven testing, use the API-key path instead of weakening Privy auth:
 
 ```bash
-# Register a local agent key and write apps/web/.env.local
+# Register a local agent key and write apps/web-tanstack/.env.local
 bun run setup:agent-auth -- --agent-name CodexDev
 
 # Start web app
@@ -158,19 +157,14 @@ curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
 ```
 LTCG-v2/
 ├── convex/                    # Convex backend (host layer)
-├── apps/rpg-web/              # RPG creator + library + session UI
+├── apps/web-tanstack/         # Primary frontend (TanStack Start)
+├── apps/web/                  # Legacy archive (React Router; excluded from default flows)
 ├── packages/
 │   ├── engine/                # Pure TS game engine
-│   ├── rpg-engine/            # Deterministic RPG engine + dice runtime
-│   ├── rpg-worlds/            # RPG world manifests + flagship world bundles
-│   ├── rpg-render/            # 2D renderer + optional 3D adapter contracts
-│   ├── rpg-agents/            # Agent seat policies and safety helpers
-│   ├── plugin-rpg/            # ElizaOS RPG plugin
 │   ├── plugin-ltcg/           # ElizaOS plugin
 │   ├── lunchtable-tcg-cards/  # Card inventory + decks
 │   ├── lunchtable-tcg-match/  # Event-sourced matches
 │   └── lunchtable-tcg-story/  # Story mode progression
-├── apps/web/                  # Frontend (Vite + React SPA)
 └── docs/                      # Architecture + agent docs
 ```
 
@@ -186,7 +180,7 @@ LTCG-v2/
 
 ## Audio Soundtrack
 
-- Manifest file: `apps/web/public/soundtrack.in`
+- Manifest file: `apps/web-tanstack/public/soundtrack.in`
 - Agent-readable endpoint: `GET /api/soundtrack` (optional `?context=play`)
 - Plugin env (optional): `LTCG_SOUNDTRACK_API_URL=https://your-app.com/api/soundtrack`
 

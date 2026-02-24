@@ -53,12 +53,13 @@ function initTempRepo() {
   );
 
   mkdirSync(path.join(dir, ".github/workflows"), { recursive: true });
-  mkdirSync(path.join(dir, "apps/web/src/components/game/hooks"), { recursive: true });
-  mkdirSync(path.join(dir, "apps/web/api"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/web-tanstack"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/web-tanstack/src/legacy/components/game/hooks"), { recursive: true });
+  mkdirSync(path.join(dir, "apps/web-tanstack/api"), { recursive: true });
   mkdirSync(path.join(dir, "api"), { recursive: true });
 
   writeFileSync(path.join(dir, "package.json"), "{\n  \"name\": \"test\"\n}\n");
-  writeFileSync(path.join(dir, "apps/web/package.json"), "{\n  \"name\": \"web\"\n}\n");
+  writeFileSync(path.join(dir, "apps/web-tanstack/package.json"), "{\n  \"name\": \"web-ts\"\n}\n");
 
   expect(runCommand(dir, "git", ["init", "-q"]).status).toBe(0);
   expect(runCommand(dir, "git", ["config", "user.email", "test@example.com"]).status).toBe(0);
@@ -77,9 +78,9 @@ describe("cleanup.sh", () => {
   it("defaults to dry-run and only removes untracked artifacts on apply", () => {
     const dir = initTempRepo();
 
-    const trackedTestPath = "apps/web/src/components/game/hooks/useGameState.test.ts";
+    const trackedTestPath = "apps/web-tanstack/src/legacy/components/game/hooks/useGameState.test.ts";
     const untrackedWorkflowPath = ".github/workflows/remotion-pr-preview.yml";
-    const duplicateAppHandler = "apps/web/api/soundtrack-sfx.ts";
+    const duplicateAppHandler = "apps/web-tanstack/api/soundtrack-sfx.ts";
     const rootHandler = "api/soundtrack-sfx.ts";
 
     writeFileSync(path.join(dir, trackedTestPath), "// tracked test file\n");
@@ -110,7 +111,7 @@ describe("fix-packages.sh", () => {
     const dir = initTempRepo();
 
     mkdirSync(path.join(dir, "node_modules/example"), { recursive: true });
-    mkdirSync(path.join(dir, "apps/web/node_modules/example"), { recursive: true });
+    mkdirSync(path.join(dir, "apps/web-tanstack/node_modules/example"), { recursive: true });
     writeFileSync(path.join(dir, "bun.lockb"), "lock");
 
     const dryRun = runCommand(dir, "bash", ["fix-packages.sh"]);
@@ -128,7 +129,7 @@ describe("fix-packages.sh", () => {
     expect(apply.status).toBe(0);
     expect(apply.stdout).toContain("Skipped bun install");
     expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
-    expect(existsSync(path.join(dir, "apps/web/node_modules"))).toBe(false);
+    expect(existsSync(path.join(dir, "apps/web-tanstack/node_modules"))).toBe(false);
     expect(existsSync(path.join(dir, "bun.lockb"))).toBe(false);
   });
 });
@@ -161,8 +162,11 @@ describe("scripts/setup-dev-env.sh", () => {
     expect(rootEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
     expect(rootEnv).toContain("LTCG_API_URL=https://scintillating-mongoose-458.convex.site");
 
-    const webEnv = readFileSync(path.join(dir, "apps/web/.env.local"), "utf8");
-    expect(webEnv).toContain("VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud");
+    const webTanstackEnv = readFileSync(path.join(dir, "apps/web-tanstack/.env.local"), "utf8");
+    expect(webTanstackEnv).toContain(
+      "VITE_CONVEX_URL=https://scintillating-mongoose-458.convex.cloud",
+    );
+
   });
 });
 
