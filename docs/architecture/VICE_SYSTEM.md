@@ -113,38 +113,38 @@ Additionally, `CARD_DESTROYED` fires with `reason: "breakdown"` when the card is
 
 ## The 10 Canonical Vice Types
 
-![The Ten-Fold Curse](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_master_splash_landscape_1771172852490.png)
+![The Ten-Fold Curse](../../apps/web-tanstack/public/lunchtable/vices/vice-splash.png)
 
 Defined in `GAME_CONFIG.VICE_TYPES`. Each vice is a character flaw that can trigger a breakdown.
 
-### 1. Gambling ::: ![Gambling](/Users/home/Desktop/LTCG-v2/apps/web/public/lunchtable/vices/gambling.png)
+### 1. Gambling ::: ![Gambling](../../apps/web-tanstack/public/lunchtable/vices/gambling.png)
 **Description:** Can't stop betting -- doubles down even when losing.
 
-### 2. Alcohol ::: ![Alcohol](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_alcohol_comic_1771172385924.png)
+### 2. Alcohol ::: ![Alcohol](../../apps/web-tanstack/public/lunchtable/vices/alcohol.png)
 **Description:** Party lifestyle that spirals out of control.
 
-### 3. Social Media ::: ![Social Media](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_social_media_comic_1771172400411.png)
+### 3. Social Media ::: ![Social Media](../../apps/web-tanstack/public/lunchtable/vices/social-media.png)
 **Description:** Addicted to likes, shares, and online validation.
 
-### 4. Crypto ::: ![Crypto](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_crypto_comic_1771172423409.png)
+### 4. Crypto ::: ![Crypto](../../apps/web-tanstack/public/lunchtable/vices/crypto.png)
 **Description:** All-in on digital assets, blind to risk.
 
-### 5. Validation ::: ![Validation](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_validation_comic_retry_1771172446648.png)
+### 5. Validation ::: ![Validation](../../apps/web-tanstack/public/lunchtable/vices/validation.png)
 **Description:** Desperate need for approval and recognition.
 
-### 6. Conspiracy ::: ![Conspiracy](/Users/home/Desktop/LTCG-v2/apps/web/public/lunchtable/vices/conspiracy.png)
+### 6. Conspiracy ::: ![Conspiracy](../../apps/web-tanstack/public/lunchtable/vices/conspiracy.png)
 **Description:** Lost in paranoid theories, disconnected from reality.
 
-### 7. Narcissism ::: ![Narcissism](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_narcissism_comic_1771172480416.png)
+### 7. Narcissism ::: ![Narcissism](../../apps/web-tanstack/public/lunchtable/vices/narcissism.png)
 **Description:** Self-obsession that alienates everyone.
 
-### 8. Adderall ::: ![Adderall](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_adderall_comic_1771172503606.png)
+### 8. Adderall ::: ![Adderall](../../apps/web-tanstack/public/lunchtable/vices/adderall.png)
 **Description:** Stimulant dependency, burnout from hyperfocus.
 
-### 9. MLM ::: ![MLM](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_mlm_comic_1771172520609.png)
+### 9. MLM ::: ![MLM](../../apps/web-tanstack/public/lunchtable/vices/mlm.png)
 **Description:** Multi-level marketing delusion, hustle culture.
 
-### 10. Rage ::: ![Rage](/Users/home/.gemini/antigravity/brain/e67c5c5b-7a39-4849-ab1d-cb7bc6e34507/vice_rage_comic_1771172538190.png)
+### 10. Rage ::: ![Rage](../../apps/web-tanstack/public/lunchtable/vices/rage.png)
 **Description:** Uncontrolled anger that destroys relationships.
 
 ---

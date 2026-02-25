@@ -22,7 +22,7 @@ LTCG-v2/
 │   ├── lunchtable-tcg-match/  # Convex component: event-sourced matches
 │   └── lunchtable-tcg-story/  # Convex component: story mode progression
 ├── apps/web-tanstack/         # Frontend (TanStack Start + React 19)
-├── apps/web/                  # Legacy archive (excluded from default flows)
+│   └── src/legacy/            # Legacy React Router compatibility modules
 ├── reference/frontend/        # Reference frontend (patterns only)
 └── docs/                      # Architecture + agent docs
 ```
@@ -105,7 +105,7 @@ import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 
 ## Theming: Zine Aesthetic
 
-Source of truth: original LTCG at `/Users/home/Desktop/LTCG/apps/web/app/globals.css`
+Source of truth: `apps/web-tanstack/src/styles/legacy.css`
 
 ### Core Design System
 
