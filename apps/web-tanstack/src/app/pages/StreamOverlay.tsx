@@ -16,6 +16,7 @@
 
 import { useSearchParams } from "@/router/react-router";
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useStreamOverlay, type StreamChatMessage } from "@/hooks/useStreamOverlay";
 import { parseStreamOverlayParams } from "@/lib/streamOverlayParams";
 import { FieldRow } from "@/components/game/FieldRow";
@@ -28,6 +29,7 @@ import type { CardDefinition } from "@/lib/convexTypes";
 import type { SpectatorSpellTrapCard } from "@/lib/spectatorAdapter";
 import { ConvexHttpClient } from "convex/browser";
 import { apiAny } from "@/lib/convexHelpers";
+import { LANDING_BG, STREAM_OVERLAY } from "@/lib/blobUrls";
 
 const MAX_LP = 4000;
 const TICKER_COUNT = 5;
@@ -217,11 +219,54 @@ export function StreamOverlay() {
 
 function OverlayShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="w-screen h-screen overflow-hidden flex items-center justify-center"
-      style={{ background: "#0d0c0a" }}
-    >
-      {children}
+    <div className="w-screen h-screen overflow-hidden flex items-center justify-center relative">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url('${LANDING_BG}')`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          filter: "grayscale(0.35) contrast(1.1) brightness(0.4)",
+        }}
+      />
+      <div className="absolute inset-0 bg-[#050505]/70" />
+      <motion.div
+        className="absolute -inset-[15%]"
+        animate={{ rotate: [0, 360] }}
+        transition={{ duration: 90, repeat: Infinity, ease: "linear" }}
+        style={{
+          background:
+            "conic-gradient(from 90deg, rgba(255,204,0,0.15), rgba(51,204,255,0.12), rgba(255,204,0,0.15))",
+          mixBlendMode: "screen",
+          opacity: 0.22,
+        }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none opacity-20"
+        style={{
+          backgroundImage: `url('${STREAM_OVERLAY}')`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          mixBlendMode: "screen",
+        }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 3px)",
+        }}
+      />
+
+      <div className="relative z-10 w-full h-full border-2 border-white/12 bg-black/20">
+        <div className="absolute top-2 left-2 z-20 inline-flex items-center gap-1.5 border border-[#ffcc00]/50 bg-black/65 px-2.5 py-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#ffcc00] animate-pulse" />
+          <span className="font-['Outfit'] text-[9px] uppercase tracking-widest text-[#ffcc00]">
+            Agent Spectator Overlay
+          </span>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

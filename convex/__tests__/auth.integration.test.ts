@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 import { expect, test, describe } from "vitest";
-import { ConvexError } from "convex/values";
 import { api } from "../_generated/api";
 import { setupTestConvex, seedUser, ALICE, BOB } from "./setup.test-helpers";
 
@@ -41,6 +40,20 @@ describe("syncUser", () => {
     // Email was updated
     const user = await asAlice.query(api.auth.currentUser, {});
     expect(user.email).toBe("alice-new@test.com");
+  });
+
+  test("stores wallet metadata from login sync", async () => {
+    const t = setupTestConvex();
+    const asAlice = t.withIdentity(ALICE);
+
+    await asAlice.mutation(api.auth.syncUser, {
+      walletAddress: "So11111111111111111111111111111111111111112",
+      walletType: "phantom",
+    });
+
+    const user = await asAlice.query(api.auth.currentUser, {});
+    expect(user.walletAddress).toBe("So11111111111111111111111111111111111111112");
+    expect(user.walletType).toBe("phantom");
   });
 
   test("throws when called without authentication", async () => {
@@ -204,6 +217,9 @@ describe("getOnboardingStatus", () => {
       hasUsername: false, // auto-generated "player_..." isn't a real username
       hasAvatar: false,
       hasStarterDeck: false,
+      hasRetakeChoice: false,
+      wantsRetake: false,
+      hasRetakeAccount: false,
     });
   });
 
@@ -225,5 +241,58 @@ describe("getOnboardingStatus", () => {
 
     const status = await asAlice.query(api.auth.getOnboardingStatus, {});
     expect(status!.hasAvatar).toBe(true);
+  });
+
+  test("records retake decline choice", async () => {
+    const t = setupTestConvex();
+    const asAlice = await seedUser(t, ALICE, api);
+
+    await asAlice.mutation(api.auth.setRetakeOnboardingChoice, {
+      choice: "declined",
+    });
+
+    const status = await asAlice.query(api.auth.getOnboardingStatus, {});
+    expect(status).toMatchObject({
+      hasRetakeChoice: true,
+      wantsRetake: false,
+      hasRetakeAccount: false,
+    });
+  });
+
+  test("links retake account only when wallet matches", async () => {
+    const t = setupTestConvex();
+    const asAlice = t.withIdentity(ALICE);
+
+    await asAlice.mutation(api.auth.syncUser, {
+      walletAddress: "SoWallet111111111111111111111111111111111111111",
+      walletType: "phantom",
+    });
+
+    await asAlice.mutation(api.auth.linkRetakeAccount, {
+      agentId: "agt_123",
+      userDbId: "usr_456",
+      agentName: "alice_agent",
+      walletAddress: "SoWallet111111111111111111111111111111111111111",
+      tokenAddress: "TokenAddress11111111111111111111111111111111",
+      tokenTicker: "alice",
+    });
+
+    const status = await asAlice.query(api.auth.getOnboardingStatus, {});
+    expect(status).toMatchObject({
+      hasRetakeChoice: true,
+      wantsRetake: true,
+      hasRetakeAccount: true,
+    });
+
+    await expect(
+      asAlice.mutation(api.auth.linkRetakeAccount, {
+        agentId: "agt_999",
+        userDbId: "usr_999",
+        agentName: "wrong_wallet",
+        walletAddress: "SoOtherWallet11111111111111111111111111111111111",
+        tokenAddress: "TokenAddress99999999999999999999999999999999",
+        tokenTicker: "wrong",
+      }),
+    ).rejects.toThrow();
   });
 });

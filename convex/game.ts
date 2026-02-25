@@ -853,6 +853,47 @@ export const listOpenPvpLobbies = query({
   },
 });
 
+export const listPublicPvpLobbies = query({
+  args: {
+    includeActive: v.optional(v.boolean()),
+  },
+  returns: v.array(vPvpLobbySummary),
+  handler: async (ctx, args) => {
+    const includeActive = args.includeActive !== false;
+    const waitingRows = await ctx.db
+      .query("pvpLobbies")
+      .withIndex("by_status", (q: any) => q.eq("status", "waiting"))
+      .collect();
+    const activeRows = includeActive
+      ? await ctx.db
+          .query("pvpLobbies")
+          .withIndex("by_status", (q: any) => q.eq("status", "active"))
+          .collect()
+      : [];
+
+    const output: Array<ReturnType<typeof normalizePvpLobbySummary>> = [];
+    const candidates = [...waitingRows, ...activeRows];
+    for (const row of candidates) {
+      if (row.visibility !== "public") continue;
+
+      const meta = await match.getMatchMeta(ctx, { matchId: row.matchId });
+      if (!meta) continue;
+      const metaStatus = (meta as any).status;
+      if (metaStatus !== "waiting" && metaStatus !== "active") continue;
+
+      output.push(
+        normalizePvpLobbySummary({
+          ...row,
+          status: metaStatus,
+        }),
+      );
+    }
+
+    output.sort((a, b) => b.createdAt - a.createdAt);
+    return output;
+  },
+});
+
 export const getMyPvpLobby = query({
   args: {},
   returns: v.union(vPvpLobbySummary, v.null()),
