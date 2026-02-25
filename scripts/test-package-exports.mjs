@@ -29,14 +29,17 @@ const PACKAGES = [
     dir: join(PACKAGES_DIR, "engine"),
     exports: {
       ".": {
+        "@convex-dev/component-source": "./src/index.ts",
         import: "./dist/index.js",
         types: "./dist/index.d.ts",
       },
       "./types": {
+        "@convex-dev/component-source": "./src/types/index.ts",
         import: "./dist/types/index.js",
         types: "./dist/types/index.d.ts",
       },
       "./rules": {
+        "@convex-dev/component-source": "./src/rules/index.ts",
         import: "./dist/rules/index.js",
         types: "./dist/rules/index.d.ts",
       },
