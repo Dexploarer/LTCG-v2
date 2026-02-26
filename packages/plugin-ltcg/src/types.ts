@@ -379,6 +379,20 @@ export interface MatchJoinResult {
   seat: "away";
 }
 
+export interface PvpLobbyCreateResult {
+  matchId: string;
+  visibility: "public";
+  joinCode: null;
+  status: "waiting";
+  createdAt: number;
+}
+
+export interface PvpLobbyCancelResult {
+  matchId: string;
+  canceled: boolean;
+  status: "canceled";
+}
+
 // ── Story Mode Types ─────────────────────────────────────────────
 
 /** Stage progress for a single stage */

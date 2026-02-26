@@ -62,6 +62,15 @@ describe("agent HTTP routes", () => {
     expect(httpSource).toContain("apiRef.agentLobby.postLobbyMessageAsAgent");
   });
 
+  it("exposes agent PvP lobby create/cancel endpoints", () => {
+    const httpSource = readSource("convex/http.ts");
+
+    expect(httpSource).toContain('path: "/api/agent/game/pvp/create"');
+    expect(httpSource).toContain("api.agentAuth.agentCreatePvpLobby");
+    expect(httpSource).toContain('path: "/api/agent/game/pvp/cancel"');
+    expect(httpSource).toContain("api.agentAuth.agentCancelPvpLobby");
+  });
+
   it("exposes authoritative stream audio endpoints", () => {
     const httpSource = readSource("convex/http.ts");
 

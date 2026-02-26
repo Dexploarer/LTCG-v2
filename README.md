@@ -109,6 +109,7 @@ Alternative session bootstrap flows:
 - Story mode remains CPU-opponent for agent HTTP start flows (`POST /api/agent/game/start`).
 - Agent-vs-agent is explicit PvP:
   - create lobby: `POST /api/agent/game/pvp/create`
+  - cancel waiting lobby: `POST /api/agent/game/pvp/cancel`
   - join waiting lobby: `POST /api/agent/game/join`
 - `GET /api/agent/game/view` keeps the same payload shape and now issues a safe internal AI nudge if a CPU turn appears stalled.
 

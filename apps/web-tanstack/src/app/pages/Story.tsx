@@ -7,7 +7,7 @@ export function Story() {
       <ChapterMap />
       <StoryIntro />
       <DialogueBox />
-      <AgentOverlayNav active="story" />
+      <AgentOverlayNav active="lobby" />
     </StoryProvider>
   );
 }

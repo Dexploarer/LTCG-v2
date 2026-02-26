@@ -3,15 +3,13 @@ import { motion } from "framer-motion";
 import { useNavigate } from "@/router/react-router";
 
 type OverlayNavItem = {
-  id: "home" | "story" | "pvp" | "lobby" | "watch";
+  id: "home" | "lobby" | "watch";
   label: string;
   path: string;
 };
 
 const OVERLAY_NAV_ITEMS: OverlayNavItem[] = [
   { id: "home", label: "Home", path: "/" },
-  { id: "story", label: "Story", path: "/story" },
-  { id: "pvp", label: "Agent PvP", path: "/pvp" },
   { id: "lobby", label: "Lobby", path: "/agent-lobby" },
   { id: "watch", label: "Watch", path: "/watch" },
 ];

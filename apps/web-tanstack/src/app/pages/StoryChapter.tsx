@@ -46,7 +46,7 @@ export function StoryChapter() {
       <StoryChapterInner />
       <DialogueBox />
       <BattleTransition />
-      <AgentOverlayNav active="story" />
+      <AgentOverlayNav active="lobby" />
     </StoryProvider>
   );
 }

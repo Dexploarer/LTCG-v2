@@ -92,4 +92,44 @@ describe("LTCGClient agent control endpoints", () => {
       }),
     );
   });
+
+  it("creates and cancels a PvP lobby through agent endpoints", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        matchId: "match_1",
+        visibility: "public",
+        joinCode: null,
+        status: "waiting",
+        createdAt: Date.now(),
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        matchId: "match_1",
+        canceled: true,
+        status: "canceled",
+      }),
+    );
+
+    const client = new LTCGClient("https://example.convex.site", "ltcg_test_key");
+    await client.createPvpLobby();
+    await client.cancelPvpLobby("match_1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://example.convex.site/api/agent/game/pvp/create",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://example.convex.site/api/agent/game/pvp/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ matchId: "match_1" }),
+      }),
+    );
+  });
 });

@@ -356,6 +356,32 @@ corsRoute({
 });
 
 corsRoute({
+	path: "/api/agent/game/pvp/cancel",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = (await request.json()) as Record<string, any>;
+		const { matchId } = body;
+
+		if (!matchId || typeof matchId !== "string") {
+			return errorResponse("matchId is required.");
+		}
+
+		try {
+			const result = await ctx.runMutation(api.agentAuth.agentCancelPvpLobby, {
+				agentUserId: agent.userId,
+				matchId,
+			});
+			return jsonResponse(result);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
 	path: "/api/agent/game/join",
 	method: "POST",
 	handler: async (ctx, request) => {

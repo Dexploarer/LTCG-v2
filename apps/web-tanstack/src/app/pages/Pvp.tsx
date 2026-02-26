@@ -531,7 +531,7 @@ export function Pvp() {
         )}
       </div>
 
-      <AgentOverlayNav active="pvp" />
+      <AgentOverlayNav active="lobby" />
     </div>
   );
 }

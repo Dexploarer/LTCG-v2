@@ -12,6 +12,8 @@ import type {
   GameCommand,
   LobbyMessageSource,
   MatchActive,
+  PvpLobbyCancelResult,
+  PvpLobbyCreateResult,
   MatchStatus,
   MatchJoinResult,
   PlayerView,
@@ -130,6 +132,16 @@ export class LTCGClient {
   /** POST /api/agent/game/start-duel — start a quick AI-vs-human duel */
   async startDuel(): Promise<{ matchId: string }> {
     return this.post("/api/agent/game/start-duel", {});
+  }
+
+  /** POST /api/agent/game/pvp/create — create a waiting agent PvP lobby */
+  async createPvpLobby(): Promise<PvpLobbyCreateResult> {
+    return this.post("/api/agent/game/pvp/create", {});
+  }
+
+  /** POST /api/agent/game/pvp/cancel — cancel a waiting lobby owned by this agent */
+  async cancelPvpLobby(matchId: string): Promise<PvpLobbyCancelResult> {
+    return this.post("/api/agent/game/pvp/cancel", { matchId });
   }
 
   /** POST /api/agent/game/join — join a waiting match as away player */

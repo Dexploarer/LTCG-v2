@@ -61,6 +61,20 @@ type LobbySnapshot = {
   messages: LobbyMessage[];
 };
 
+type StoryNextStageResponse = {
+  done: boolean;
+  chapterId?: string;
+  stageNumber?: number;
+};
+
+type CreatedPvpLobby = {
+  matchId: string;
+  visibility: "public";
+  joinCode: null;
+  status: "waiting";
+  createdAt: number;
+};
+
 const sourcePillClass: Record<LobbyMessage["source"], string> = {
   agent: "bg-[#121212] text-white",
   retake: "bg-[#ffcc00] text-[#121212]",
@@ -121,6 +135,8 @@ export function AgentLobby() {
   const [error, setError] = useState("");
   const [snapshot, setSnapshot] = useState<LobbySnapshot | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
+  const [lastMatchId, setLastMatchId] = useState<string | null>(null);
+  const [lastSeat, setLastSeat] = useState<"host" | "away" | null>(null);
 
   const loadSnapshot = useCallback(async () => {
     if (!apiBaseUrl || !apiKey || status !== "connected") {
@@ -172,6 +188,20 @@ export function AgentLobby() {
     return [...snapshot.openLobbies].sort((a, b) => b.createdAt - a.createdAt);
   }, [snapshot?.openLobbies]);
 
+  const myWaitingLobbies = useMemo(() => {
+    if (!snapshot) return [];
+    return openLobbies.filter(
+      (lobby) =>
+        lobby.hostUserId === snapshot.currentUser.userId &&
+        lobby.status === "waiting",
+    );
+  }, [openLobbies, snapshot]);
+
+  const activeStoryMatches = useMemo(() => {
+    if (!snapshot?.activeStoryMatches) return [];
+    return [...snapshot.activeStoryMatches].sort((a, b) => b.stageNumber - a.stageNumber);
+  }, [snapshot?.activeStoryMatches]);
+
   const handleConnect = useCallback(() => {
     setError("");
     setApiKey(manualApiKey);
@@ -221,6 +251,92 @@ export function AgentLobby() {
     }
   }, [apiBaseUrl, apiKey, loadSnapshot, snapshot]);
 
+  const handleCreatePvpLobby = useCallback(async () => {
+    if (!apiBaseUrl || !apiKey) return;
+    setError("");
+    setBusyKey("create");
+    try {
+      const result = await agentFetch<CreatedPvpLobby>({
+        apiBaseUrl,
+        apiKey,
+        path: "/api/agent/game/pvp/create",
+        method: "POST",
+      });
+      setLastMatchId(result.matchId);
+      setLastSeat("host");
+      await loadSnapshot();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to create PvP lobby.");
+    } finally {
+      setBusyKey(null);
+    }
+  }, [apiBaseUrl, apiKey, loadSnapshot]);
+
+  const handleCancelLobby = useCallback(
+    async (matchId: string) => {
+      if (!apiBaseUrl || !apiKey) return;
+      setError("");
+      setBusyKey(`cancel:${matchId}`);
+      try {
+        await agentFetch({
+          apiBaseUrl,
+          apiKey,
+          path: "/api/agent/game/pvp/cancel",
+          method: "POST",
+          body: { matchId },
+        });
+        if (lastMatchId === matchId) {
+          setLastMatchId(null);
+          setLastSeat(null);
+        }
+        await loadSnapshot();
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : "Failed to cancel PvP lobby.");
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [apiBaseUrl, apiKey, lastMatchId, loadSnapshot],
+  );
+
+  const handleStartNextStoryMatch = useCallback(async () => {
+    if (!apiBaseUrl || !apiKey) return;
+    setError("");
+    setBusyKey("story");
+    try {
+      const nextStage = await agentFetch<StoryNextStageResponse>({
+        apiBaseUrl,
+        apiKey,
+        path: "/api/agent/story/next-stage",
+      });
+
+      if (nextStage.done || !nextStage.chapterId || !nextStage.stageNumber) {
+        throw new Error("Story mode is complete for this agent.");
+      }
+
+      const result = await agentFetch<{ matchId: string }>({
+        apiBaseUrl,
+        apiKey,
+        path: "/api/agent/game/start",
+        method: "POST",
+        body: {
+          chapterId: nextStage.chapterId,
+          stageNumber: nextStage.stageNumber,
+        },
+      });
+
+      setLastMatchId(result.matchId);
+      setLastSeat("host");
+      await loadSnapshot();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "Failed to start next story match.",
+      );
+    } finally {
+      setBusyKey(null);
+    }
+  }, [apiBaseUrl, apiKey, loadSnapshot]);
+
   const handleJoinLobby = useCallback(
     async (matchId: string) => {
       if (!apiBaseUrl || !apiKey) return;
@@ -234,6 +350,8 @@ export function AgentLobby() {
           method: "POST",
           body: { matchId },
         });
+        setLastMatchId(matchId);
+        setLastSeat("away");
         await loadSnapshot();
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "Failed to join lobby.");
@@ -242,6 +360,15 @@ export function AgentLobby() {
       }
     },
     [apiBaseUrl, apiKey, loadSnapshot],
+  );
+
+  const lastHostOverlay = useMemo(
+    () => (lastMatchId ? buildStreamOverlayUrl({ matchId: lastMatchId, seat: "host" }) : null),
+    [lastMatchId],
+  );
+  const lastAwayOverlay = useMemo(
+    () => (lastMatchId ? buildStreamOverlayUrl({ matchId: lastMatchId, seat: "away" }) : null),
+    [lastMatchId],
   );
 
   if (status !== "connected") {
@@ -395,6 +522,34 @@ export function AgentLobby() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCreatePvpLobby}
+                    disabled={myWaitingLobbies.length > 0 || busyKey === "create"}
+                    className="tcg-button-primary px-4 py-2 text-[11px] disabled:opacity-60"
+                  >
+                    {busyKey === "create" ? "Creating..." : "Create PvP Lobby"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartNextStoryMatch}
+                    disabled={busyKey === "story"}
+                    className="tcg-button-primary px-4 py-2 text-[11px] disabled:opacity-60"
+                  >
+                    {busyKey === "story" ? "Launching..." : "Start Next Story"}
+                  </button>
+                  {myWaitingLobbies[0] && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelLobby(myWaitingLobbies[0].matchId)}
+                      disabled={busyKey === `cancel:${myWaitingLobbies[0].matchId}`}
+                      className="tcg-button px-4 py-2 text-[11px] disabled:opacity-60"
+                    >
+                      {busyKey === `cancel:${myWaitingLobbies[0].matchId}`
+                        ? "Cancelling..."
+                        : "Cancel My Lobby"}
+                    </button>
+                  )}
                   {snapshot.currentUser.streamUrl && (
                     <a
                       href={snapshot.currentUser.streamUrl}
@@ -424,6 +579,33 @@ export function AgentLobby() {
                   </button>
                 </div>
               </div>
+              {lastMatchId && (
+                <div className="relative mt-3 pt-3 border-t border-[#121212]/20 flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className="font-black uppercase tracking-wider">
+                    Last match: {lastMatchId} ({lastSeat ?? "unknown"})
+                  </span>
+                  {lastHostOverlay && (
+                    <a
+                      href={lastHostOverlay}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tcg-button px-3 py-1.5 text-[10px]"
+                    >
+                      Host Overlay
+                    </a>
+                  )}
+                  {lastAwayOverlay && (
+                    <a
+                      href={lastAwayOverlay}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="tcg-button px-3 py-1.5 text-[10px]"
+                    >
+                      Away Overlay
+                    </a>
+                  )}
+                </div>
+              )}
             </section>
 
             {error && (
@@ -521,6 +703,79 @@ export function AgentLobby() {
                       })}
                     </div>
                   )}
+
+                  <div className="mt-5 pt-4 border-t border-[#121212]/20">
+                    <p className="text-xs uppercase tracking-wider font-black text-[#121212] mb-3">
+                      Active Story Arenas
+                    </p>
+                    {activeStoryMatches.length === 0 ? (
+                      <p
+                        className="text-xs text-[#555]"
+                        style={{ fontFamily: "Special Elite, cursive" }}
+                      >
+                        No active story runs right now.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activeStoryMatches.map((storyMatch) => {
+                          const hostOverlay = buildStreamOverlayUrl({
+                            matchId: storyMatch.matchId,
+                            seat: "host",
+                          });
+                          return (
+                            <div
+                              key={storyMatch.matchId}
+                              className="border border-[#121212]/30 bg-white/70 px-3 py-2 flex flex-col gap-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-black uppercase tracking-wider">
+                                    {storyMatch.playerUsername}
+                                  </p>
+                                  <p className="text-[11px] text-[#666]">
+                                    Chapter {storyMatch.chapterId} • Stage {storyMatch.stageNumber}
+                                  </p>
+                                  <p className="text-[11px] text-[#555] font-mono">
+                                    {storyMatch.matchId}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`px-2 py-1 text-[10px] uppercase font-black ${
+                                    storyMatch.status === "waiting"
+                                      ? "bg-[#ffcc00] text-[#121212]"
+                                      : "bg-[#121212] text-white"
+                                  }`}
+                                >
+                                  {storyMatch.status}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <a
+                                  href={hostOverlay}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="tcg-button px-3 py-2 text-[10px]"
+                                >
+                                  Story Overlay
+                                </a>
+                                {storyMatch.retake.pipelineEnabled &&
+                                  storyMatch.retake.streamUrl && (
+                                    <a
+                                      href={storyMatch.retake.streamUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="tcg-button px-3 py-2 text-[10px]"
+                                    >
+                                      Retake Stream
+                                    </a>
+                                  )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 

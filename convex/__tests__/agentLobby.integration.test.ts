@@ -88,4 +88,29 @@ describe("agentLobby", () => {
 
     expect(snapshot.messages.some((entry) => entry.text === "Agent HTTP route message")).toBe(true);
   });
+
+  test("agent auth can create and cancel a waiting PvP lobby", async () => {
+    const t = setupTestConvex();
+    await seedAliceWithDeckAndStats(t, api);
+
+    const aliceUser = await t.run(async (ctx: any) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", ALICE.subject))
+        .first(),
+    );
+    expect(aliceUser).toBeTruthy();
+
+    const created = await t.mutation(api.agentAuth.agentCreatePvpLobby, {
+      agentUserId: aliceUser!._id,
+    });
+    expect(created.status).toBe("waiting");
+
+    const canceled = await t.mutation(api.agentAuth.agentCancelPvpLobby, {
+      agentUserId: aliceUser!._id,
+      matchId: created.matchId,
+    });
+    expect(canceled.canceled).toBe(true);
+    expect(canceled.status).toBe("canceled");
+  });
 });

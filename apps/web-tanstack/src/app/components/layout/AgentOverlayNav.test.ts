@@ -25,8 +25,7 @@ describe("AgentOverlayNav", () => {
   it("renders agent-focused navigation labels", () => {
     const html = renderToStaticMarkup(createElement(AgentOverlayNav, { active: "home" }));
     expect(html).toContain("Home");
-    expect(html).toContain("Story");
-    expect(html).toContain("Agent PvP");
+    expect(html).toContain("Lobby");
     expect(html).toContain("Watch");
   });
 

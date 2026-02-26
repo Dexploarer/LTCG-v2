@@ -235,6 +235,48 @@ export const agentCreatePvpLobby = mutation({
   },
 });
 
+export const agentCancelPvpLobby = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    matchId: v.string(),
+  },
+  returns: v.object({
+    matchId: v.string(),
+    canceled: v.boolean(),
+    status: v.literal("canceled"),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const lobby = await ctx.db
+      .query("pvpLobbies")
+      .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
+      .first();
+    if (!lobby) {
+      throw new ConvexError("PvP lobby not found.");
+    }
+    if (String(lobby.hostUserId) !== String(user._id)) {
+      throw new ConvexError("Only the lobby host can cancel this lobby.");
+    }
+    if (lobby.status !== "waiting") {
+      throw new ConvexError(`Lobby is not cancelable (status: ${lobby.status}).`);
+    }
+
+    await match.cancelMatch(ctx, { matchId: args.matchId });
+    await ctx.db.patch(lobby._id, {
+      status: "canceled",
+      endedAt: Date.now(),
+    });
+
+    return {
+      matchId: args.matchId,
+      canceled: true,
+      status: "canceled" as const,
+    };
+  },
+});
+
 export const agentStartDuel = mutation({
   args: {
     agentUserId: v.id("users"),
