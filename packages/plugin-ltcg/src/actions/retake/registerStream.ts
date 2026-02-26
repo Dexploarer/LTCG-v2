@@ -5,6 +5,7 @@
  * for subsequent streaming API calls.
  */
 
+import { getClient } from "../../client.js";
 import { getRetakeClient } from "../../retake-client.js";
 import type {
   Action,
@@ -81,13 +82,29 @@ export const registerStreamAction: Action = {
         ticker,
       });
 
-      const text = `Registered on retake.tv as "${agent.agent_name}" (agent_id: ${agent.agent_id}). Streaming is now available.`;
+      const ltcgClient = getClient();
+      const linked = await ltcgClient.linkRetakeAccount({
+        agentId: agent.agent_id,
+        userDbId: agent.userDbId,
+        agentName: agent.agent_name ?? agentName,
+        walletAddress,
+        tokenAddress: agent.token_address,
+        tokenTicker: agent.token_ticker || ticker,
+      });
+
+      const text =
+        `Registered on retake.tv as "${agent.agent_name}" (agent_id: ${agent.agent_id}). ` +
+        `Linked LunchTable pipeline: ${linked.pipelineEnabled ? "enabled" : "disabled"}.`;
       if (callback) await callback({ text, action: "REGISTER_RETAKE_STREAM" });
       return {
         success: true,
         data: {
           agent_id: agent.agent_id,
           agent_name: agent.agent_name,
+          userDbId: agent.userDbId,
+          tokenAddress: agent.token_address,
+          tokenTicker: agent.token_ticker || ticker,
+          linked,
         },
       };
     } catch (err) {

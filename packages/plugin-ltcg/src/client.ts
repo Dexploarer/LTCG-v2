@@ -6,16 +6,22 @@
  */
 
 import type {
+  AgentLobbySnapshot,
   AgentInfo,
   Chapter,
   GameCommand,
+  LobbyMessageSource,
   MatchActive,
+  PvpLobbyCancelResult,
+  PvpLobbyCreateResult,
   MatchStatus,
   MatchJoinResult,
   PlayerView,
+  RetakeLinkPayload,
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StreamAudioControl,
   SubmitActionResult,
   StoryNextStageResponse,
   StoryProgress,
@@ -128,6 +134,16 @@ export class LTCGClient {
     return this.post("/api/agent/game/start-duel", {});
   }
 
+  /** POST /api/agent/game/pvp/create — create a waiting agent PvP lobby */
+  async createPvpLobby(): Promise<PvpLobbyCreateResult> {
+    return this.post("/api/agent/game/pvp/create", {});
+  }
+
+  /** POST /api/agent/game/pvp/cancel — cancel a waiting lobby owned by this agent */
+  async cancelPvpLobby(matchId: string): Promise<PvpLobbyCancelResult> {
+    return this.post("/api/agent/game/pvp/cancel", { matchId });
+  }
+
   /** POST /api/agent/game/join — join a waiting match as away player */
   async joinMatch(
     matchId: string,
@@ -221,6 +237,61 @@ export class LTCGClient {
       senderName: opts?.senderName,
       source: opts?.source ?? "other",
     });
+  }
+
+  // ── Agent Lobby + Retake ────────────────────────────────────
+
+  /** GET /api/agent/lobby/snapshot — fetch open lobbies + chat feed. */
+  async getLobbySnapshot(limit = 80): Promise<AgentLobbySnapshot> {
+    const qs = `limit=${Math.max(1, Math.floor(limit))}`;
+    return this.get(`/api/agent/lobby/snapshot?${qs}`);
+  }
+
+  /** POST /api/agent/lobby/chat — send chat into the global agent lobby. */
+  async postLobbyChat(
+    text: string,
+    source: LobbyMessageSource = "agent",
+  ): Promise<{ ok: boolean; messageId: string }> {
+    return this.post("/api/agent/lobby/chat", { text, source });
+  }
+
+  /** POST /api/agent/retake/link — persist retake linkage with wallet integrity checks. */
+  async linkRetakeAccount(
+    payload: RetakeLinkPayload,
+  ): Promise<{
+    linked: boolean;
+    pipelineEnabled: boolean;
+    streamUrl: string;
+    tokenAddress: string | null;
+    tokenTicker: string;
+  }> {
+    return this.post("/api/agent/retake/link", payload);
+  }
+
+  /** POST /api/agent/retake/pipeline — toggle Retake output pipeline. */
+  async setRetakePipeline(
+    enabled: boolean,
+  ): Promise<{ pipelineEnabled: boolean; hasRetakeAccount: boolean }> {
+    return this.post("/api/agent/retake/pipeline", { enabled });
+  }
+
+  // ── Stream audio authority ───────────────────────────────────
+
+  /** GET /api/agent/stream/audio — read current per-agent audio control state. */
+  async getStreamAudioControl(): Promise<StreamAudioControl> {
+    return this.get("/api/agent/stream/audio");
+  }
+
+  /** POST /api/agent/stream/audio — update per-agent overlay audio control state. */
+  async setStreamAudioControl(
+    patch: Partial<
+      Pick<
+        StreamAudioControl,
+        "playbackIntent" | "musicVolume" | "sfxVolume" | "musicMuted" | "sfxMuted"
+      >
+    >,
+  ): Promise<StreamAudioControl> {
+    return this.post("/api/agent/stream/audio", patch);
   }
 
   // ── HTTP helpers ─────────────────────────────────────────────

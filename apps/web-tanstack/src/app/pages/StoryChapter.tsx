@@ -12,7 +12,7 @@ import {
   useStory,
   type Stage,
 } from "@/components/story";
-import { TrayNav } from "@/components/layout/TrayNav";
+import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { STAGES_BG, QUESTIONS_LABEL } from "@/lib/blobUrls";
 import { normalizeMatchId } from "@/lib/matchIds";
@@ -46,7 +46,7 @@ export function StoryChapter() {
       <StoryChapterInner />
       <DialogueBox />
       <BattleTransition />
-      <TrayNav />
+      <AgentOverlayNav active="lobby" />
     </StoryProvider>
   );
 }

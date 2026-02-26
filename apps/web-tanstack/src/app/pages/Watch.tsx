@@ -1,413 +1,274 @@
-import { useState, useEffect, useRef } from "react";
-import * as Sentry from "@sentry/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { TrayNav } from "@/components/layout/TrayNav";
-import {
-  getLiveStreams,
-  getRetakeConfig,
-  streamUrl,
-  type LiveStreamer,
-} from "@/lib/retake";
-import {
-  WATCH_BG,
-  MENU_TEXTURE,
-  MILUNCHLADY_PFP,
-  RETRO_TV,
-  STREAM_OVERLAY,
-  TAPE,
-  DECO_PILLS,
-} from "@/lib/blobUrls";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { StickerBadge } from "@/components/ui/StickerBadge";
-import { SpeechBubble } from "@/components/ui/SpeechBubble";
-import { SpeedLines } from "@/components/ui/SpeedLines";
-import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
+import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
+import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
+import { AmbientBackground } from "@/components/ui/AmbientBackground";
+import { LANDING_BG, MENU_TEXTURE, STREAM_OVERLAY } from "@/lib/blobUrls";
+import { buildStreamOverlayUrl, type StreamOverlaySeat } from "@/lib/streamOverlayParams";
 
-const LUNCHTABLE_AGENT = "milunchlady";
-const RETAKE_CONFIG = getRetakeConfig();
-
-const emptyStateScatter = [
-  { src: TAPE, size: 64, opacity: 0.2, rotation: 15 },
-  { src: DECO_PILLS, size: 48, opacity: 0.15, rotation: -10 },
-  { src: TAPE, size: 52, opacity: 0.18, rotation: -25 },
-  { src: DECO_PILLS, size: 40, opacity: 0.12, rotation: 30 },
-];
-
-/** Film-strip border CSS for the horizontal scroll container */
-const filmStripStyles = `
-  .film-strip-container {
-    position: relative;
-  }
-  .film-strip-container::before,
-  .film-strip-container::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 12px;
-    z-index: 2;
-    pointer-events: none;
-    background-image: repeating-linear-gradient(
-      90deg,
-      #121212 0px,
-      #121212 10px,
-      transparent 10px,
-      transparent 16px
-    );
-    opacity: 0.25;
-  }
-  .film-strip-container::before {
-    top: 0;
-  }
-  .film-strip-container::after {
-    bottom: 0;
-  }
-`;
-
-function StreamCardReveal({ children, index }: { children: React.ReactNode; index: number }) {
-  const { ref, inView, delay } = useScrollReveal({ index, threshold: 0.1 });
-  return (
-    <div
-      ref={ref}
-      style={{
-        opacity: inView ? 1 : 0,
-        transform: inView ? "translateY(0) scale(1)" : "translateY(16px) scale(0.95)",
-        transition: `opacity 0.4s ease ${delay}s, transform 0.4s ease ${delay}s`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
+type PvpLobbySummary = {
+  matchId: string;
+  hostUserId: string;
+  hostUsername: string;
+  visibility: "public" | "private";
+  joinCode: string | null;
+  status: "waiting" | "active" | "ended" | "canceled";
+  createdAt: number;
+  activatedAt: number | null;
+  endedAt: number | null;
+  pongEnabled: boolean;
+  redemptionEnabled: boolean;
+};
 
 export function Watch() {
-  const [streams, setStreams] = useState<LiveStreamer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const mountedRef = useRef(true);
+  const [matchId, setMatchId] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [seat, setSeat] = useState<StreamOverlaySeat>("host");
+  const [copiedMessage, setCopiedMessage] = useState("");
+
+  const openLobbies = useConvexQuery(apiAny.game.listPublicPvpLobbies, { includeActive: true }) as
+    | PvpLobbySummary[]
+    | undefined;
+
+  const sortedOpenLobbies = useMemo(
+    () => [...(openLobbies ?? [])].sort((a, b) => b.createdAt - a.createdAt),
+    [openLobbies],
+  );
+
+  const normalizedMatchId = matchId.trim();
+  const normalizedApiKey = apiKey.trim();
+  const canOpenOverlay = normalizedMatchId.length > 0;
+
+  const overlayPath = useMemo(
+    () =>
+      buildStreamOverlayUrl({
+        matchId: normalizedMatchId || null,
+        apiKey: normalizedApiKey || null,
+        seat,
+      }),
+    [normalizedApiKey, normalizedMatchId, seat],
+  );
+
+  const openOverlay = useCallback(() => {
+    if (!canOpenOverlay || typeof window === "undefined") return;
+    window.open(overlayPath, "_blank", "noopener,noreferrer");
+  }, [canOpenOverlay, overlayPath]);
+
+  const copyOverlayUrl = useCallback(async () => {
+    if (!canOpenOverlay) return;
+    const absoluteUrl =
+      typeof window === "undefined" ? overlayPath : `${window.location.origin}${overlayPath}`;
+
+    try {
+      await navigator.clipboard.writeText(absoluteUrl);
+      setCopiedMessage("Overlay URL copied.");
+    } catch {
+      setCopiedMessage("Clipboard unavailable.");
+    }
+  }, [canOpenOverlay, overlayPath]);
 
   useEffect(() => {
-    mountedRef.current = true;
-
-    async function fetchStreams() {
-      try {
-        const live = await getLiveStreams(RETAKE_CONFIG.apiUrl);
-        if (mountedRef.current) {
-          setStreams(live);
-          setError(false);
-        }
-      } catch (err) {
-        Sentry.captureException(err);
-        if (mountedRef.current) setError(true);
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    }
-
-    fetchStreams();
-    const interval = setInterval(fetchStreams, 30_000);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  // Separate our agent from others
-  const list = Array.isArray(streams) ? streams : [];
-  const ourAgent = list.find(
-    (s) => s.username?.toLowerCase() === LUNCHTABLE_AGENT.toLowerCase(),
-  );
-  const otherStreams = list.filter(
-    (s) => s.username?.toLowerCase() !== LUNCHTABLE_AGENT.toLowerCase(),
-  );
+    if (!copiedMessage) return;
+    const timeout = setTimeout(() => setCopiedMessage(""), 2200);
+    return () => clearTimeout(timeout);
+  }, [copiedMessage]);
 
   return (
     <div
       className="min-h-screen relative bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url('${WATCH_BG}')` }}
+      style={{ backgroundImage: `url('${LANDING_BG}')` }}
     >
-      <style>{filmStripStyles}</style>
       <div className="absolute inset-0 bg-black/75" />
+      <AmbientBackground variant="dark" />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-8 py-10 pb-24">
-        {/* Header with SpeedLines behind */}
-        <div className="text-center mb-10 relative">
-          {/* Speed lines behind the title */}
-          <div className="absolute inset-0 -inset-x-20 -inset-y-10 pointer-events-none overflow-hidden">
-            <SpeedLines intensity={1} focal={{ x: "50%", y: "50%" }} />
-          </div>
-
+      <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-8 py-8 pb-28">
+        <header className="text-center mb-6">
           <motion.h1
-            className="relative z-10 text-4xl md:text-6xl font-black uppercase tracking-tighter text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)] mb-2"
+            className="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]"
             style={{ fontFamily: "Outfit, sans-serif" }}
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            Watch Live
+            Spectator Overlay
           </motion.h1>
           <motion.p
-            className="relative z-10 text-[#ffcc00] text-sm md:text-base"
+            className="text-[#ffcc00] text-sm mt-2"
             style={{ fontFamily: "Special Elite, cursive" }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
           >
-            AI agents streaming LunchTable on retake.tv
+            Humans watch here. Agents play in Story and PvP arenas.
           </motion.p>
-        </div>
+        </header>
 
-        {/* Featured: LunchLady with RETRO_TV frame */}
         <motion.section
-          className="mb-12"
-          initial={{ opacity: 0, x: -30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+          className="relative mb-5 p-5 border-2 border-[#121212]"
+          style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
         >
+          <div className="absolute inset-0 bg-white/84 pointer-events-none" />
           <div className="relative">
-            {/* RETRO_TV decorative frame */}
-            <div className="absolute -inset-4 md:-inset-6 pointer-events-none z-0">
-              <img
-                src={RETRO_TV}
-                alt=""
-                className="w-full h-full object-contain opacity-20"
-                draggable={false}
+            <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-3">
+              Open Overlay by Match ID
+            </p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-2">
+              <input
+                type="text"
+                value={matchId}
+                onChange={(event) => setMatchId(event.target.value)}
+                placeholder="match_123..."
+                className="border-2 border-[#121212] bg-white px-3 py-2 text-sm font-mono"
               />
+              <select
+                value={seat}
+                onChange={(event) => setSeat(event.target.value as StreamOverlaySeat)}
+                className="border-2 border-[#121212] bg-white px-3 py-2 text-sm font-bold uppercase"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="host">Host Seat</option>
+                <option value="away">Away Seat</option>
+              </select>
+              <button
+                type="button"
+                onClick={openOverlay}
+                disabled={!canOpenOverlay}
+                className="tcg-button-primary px-4 py-2 text-xs disabled:opacity-60"
+              >
+                Open Overlay
+              </button>
             </div>
 
-            <div
-              className="relative overflow-hidden z-10"
-              style={{
-                backgroundImage: `url('${MENU_TEXTURE}')`,
-                backgroundSize: "512px",
-              }}
-            >
-              <div className="absolute inset-0 bg-white/70 pointer-events-none" />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="Optional API key"
+                className="border-2 border-[#121212] bg-white px-3 py-2 text-xs font-mono flex-1 min-w-[220px]"
+              />
+              <button
+                type="button"
+                onClick={copyOverlayUrl}
+                disabled={!canOpenOverlay}
+                className="tcg-button px-4 py-2 text-xs disabled:opacity-60"
+              >
+                Copy URL
+              </button>
+              {copiedMessage && (
+                <span className="text-[11px] text-[#121212] font-bold">{copiedMessage}</span>
+              )}
+            </div>
 
-              <div className="relative flex flex-col md:flex-row items-center gap-6 p-6 md:p-8">
-                {/* Agent avatar */}
-                <div className="shrink-0 w-28 h-28 md:w-36 md:h-36 border-4 border-[#121212] bg-[#121212]/10 overflow-hidden">
-                  <img
-                    src={MILUNCHLADY_PFP}
-                    alt={LUNCHTABLE_AGENT}
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
+            <p className="text-[11px] text-[#555] mt-2">
+              URL preview: <span className="font-mono break-all">{overlayPath}</span>
+            </p>
+
+            {canOpenOverlay ? (
+              <div className="mt-4 border-2 border-[#121212] bg-black overflow-hidden">
+                <div className="bg-[#121212] text-white text-[10px] uppercase tracking-wider px-3 py-1.5 font-bold">
+                  Live Preview
                 </div>
-
-                <div className="flex-1 text-center md:text-left">
-                  <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
-                    <h2
-                      className="text-2xl md:text-3xl font-black uppercase tracking-tight text-[#121212]"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {LUNCHTABLE_AGENT}
-                    </h2>
-                    {ourAgent ? (
-                      <StickerBadge label="LIVE" variant="stamp" pulse />
-                    ) : (
-                      <span
-                        className="inline-flex items-center gap-1.5 bg-[#121212]/20 text-[#121212]/60 text-xs font-black px-2.5 py-1 uppercase tracking-wider"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        Offline
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Description in SpeechBubble */}
-                  <div className="mb-4">
-                    <SpeechBubble variant="speech" tail="left">
-                      The official LunchTable AI agent — plays, streams, and
-                      trash-talks on retake.tv
-                    </SpeechBubble>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                    <a
-                      href={streamUrl(LUNCHTABLE_AGENT)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#121212] text-white font-black uppercase tracking-wider text-sm transition-all hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(255,204,0,0.2)]"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <span className="text-lg">&#9655;</span>
-                      {ourAgent ? "Watch Now" : "Visit Channel"}
-                    </a>
-
-                    {ourAgent?.viewer_count != null && (
-                      <span
-                        className="text-sm text-[#121212]/50"
-                        style={{ fontFamily: "Special Elite, cursive" }}
-                      >
-                        {ourAgent.viewer_count} watching
-                      </span>
-                    )}
-                  </div>
-                </div>
+                <iframe
+                  title="Overlay Preview"
+                  src={overlayPath}
+                  className="w-full aspect-video bg-black"
+                  sandbox="allow-scripts allow-same-origin"
+                />
               </div>
-            </div>
+            ) : (
+              <div className="mt-4 border-2 border-dashed border-[#121212]/40 p-4 text-center">
+                <p className="text-[11px] text-[#666]" style={{ fontFamily: "Special Elite, cursive" }}>
+                  Enter a match ID to preview the overlay feed.
+                </p>
+              </div>
+            )}
           </div>
         </motion.section>
 
-        {/* Divider */}
-        <div className="flex items-center gap-4 mb-8">
-          <div className="flex-1 h-px bg-white/20" />
-          <span
-            className="text-white/40 text-xs uppercase tracking-widest"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Other Streams
-          </span>
-          <div className="flex-1 h-px bg-white/20" />
-        </div>
-
-        {/* Live streams — film-strip horizontal scroll */}
-        {loading && list.length === 0 ? (
-          <div className="text-center py-16">
-            <div
-              className="text-white/30 text-sm animate-pulse"
-              style={{ fontFamily: "Special Elite, cursive" }}
-            >
-              Checking retake.tv for live streams...
-            </div>
-          </div>
-        ) : error && list.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-4xl mb-4 opacity-20">&#9888;</div>
-            <p
-              className="text-white/40 text-sm mb-4"
-              style={{ fontFamily: "Special Elite, cursive" }}
-            >
-              retake.tv is migrating to Solana — streams will be back soon
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.06 }}
+          className="relative p-5 border-2 border-[#121212]"
+          style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
+        >
+          <div className="absolute inset-0 bg-white/84 pointer-events-none" />
+          <div className="relative">
+            <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-3">
+              Open Public Agent Arenas
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="text-[#ffcc00]/60 hover:text-[#ffcc00] text-xs uppercase tracking-wider transition-colors"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Retry
-            </button>
-          </div>
-        ) : otherStreams.length === 0 ? (
-          <div className="relative text-center py-16">
-            {/* Decorative scatter for empty state */}
-            <DecorativeScatter elements={emptyStateScatter} seed={99} density={6} />
-            <div className="relative z-10">
-              <div className="text-5xl mb-4 opacity-20">&#128250;</div>
-              <p
-                className="text-white/50 text-sm mb-2"
-                style={{ fontFamily: "Special Elite, cursive" }}
-              >
-                No other agents are streaming right now
-              </p>
-              <p
-                className="text-white/30 text-xs"
-                style={{ fontFamily: "Special Elite, cursive" }}
-              >
-                Check back later or start your own agent stream
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="film-strip-container py-4">
-            <div
-              className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
-              style={{ scrollbarWidth: "thin", scrollbarColor: "#ffcc00 transparent" }}
-            >
-              {otherStreams.map((s, i) => (
-                <StreamCardReveal key={s.user_id} index={i}>
-                  <a
-                    href={streamUrl(s.username)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group relative block overflow-hidden transition-all hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(255,204,0,0.15)] snap-start min-w-[280px] shrink-0"
-                    style={{
-                      backgroundImage: `url('${MENU_TEXTURE}')`,
-                      backgroundSize: "512px",
-                    }}
-                  >
-                    <div className="absolute inset-0 bg-white/70 group-hover:bg-white/80 pointer-events-none transition-colors" />
 
-                    {/* STREAM_OVERLAY — semi-transparent overlay */}
+            {openLobbies === undefined ? (
+              <p className="text-xs text-[#555]" style={{ fontFamily: "Special Elite, cursive" }}>
+                Loading arenas...
+              </p>
+            ) : sortedOpenLobbies.length === 0 ? (
+              <p className="text-xs text-[#555]" style={{ fontFamily: "Special Elite, cursive" }}>
+                No public arenas live right now.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {sortedOpenLobbies.map((lobby) => {
+                  const hostOverlayPath = buildStreamOverlayUrl({
+                    matchId: lobby.matchId,
+                    seat: "host",
+                  });
+                  const awayOverlayPath = buildStreamOverlayUrl({
+                    matchId: lobby.matchId,
+                    seat: "away",
+                  });
+
+                  return (
                     <div
-                      className="absolute inset-0 pointer-events-none opacity-15 group-hover:opacity-20 transition-opacity z-[1]"
-                      style={{
-                        backgroundImage: `url('${STREAM_OVERLAY}')`,
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                        mixBlendMode: "multiply",
-                      }}
-                    />
-
-                    <div className="relative p-5 z-[2]">
-                      <div className="flex items-center gap-3 mb-2">
-                        {s.avatar_url ? (
-                          <img
-                            src={s.avatar_url}
-                            alt={s.username}
-                            className="w-10 h-10 border-2 border-[#121212] object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 border-2 border-[#121212] bg-[#121212]/10 flex items-center justify-center text-lg">
-                            &#9881;
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3
-                            className="text-base font-black uppercase tracking-tight text-[#121212] truncate"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {s.username}
-                          </h3>
-                        </div>
-                        <StickerBadge label="LIVE" variant="stamp" pulse />
+                      key={lobby.matchId}
+                      className="border border-[#121212]/30 bg-white/70 px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold truncate">Controller: {lobby.hostUsername}</p>
+                        <p className="text-[11px] text-[#555] font-mono truncate">{lobby.matchId}</p>
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-[#121212]/50">
-                        {s.viewer_count != null && (
-                          <span style={{ fontFamily: "Special Elite, cursive" }}>
-                            {s.viewer_count} watching
-                          </span>
-                        )}
-                        {s.ticker && (
-                          <span
-                            className="font-bold uppercase"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            ${s.ticker}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={hostOverlayPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tcg-button px-3 py-2 text-[10px]"
+                        >
+                          Host View
+                        </a>
+                        <a
+                          href={awayOverlayPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tcg-button px-3 py-2 text-[10px]"
+                        >
+                          Away View
+                        </a>
                       </div>
                     </div>
-                  </a>
-                </StreamCardReveal>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Stream your agent CTA */}
-        <div className="mt-16 text-center">
-          <div className="w-16 h-px bg-white/10 mx-auto mb-8" />
-          <p
-            className="text-white/30 text-xs mb-3"
-            style={{ fontFamily: "Special Elite, cursive" }}
-          >
-            Got an ElizaOS agent? Stream it on retake.tv
-          </p>
-          <a
-            href="https://retake.tv"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-6 py-2.5 border border-white/20 text-white/60 hover:text-[#ffcc00] hover:border-[#ffcc00]/30 text-xs font-bold uppercase tracking-wider transition-all"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Start Streaming on retake.tv
-          </a>
-        </div>
+        </motion.section>
       </div>
 
-      <TrayNav />
+      <div
+        className="absolute inset-0 pointer-events-none opacity-15"
+        style={{
+          backgroundImage: `url('${STREAM_OVERLAY}')`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          mixBlendMode: "screen",
+        }}
+      />
+
+      <AgentOverlayNav active="watch" />
     </div>
   );
 }

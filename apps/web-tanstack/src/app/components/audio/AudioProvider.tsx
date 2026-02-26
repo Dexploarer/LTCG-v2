@@ -25,6 +25,27 @@ const VALID_AUDIO_PLAYBACK_INTENTS = new Set<AudioPlaybackIntent>([
   "stopped",
 ]);
 
+function normalizeSearch(search: string): string {
+  if (!search) return "";
+  return search.startsWith("?") ? search.slice(1) : search;
+}
+
+function parseOptionalBoolean(value: string | null): boolean | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return null;
+}
+
+export function shouldAutoUnlockAudioForLocation(pathname: string, search = ""): boolean {
+  const cleanPath = pathname.trim().toLowerCase();
+  const params = new URLSearchParams(normalizeSearch(search));
+  const explicit = parseOptionalBoolean(params.get("audioAutoplay"));
+  if (explicit !== null) return explicit;
+  return cleanPath === "/stream-overlay" || cleanPath.startsWith("/stream-overlay/");
+}
+
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
@@ -195,6 +216,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     audio.preload = "metadata";
     audio.crossOrigin = "anonymous";
     musicAudioRef.current = audio;
+
+    if (typeof window !== "undefined") {
+      const autoUnlock = shouldAutoUnlockAudioForLocation(
+        window.location.pathname,
+        window.location.search,
+      );
+      unlockedRef.current = autoUnlock;
+      if (autoUnlock) {
+        playbackIntentRef.current = "playing";
+      }
+    }
+
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     audio.addEventListener("play", onPlay);

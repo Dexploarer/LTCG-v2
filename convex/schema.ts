@@ -7,9 +7,26 @@ export default defineSchema(
       privyId: v.string(),
       username: v.string(),
       email: v.optional(v.string()),
+      walletAddress: v.optional(v.string()),
+      walletType: v.optional(v.string()),
       name: v.optional(v.string()),
       telegramUserId: v.optional(v.string()),
       avatarPath: v.optional(v.string()),
+      retakeOptInStatus: v.optional(
+        v.union(
+          v.literal("pending"),
+          v.literal("declined"),
+          v.literal("accepted"),
+        ),
+      ),
+      retakeAgentId: v.optional(v.string()),
+      retakeUserDbId: v.optional(v.string()),
+      retakeAgentName: v.optional(v.string()),
+      retakeWalletAddress: v.optional(v.string()),
+      retakeTokenAddress: v.optional(v.string()),
+      retakeTokenTicker: v.optional(v.string()),
+      retakePipelineEnabled: v.optional(v.boolean()),
+      retakeLinkedAt: v.optional(v.number()),
       // String ID referencing a userDecks doc in the cards component.
       // Stored as string because host schema can't reference component table types.
       activeDeckId: v.optional(v.string()),
@@ -17,8 +34,10 @@ export default defineSchema(
       cliqueId: v.optional(v.id("cliques")),
       cliqueRole: v.optional(v.union(v.literal("member"), v.literal("leader"), v.literal("founder"))),
       createdAt: v.number(),
+      updatedAt: v.optional(v.number()),
     })
       .index("by_privyId", ["privyId"])
+      .index("by_walletAddress", ["walletAddress"])
       .index("by_username", ["username"])
       .index("by_clique", ["cliqueId"])
       .index("by_telegramUserId", ["telegramUserId"]),
@@ -290,6 +309,35 @@ export default defineSchema(
     })
       .index("by_agent", ["agentId"])
       .index("by_agent_created", ["agentId", "createdAt"]),
+
+    // Authoritative per-agent stream audio state used by spectator overlays
+    // and retake pipeline output controls.
+    streamAudioControls: defineTable({
+      agentId: v.id("agents"),
+      playbackIntent: v.union(
+        v.literal("playing"),
+        v.literal("paused"),
+        v.literal("stopped"),
+      ),
+      musicVolume: v.number(),
+      sfxVolume: v.number(),
+      musicMuted: v.boolean(),
+      sfxMuted: v.boolean(),
+      updatedAt: v.number(),
+    })
+      .index("by_agentId", ["agentId"])
+      .index("by_updatedAt", ["updatedAt"]),
+
+    // Global agent lobby chat for coordinating story/pvp sessions and stream links.
+    agentLobbyMessages: defineTable({
+      userId: v.id("users"),
+      senderName: v.string(),
+      text: v.string(),
+      source: v.union(v.literal("agent"), v.literal("retake"), v.literal("system")),
+      createdAt: v.number(),
+    })
+      .index("by_createdAt", ["createdAt"])
+      .index("by_user", ["userId"]),
 
     // Agent telemetry — per-agent win/loss and match statistics
     agentStats: defineTable({

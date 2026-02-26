@@ -18,12 +18,12 @@ const ROUTE_LABELS: Record<string, string> = {
   settings: "Settings",
   leaderboard: "Leaderboard",
   watch: "Watch",
+  "agent-lobby": "Agent Lobby",
   onboarding: "Onboarding",
   about: "About",
   privacy: "Privacy",
   terms: "Terms",
   token: "$LUNCH",
-  "agent-dev": "Agent Dev",
   duel: "Duel",
 };
 
@@ -37,15 +37,21 @@ const ROUTE_ACCENT: Record<string, string> = {
   profile: "#38a169",
   leaderboard: "#d69e2e",
   watch: "#e53e3e",
+  "agent-lobby": "#ffcc00",
   token: "#ffcc00",
 };
 
 /** Pages where the breadcrumb should NOT render. */
 const HIDDEN_ROUTES = new Set(["/", "/onboarding"]);
+const OVERLAY_ROUTE_PREFIXES = ["/story", "/pvp", "/agent-lobby", "/watch", "/stream-overlay"];
 
 /** Full-screen views that shouldn't show a breadcrumb. */
 function isFullscreenRoute(pathname: string): boolean {
-  return pathname.startsWith("/play/");
+  if (pathname.startsWith("/play/")) return true;
+  return OVERLAY_ROUTE_PREFIXES.some(
+    (routePrefix) =>
+      pathname === routePrefix || pathname.startsWith(`${routePrefix}/`),
+  );
 }
 
 function buildCrumbs(pathname: string): Crumb[] {

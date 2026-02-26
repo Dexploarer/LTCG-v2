@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@/router/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
-import { TrayNav } from "@/components/layout/TrayNav";
+import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { LANDING_BG, MENU_TEXTURE } from "@/lib/blobUrls";
+import { buildStreamOverlayUrl } from "@/lib/streamOverlayParams";
 
 type PvpLobbySummary = {
   matchId: string;
@@ -98,6 +99,14 @@ export function Pvp() {
     () => [...(openLobbies ?? [])].sort((a, b) => b.createdAt - a.createdAt),
     [openLobbies],
   );
+  const getOverlayUrl = useCallback(
+    (matchId: string, seat: "host" | "away") =>
+      buildStreamOverlayUrl({
+        matchId,
+        seat,
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (myLobby?.status === "active") {
@@ -140,8 +149,8 @@ export function Pvp() {
         })) as CreateResult;
         setMessage(
           visibility === "private"
-            ? `Private lobby ready. Join code: ${created.joinCode ?? "n/a"}`
-            : "Public lobby created.",
+            ? `Private arena ready. Join code: ${created.joinCode ?? "n/a"}`
+            : "Public arena created.",
         );
         clearFlash();
       } catch (err: any) {
@@ -150,7 +159,7 @@ export function Pvp() {
         setBusyKey(null);
       }
     },
-    [clearFlash, createPvpLobby, resetNotices],
+    [clearFlash, createPvpLobby, pongEnabled, redemptionEnabled, resetNotices],
   );
 
   const handleJoinLobby = useCallback(
@@ -196,7 +205,7 @@ export function Pvp() {
     setBusyKey("cancel");
     try {
       await cancelPvpLobby({ matchId: myLobby.matchId });
-      setMessage("Lobby canceled.");
+      setMessage("Arena canceled.");
       clearFlash();
     } catch (err: any) {
       setError(err?.message ?? "Failed to cancel lobby.");
@@ -232,7 +241,7 @@ export function Pvp() {
             initial={{ opacity: 0, y: -15 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            PvP Lobby
+            Agent vs Agent PvP
           </motion.h1>
           <motion.p
             className="text-[#ffcc00] text-sm mt-2"
@@ -241,7 +250,7 @@ export function Pvp() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.15 }}
           >
-            Human vs Human duels + Human-hosted invites for Milady agents
+            Keep humans in spectator mode. Agents handle both seats.
           </motion.p>
         </header>
 
@@ -262,7 +271,7 @@ export function Pvp() {
           <div className="absolute inset-0 bg-white/82 pointer-events-none" />
           <div className="relative">
             <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-3">
-              Create Lobby
+              Create Agent Lobby
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -271,7 +280,7 @@ export function Pvp() {
                 onClick={() => handleCreateLobby("public")}
                 className="tcg-button-primary px-4 py-2 text-xs disabled:opacity-60"
               >
-                {busyKey === "create:public" ? "Creating..." : "Create Public Lobby"}
+                {busyKey === "create:public" ? "Creating..." : "Create Public Arena"}
               </button>
               <button
                 type="button"
@@ -279,9 +288,12 @@ export function Pvp() {
                 onClick={() => handleCreateLobby("private")}
                 className="tcg-button px-4 py-2 text-xs disabled:opacity-60"
               >
-                {busyKey === "create:private" ? "Creating..." : "Create Private Lobby"}
+                {busyKey === "create:private" ? "Creating..." : "Create Private Arena"}
               </button>
             </div>
+            <p className="text-[11px] text-[#555] mt-2">
+              Share the match ID with autonomous agents. Humans can watch through overlay links.
+            </p>
 
             {/* House rules toggles */}
             <div className="mt-3 flex flex-wrap gap-4">
@@ -309,7 +321,7 @@ export function Pvp() {
 
             {!canCreate && (
               <p className="text-[11px] text-[#555] mt-2">
-                You already have a waiting/active lobby below.
+                You already have a waiting/active arena below.
               </p>
             )}
           </div>
@@ -326,7 +338,7 @@ export function Pvp() {
           <div className="absolute inset-0 bg-white/82 pointer-events-none" />
           <div className="relative">
             <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-3">
-              Join Private Lobby
+              Join Agent Lobby by Code
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
@@ -343,7 +355,7 @@ export function Pvp() {
                 disabled={busyKey !== null}
                 className="tcg-button px-4 py-2 text-xs disabled:opacity-60"
               >
-                {busyKey === "join:code" ? "Joining..." : "Join by Code"}
+                {busyKey === "join:code" ? "Joining..." : "Join Arena"}
               </button>
             </div>
           </div>
@@ -370,7 +382,7 @@ export function Pvp() {
                   <span className="absolute w-full h-full rounded-full border border-[#ffcc00]/40 animate-radar-ping" />
                   <span className="absolute w-full h-full rounded-full border border-[#ffcc00]/30 animate-radar-ping" style={{ animationDelay: "0.5s" }} />
                 </span>
-                Your Waiting Lobby
+                Your Waiting Agent Arena
               </p>
               <p className="text-xs text-[#444] mb-1">
                 Visibility: <span className="font-bold uppercase">{myLobby.visibility}</span>
@@ -406,11 +418,27 @@ export function Pvp() {
                   disabled={busyKey !== null}
                   className="tcg-button-primary px-3 py-2 text-[10px] disabled:opacity-60"
                 >
-                  {busyKey === "cancel" ? "Canceling..." : "Cancel Lobby"}
+                  {busyKey === "cancel" ? "Canceling..." : "Cancel Arena"}
                 </button>
+                <a
+                  href={getOverlayUrl(myLobby.matchId, "host")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tcg-button px-3 py-2 text-[10px]"
+                >
+                  Watch Host Overlay
+                </a>
+                <a
+                  href={getOverlayUrl(myLobby.matchId, "away")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tcg-button px-3 py-2 text-[10px]"
+                >
+                  Watch Away Overlay
+                </a>
               </div>
               <p className="text-[10px] text-[#555] mt-2">
-                Agents can join this lobby via <span className="font-mono">JOIN_LTCG_MATCH</span> using the match ID.
+                Agents can join via <span className="font-mono">JOIN_LTCG_MATCH</span> using this match ID.
               </p>
             </div>
           </motion.section>
@@ -427,10 +455,10 @@ export function Pvp() {
           <div className="absolute inset-0 bg-white/82 pointer-events-none" />
           <div className="relative">
             <p className="text-xs uppercase tracking-wider font-bold text-[#121212] mb-3">
-              Open Public Lobbies
+              Open Agent Arenas
             </p>
             {sortedOpenLobbies.length === 0 ? (
-              <p className="text-xs text-[#555]">No public lobbies are open right now.</p>
+              <p className="text-xs text-[#555]">No public agent arenas are open right now.</p>
             ) : (
               <div className="space-y-2">
                 <AnimatePresence mode="popLayout">
@@ -446,7 +474,7 @@ export function Pvp() {
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-bold truncate">
-                          Host: {lobby.hostUsername}
+                          Controller: {lobby.hostUsername}
                         </p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <p className="text-[11px] text-[#555] font-mono truncate">
@@ -464,16 +492,26 @@ export function Pvp() {
                           )}
                         </div>
                       </div>
-                      <motion.button
-                        type="button"
-                        onClick={() => handleJoinLobby(lobby.matchId)}
-                        disabled={busyKey !== null}
-                        className="tcg-button px-3 py-2 text-[10px] shrink-0 disabled:opacity-60"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {busyKey === `join:${lobby.matchId}` ? "Joining..." : "Join"}
-                      </motion.button>
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={getOverlayUrl(lobby.matchId, "host")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tcg-button px-3 py-2 text-[10px] shrink-0"
+                        >
+                          Watch
+                        </a>
+                        <motion.button
+                          type="button"
+                          onClick={() => handleJoinLobby(lobby.matchId)}
+                          disabled={busyKey !== null}
+                          className="tcg-button-primary px-3 py-2 text-[10px] shrink-0 disabled:opacity-60"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          {busyKey === `join:${lobby.matchId}` ? "Joining..." : "Join"}
+                        </motion.button>
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -493,7 +531,7 @@ export function Pvp() {
         )}
       </div>
 
-      <TrayNav />
+      <AgentOverlayNav active="lobby" />
     </div>
   );
 }

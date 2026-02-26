@@ -18,6 +18,7 @@ export interface AutonomyStatus {
 
 const MAX_TURNS = 150;
 const POLL_DELAY_MS = 1500;
+const PVP_LOBBY_WAIT_MS = 90_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -216,14 +217,66 @@ export class LTCGAutonomyController {
       if (!(await this.waitIfPausedOrStopped())) return;
       await ensureDeckSelected();
 
-      const duel = await client.startDuel();
-      await client.setMatchWithSeat(duel.matchId);
+      const snapshot = await client.getLobbySnapshot();
+      const joinableLobby = snapshot.openLobbies
+        .filter(
+          (lobby) =>
+            lobby.status === "waiting" &&
+            lobby.visibility === "public" &&
+            lobby.hostUserId !== snapshot.currentUser.userId,
+        )
+        .sort((a, b) => a.createdAt - b.createdAt)[0];
 
-      const seat = (client.currentSeat ?? "host") as MatchActive["seat"];
-      await this.playMatchUntilGameOver(duel.matchId, seat);
+      if (joinableLobby) {
+        const joined = await client.joinMatch(joinableLobby.matchId);
+        await client.setMatchWithSeat(joined.matchId);
 
+        const joinSeat = (client.currentSeat ?? "away") as MatchActive["seat"];
+        await this.playMatchUntilGameOver(joined.matchId, joinSeat);
+        if (this.stopRequested) return;
+        client.setMatch(null);
+        if (!this.continuous) return;
+        continue;
+      }
+
+      const created = await client.createPvpLobby();
+      await client.setMatchWithSeat(created.matchId);
+
+      const waitStart = Date.now();
+      let isActive = false;
+      while (Date.now() - waitStart < PVP_LOBBY_WAIT_MS) {
+        if (!(await this.waitIfPausedOrStopped())) {
+          break;
+        }
+
+        const status = await client.getMatchStatus(created.matchId);
+        if (status.status === "active") {
+          isActive = true;
+          break;
+        }
+        if (status.status === "ended" || status.status === "canceled") {
+          break;
+        }
+        await sleep(POLL_DELAY_MS);
+      }
+
+      if (!isActive) {
+        try {
+          const status = await client.getMatchStatus(created.matchId);
+          if (status.status === "waiting") {
+            await client.cancelPvpLobby(created.matchId);
+          }
+        } catch {
+          // Best-effort cleanup; continue loop regardless.
+        }
+        client.setMatch(null);
+        if (!this.continuous) return;
+        continue;
+      }
+
+      const hostSeat = (client.currentSeat ?? "host") as MatchActive["seat"];
+      await this.playMatchUntilGameOver(created.matchId, hostSeat);
       if (this.stopRequested) return;
-
       client.setMatch(null);
       if (!this.continuous) return;
     }

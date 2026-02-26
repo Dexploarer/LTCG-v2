@@ -1,11 +1,8 @@
 import { useCallback } from "react";
 import { useNavigate } from "@/router/react-router";
-import { usePrivy } from "@privy-io/react-auth";
 import { motion } from "framer-motion";
 import { useIframeMode } from "@/hooks/useIframeMode";
-import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
-import { TrayNav } from "@/components/layout/TrayNav";
-import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
+import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { useCardTilt } from "@/hooks/useCardTilt";
 import { SpeechBubble } from "@/components/ui/SpeechBubble";
@@ -14,7 +11,7 @@ import { DecorativeScatter } from "@/components/ui/DecorativeScatter";
 import { ComicImpactText } from "@/components/ui/ComicImpactText";
 import {
   INK_FRAME, LANDING_BG, DECO_PILLS, TITLE,
-  STORY_BG, COLLECTION_BG, DECK_BG, WATCH_BG, PVP_BG,
+  STORY_BG, WATCH_BG, PVP_BG,
   TAPE, CIGGARETTE_TRAY,
 } from "@/lib/blobUrls";
 
@@ -129,23 +126,12 @@ function Panel({
 export function Home() {
   const { isEmbedded } = useIframeMode();
   const navigate = useNavigate();
-  const { authenticated, login } = PRIVY_ENABLED
-    ? usePrivy()
-    : { authenticated: false, login: () => { } };
-
-  // After Privy login returns to Home, auto-navigate to the saved destination
-  usePostLoginRedirect();
 
   const goTo = useCallback(
-    (path: string, requiresAuth: boolean) => {
-      if (requiresAuth && !authenticated) {
-        storeRedirect(path);
-        login();
-        return;
-      }
+    (path: string) => {
       navigate(path);
     },
-    [authenticated, login, navigate],
+    [navigate],
   );
 
   return (
@@ -210,7 +196,7 @@ export function Home() {
               className="text-base md:text-lg text-[#121212] drop-shadow-none"
               style={{ fontFamily: "Special Elite, cursive" }}
             >
-              School of Hard Knocks
+              Agent-Only Runtime Overlay
             </span>
           </SpeechBubble>
         </motion.div>
@@ -218,73 +204,60 @@ export function Home() {
 
       {/* Comic panels grid */}
       <motion.div
-        className="relative z-10 flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4 md:p-8 max-w-6xl w-full mx-auto"
+        className="relative z-10 flex-1 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-4 md:p-8 max-w-7xl w-full mx-auto"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         <Panel
           title="Story Mode"
-          subtitle="Fight your way through the halls"
+          subtitle="Queue chapter battles through the agent control lobby"
           bgImage={STORY_BG}
-          onClick={() => goTo("/story", true)}
+          onClick={() => goTo("/story")}
           impactWord="FIGHT!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
         </Panel>
 
         <Panel
-          title="Collection"
-          subtitle="132 cards across 6 archetypes"
-          bgImage={COLLECTION_BG}
-          onClick={() => goTo("/collection", true)}
-          impactWord="COLLECT!"
-        >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9830;</div>
-        </Panel>
-
-        <Panel
-          title="Build Deck"
-          subtitle="Stack your hand before the bell rings"
-          bgImage={DECK_BG}
-          onClick={() => goTo("/decks", true)}
-          impactWord="BUILD!"
-        >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9998;</div>
-        </Panel>
-
-        <Panel
-          title="Watch Live"
-          subtitle="Agents streaming on retake.tv"
-          bgImage={WATCH_BG}
-          onClick={() => goTo("/watch", false)}
-          impactWord="WATCH!"
-        >
-          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
-        </Panel>
-
-        <Panel
-          title="PvP Lobby"
-          subtitle="Human duels + agent join invites"
+          title="Agent PvP"
+          subtitle="Run agent-vs-agent duels with shared plugin parity"
           bgImage={PVP_BG}
-          onClick={() => goTo("/pvp", true)}
+          onClick={() => goTo("/pvp")}
           impactWord="DUEL!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
         </Panel>
 
+        <Panel
+          title="Agent Lobby"
+          subtitle="Chat, retake pipeline controls, and runtime diagnostics"
+          bgContain
+          onClick={() => goTo("/agent-lobby")}
+          impactWord="SYNC!"
+        >
+          <div className="text-4xl mb-3">&#128172;</div>
+        </Panel>
+
+        <Panel
+          title="Watch Overlays"
+          subtitle="Open animated spectator overlays for live matches"
+          bgImage={WATCH_BG}
+          onClick={() => goTo("/watch")}
+          impactWord="WATCH!"
+        >
+          <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
+        </Panel>
       </motion.div>
 
-      {isEmbedded && (
-        <p
-          className="relative z-10 text-center text-xs text-white/40"
-          style={{ paddingBottom: "calc(3.5rem + var(--safe-area-bottom))", fontFamily: "Special Elite, cursive" }}
-        >
-          Running inside milaidy
-        </p>
-      )}
+      <p
+        className="relative z-10 text-center text-xs text-white/70 px-4"
+        style={{ paddingBottom: "calc(5rem + var(--safe-area-bottom))", fontFamily: "Special Elite, cursive" }}
+      >
+        One capability surface for OpenClawd and milady/elizaOS agents. Humans watch via overlays.
+      </p>
 
-      <TrayNav />
+      {!isEmbedded && <AgentOverlayNav active="home" />}
     </div>
   );
 }

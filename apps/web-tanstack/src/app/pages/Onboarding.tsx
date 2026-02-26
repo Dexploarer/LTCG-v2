@@ -7,6 +7,7 @@ import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { useUserSync } from "@/hooks/auth/useUserSync";
 import { consumeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { LANDING_BG } from "@/lib/blobUrls";
+import { registerAgent } from "@/lib/retake";
 import {
   DEFAULT_SIGNUP_AVATAR_PATH,
   SIGNUP_AVATAR_OPTIONS,
@@ -24,6 +25,11 @@ interface StarterDeck {
   playstyle: string;
   cardCount: number;
 }
+
+type CurrentUserProfile = {
+  username: string;
+  walletAddress?: string;
+};
 
 const ARCHETYPE_COLORS: Record<string, string> = {
   dropouts: "#e53e3e",
@@ -51,29 +57,63 @@ export function Onboarding() {
   const { isAuthenticated } = useConvexAuth();
 
   const setUsernameMutation = useConvexMutation(apiAny.auth.setUsername);
+  const setRetakeChoiceMutation = useConvexMutation(apiAny.auth.setRetakeOnboardingChoice);
+  const linkRetakeAccountMutation = useConvexMutation(apiAny.auth.linkRetakeAccount);
   const setAvatarPathMutation = useConvexMutation(apiAny.auth.setAvatarPath);
   const selectStarterDeckMutation = useConvexMutation(apiAny.game.selectStarterDeck);
+  const currentUser = useConvexQuery(apiAny.auth.currentUser, isAuthenticated ? {} : "skip") as
+    | CurrentUserProfile
+    | null
+    | undefined;
   const starterDecks = useConvexQuery(apiAny.game.getStarterDecks, isAuthenticated ? {} : "skip") as
     | StarterDeck[]
     | undefined;
 
   // Determine which step we're on based on onboarding status
   const needsUsername = onboardingStatus && !onboardingStatus.hasUsername;
+  const retakeResolved = Boolean(
+    onboardingStatus?.hasRetakeChoice &&
+    (!onboardingStatus.wantsRetake || onboardingStatus.hasRetakeAccount),
+  );
+  const needsRetake =
+    onboardingStatus &&
+    onboardingStatus.hasUsername &&
+    !retakeResolved;
   const needsAvatar =
     onboardingStatus &&
     onboardingStatus.hasUsername &&
+    retakeResolved &&
     !onboardingStatus.hasAvatar;
   const needsDeck =
     onboardingStatus &&
     onboardingStatus.hasUsername &&
+    retakeResolved &&
     onboardingStatus.hasAvatar &&
     !onboardingStatus.hasStarterDeck;
+  const stepCopy = needsUsername
+    ? "Step 1 of 4: Choose your name"
+    : needsRetake
+      ? "Step 2 of 4: Link optional Retake account"
+      : needsAvatar
+        ? "Step 3 of 4: Pick your avatar"
+        : "Step 4 of 4: Pick your deck";
+  const progressWidth = needsUsername
+    ? "25%"
+    : needsRetake
+      ? "50%"
+      : needsAvatar
+        ? "75%"
+        : "100%";
 
   const handleUsernameComplete = useCallback(() => {
     // onboardingStatus will reactively update
   }, []);
 
   const handleAvatarComplete = useCallback(() => {
+    // onboardingStatus will reactively update
+  }, []);
+
+  const handleRetakeComplete = useCallback(() => {
     // onboardingStatus will reactively update
   }, []);
 
@@ -91,7 +131,12 @@ export function Onboarding() {
   }
 
   // Already complete — redirect to saved destination or home
-  if (onboardingStatus.hasUsername && onboardingStatus.hasStarterDeck) {
+  if (
+    onboardingStatus.hasUsername &&
+    retakeResolved &&
+    onboardingStatus.hasAvatar &&
+    onboardingStatus.hasStarterDeck
+  ) {
     navigate(consumeRedirect() ?? "/", { replace: true });
     return null;
   }
@@ -123,11 +168,7 @@ export function Onboarding() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-            {needsUsername
-              ? "Step 1 of 3: Choose your name"
-              : needsAvatar
-                ? "Step 2 of 3: Pick your avatar"
-                : "Step 3 of 3: Pick your deck"}
+            {stepCopy}
           </motion.p>
         </div>
 
@@ -137,7 +178,7 @@ export function Onboarding() {
             <motion.div
               className="h-full bg-[#ffcc00]"
               initial={{ width: "0%" }}
-              animate={{ width: needsUsername ? "33%" : needsAvatar ? "66%" : "100%" }}
+              animate={{ width: progressWidth }}
               transition={{ type: "spring", stiffness: 200, damping: 25 }}
             />
           </div>
@@ -155,6 +196,23 @@ export function Onboarding() {
               <UsernameStep
                 setUsernameMutation={setUsernameMutation}
                 onComplete={handleUsernameComplete}
+              />
+            </motion.div>
+          )}
+          {needsRetake && (
+            <motion.div
+              key="retake"
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <RetakeOnboardingStep
+                username={currentUser?.username ?? "LunchTableAgent"}
+                walletAddress={onboardingStatus?.walletAddress ?? currentUser?.walletAddress ?? null}
+                setRetakeChoiceMutation={setRetakeChoiceMutation}
+                linkRetakeAccountMutation={linkRetakeAccountMutation}
+                onComplete={handleRetakeComplete}
               />
             </motion.div>
           )}
@@ -274,7 +332,162 @@ function UsernameStep({
   );
 }
 
-// ── Step 2: Avatar Selection ──────────────────────────────────────
+// ── Step 2: Optional Retake Link ──────────────────────────────────
+
+function RetakeOnboardingStep({
+  username,
+  walletAddress,
+  setRetakeChoiceMutation,
+  linkRetakeAccountMutation,
+  onComplete,
+}: {
+  username: string;
+  walletAddress: string | null;
+  setRetakeChoiceMutation: (args: { choice: "declined" | "accepted" }) => Promise<{
+    success: boolean;
+    choice: "declined" | "accepted";
+  }>;
+  linkRetakeAccountMutation: (args: {
+    agentId: string;
+    userDbId: string;
+    agentName: string;
+    walletAddress: string;
+    tokenAddress: string;
+    tokenTicker: string;
+  }) => Promise<{ success: boolean; streamUrl: string }>;
+  onComplete: () => void;
+}) {
+  const [agentName, setAgentName] = useState(() => username.replace(/\s+/g, "_").slice(0, 24));
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSkip = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      await setRetakeChoiceMutation({ choice: "declined" });
+      onComplete();
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to skip Retake setup.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!walletAddress) {
+      setError("No wallet found. Sign in again with Phantom, Solflare, or Backpack.");
+      return;
+    }
+    const normalizedName = agentName.trim().replace(/\s+/g, "_");
+    if (normalizedName.length < 3) {
+      setError("Retake name must be at least 3 characters.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const imageUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/favicon.ico`
+          : "https://lunchtable.app/favicon.ico";
+      const registration = await registerAgent({
+        agent_name: normalizedName,
+        agent_description: `LunchTable agent streamer for ${username}.`,
+        image_url: imageUrl,
+        wallet_address: walletAddress,
+      });
+
+      if (!registration) {
+        throw new Error("Retake registration failed. Please try again.");
+      }
+
+      await linkRetakeAccountMutation({
+        agentId: registration.agent_id,
+        userDbId: registration.userDbId,
+        agentName: registration.agent_name,
+        walletAddress: registration.wallet_address,
+        tokenAddress: registration.token_address,
+        tokenTicker: registration.token_ticker,
+      });
+      onComplete();
+    } catch (err: any) {
+      Sentry.captureException(err);
+      setError(err.message ?? "Failed to link Retake account.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="paper-panel p-8 md:p-10 mx-auto max-w-2xl">
+      <h2
+        className="text-2xl mb-3 text-center"
+        style={{ fontFamily: "Outfit, sans-serif", fontWeight: 900 }}
+      >
+        RETAKE PIPELINE (OPTIONAL)
+      </h2>
+      <p
+        className="text-sm text-[#444] mb-5 text-center"
+        style={{ fontFamily: "Special Elite, cursive" }}
+      >
+        Use your same wallet to create a Retake identity, stream matches, and keep overlay integrity end-to-end.
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs uppercase tracking-wider font-black text-[#121212]">
+            Wallet
+          </label>
+          <input
+            type="text"
+            value={walletAddress ?? "Not detected"}
+            readOnly
+            className="mt-1 w-full border-2 border-[#121212] bg-[#f8f8f8] px-3 py-2 text-xs font-mono"
+          />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wider font-black text-[#121212]">
+            Retake Agent Name
+          </label>
+          <input
+            type="text"
+            value={agentName}
+            onChange={(event) => setAgentName(event.target.value)}
+            className="mt-1 w-full border-2 border-[#121212] bg-white px-3 py-2 text-sm font-bold"
+            maxLength={32}
+            disabled={submitting}
+          />
+        </div>
+      </div>
+
+      {error && <p className="mt-3 text-red-600 text-sm font-bold uppercase">{error}</p>}
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={submitting}
+          className="tcg-button-primary px-6 py-3 text-sm uppercase disabled:opacity-50"
+        >
+          {submitting ? "Linking..." : "Yes, Link Retake"}
+        </button>
+        <button
+          type="button"
+          onClick={handleSkip}
+          disabled={submitting}
+          className="tcg-button px-6 py-3 text-sm uppercase disabled:opacity-50"
+        >
+          Skip For Now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 3: Avatar Selection ──────────────────────────────────────
 
 function AvatarSelectionStep({
   setAvatarPathMutation,
@@ -361,7 +574,7 @@ function AvatarSelectionStep({
   );
 }
 
-// ── Step 3: Deck Selection ────────────────────────────────────────
+// ── Step 4: Deck Selection ────────────────────────────────────────
 
 interface DeckSelectionStepProps {
   decks: StarterDeck[] | undefined;

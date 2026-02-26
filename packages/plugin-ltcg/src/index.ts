@@ -3,21 +3,24 @@
  *
  * ElizaOS plugin for playing LunchTable Trading Card Game battles.
  * Enables AI agents (milaidy, ClawDBot, or standalone runtimes) to play
- * story mode and quick-duel matches via the Convex HTTP API.
+ * story mode and agent-vs-agent PvP matches via the Convex HTTP API.
  *
  * Required config:
  *   LTCG_API_URL — Convex site URL (e.g. https://scintillating-mongoose-458.convex.site)
  *   LTCG_API_KEY — Agent API key from /api/agent/register (starts with ltcg_)
  *
  * Actions:
- *   START_LTCG_DUEL    — Start a quick AI-vs-human duel (no chapter)
+ *   START_LTCG_DUEL    — Start a quick CPU duel (legacy/testing)
  *   START_DUEL         — Compatibility alias for START_LTCG_DUEL
  *   START_LTCG_BATTLE  — Start a story mode battle
  *   START_BATTLE       — Compatibility alias for START_LTCG_BATTLE
- *   JOIN_LTCG_MATCH    — Join an open human-hosted match as the away seat
+ *   CREATE_LTCG_PVP_LOBBY — Create a waiting PvP lobby for agent-vs-agent
+ *   CANCEL_LTCG_PVP_LOBBY — Cancel a waiting PvP lobby you host
+ *   JOIN_LTCG_MATCH    — Join an open waiting match as the away seat
+ *   GET_LTCG_LOBBY_SNAPSHOT — Read open lobbies + lobby chat feed
+ *   SEND_LTCG_LOBBY_CHAT — Send a message into shared agent lobby chat
  *   PLAY_LTCG_TURN     — Auto-play one turn (summon, attack, end)
  *   PLAY_LTCG_STORY    — Play through a full story stage (start → loop → complete)
- *   JOIN_LTCG_MATCH    — Join a waiting match as the away seat
  *   RUN_LTCG_AUTONOMOUS — Deterministic autonomy controller (start/pause/resume/stop)
  *   CHECK_LTCG_STATUS  — Check current match state
  *   SURRENDER_LTCG     — Forfeit the current match
@@ -28,6 +31,7 @@
  *   CHECK_RETAKE_STATUS  — Check if stream is live + viewer count
  *   GET_RTMP_CREDENTIALS — Get RTMP URL + stream key for OBS/ffmpeg
  *   SEND_RETAKE_CHAT    — Send a chat message to a retake.tv stream
+ *   CONTROL_LTCG_STREAM_AUDIO — Authoritative music/sfx controls for overlays
  *   START_STREAM_PIPELINE — Start full video pipeline (Xvfb + Chromium + FFmpeg → RTMP)
  *   STOP_STREAM_PIPELINE  — Stop video pipeline and end stream
  *
@@ -55,6 +59,10 @@ import { getStatusAction } from "./actions/getStatus.js";
 import { surrenderAction } from "./actions/surrender.js";
 import { playStoryAction } from "./actions/playStory.js";
 import { joinMatchAction } from "./actions/joinMatch.js";
+import { createPvpLobbyAction } from "./actions/createPvpLobby.js";
+import { cancelPvpLobbyAction } from "./actions/cancelPvpLobby.js";
+import { getLobbySnapshotAction } from "./actions/getLobbySnapshot.js";
+import { sendLobbyChatAction } from "./actions/sendLobbyChat.js";
 import { getSoundtrackAction } from "./actions/getSoundtrack.js";
 import {
   runAutonomyAction,
@@ -69,6 +77,7 @@ import { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 import { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 import { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 import { sendChatAction } from "./actions/retake/sendChat.js";
+import { controlStreamAudioAction } from "./actions/retake/controlStreamAudio.js";
 import { startPipelineAction } from "./actions/retake/startPipeline.js";
 import { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 import { checkStreamDependencies } from "./stream-deps.js";
@@ -150,6 +159,14 @@ const plugin: Plugin = {
       const deps = await checkStreamDependencies();
       if (deps.allReady) {
         console.log("[LTCG] Streaming pipeline ready (Xvfb + Chromium + FFmpeg available)");
+        if (deps.audioReady) {
+          console.log("[LTCG] Audio capture ready (Pulse monitor detected)");
+        } else {
+          console.log(
+            `[LTCG] Audio capture unavailable (missing: ${deps.audioMissing.join(", ")}). ` +
+              "Pipeline will run video-only until audio deps are installed.",
+          );
+        }
       } else {
         console.log(
           `[LTCG] Streaming pipeline unavailable (missing: ${deps.missing.join(", ")}). ` +
@@ -173,6 +190,10 @@ const plugin: Plugin = {
     startDuelAction,
     startBattleAliasAction,
     startBattleAction,
+    getLobbySnapshotAction,
+    sendLobbyChatAction,
+    createPvpLobbyAction,
+    cancelPvpLobbyAction,
     joinMatchAction,
     playTurnAction,
     playStoryAction,
@@ -185,6 +206,7 @@ const plugin: Plugin = {
     checkRetakeStatusAction,
     getRtmpCredentialsAction,
     sendChatAction,
+    controlStreamAudioAction,
     startPipelineAction,
     stopPipelineAction,
   ],
@@ -211,7 +233,11 @@ export { gameStateProvider } from "./provider.js";
 export { startDuelAction } from "./actions/startDuel.js";
 export { startDuelAliasAction } from "./actions/startDuel.js";
 export { startBattleAction, startBattleAliasAction } from "./actions/startBattle.js";
+export { getLobbySnapshotAction } from "./actions/getLobbySnapshot.js";
+export { sendLobbyChatAction } from "./actions/sendLobbyChat.js";
 export { playTurnAction } from "./actions/playTurn.js";
+export { createPvpLobbyAction } from "./actions/createPvpLobby.js";
+export { cancelPvpLobbyAction } from "./actions/cancelPvpLobby.js";
 export { joinMatchAction } from "./actions/joinMatch.js";
 export { getStatusAction } from "./actions/getStatus.js";
 export { surrenderAction } from "./actions/surrender.js";
@@ -241,24 +267,35 @@ export { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 export { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 export { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 export { sendChatAction } from "./actions/retake/sendChat.js";
+export { controlStreamAudioAction } from "./actions/retake/controlStreamAudio.js";
 export { startPipelineAction } from "./actions/retake/startPipeline.js";
 export { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 export { retakeStatusRoute } from "./routes/retake.js";
 export { StreamPipeline, getStreamPipeline, initStreamPipeline } from "./stream-pipeline.js";
 export { checkStreamDependencies, resolveChromiumBinary } from "./stream-deps.js";
 export type {
+  AgentLobbySnapshot,
   AgentInfo,
   BoardCard,
   CardInHand,
   Chapter,
   GameCommand,
+  LobbyMessage,
+  LobbyMessageSource,
+  LobbySummary,
   MatchStatus,
+  PvpLobbyCancelResult,
+  PvpLobbyCreateResult,
   PlayerView,
   MatchJoinResult,
+  RetakeLinkPayload,
+  RetakeSummary,
   Route,
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StreamAudioControl,
   StoryNextStageResponse,
+  StoryLobbySummary,
   StoryProgress,
 } from "./types.js";

@@ -235,6 +235,48 @@ export const agentCreatePvpLobby = mutation({
   },
 });
 
+export const agentCancelPvpLobby = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    matchId: v.string(),
+  },
+  returns: v.object({
+    matchId: v.string(),
+    canceled: v.boolean(),
+    status: v.literal("canceled"),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const lobby = await ctx.db
+      .query("pvpLobbies")
+      .withIndex("by_matchId", (q: any) => q.eq("matchId", args.matchId))
+      .first();
+    if (!lobby) {
+      throw new ConvexError("PvP lobby not found.");
+    }
+    if (String(lobby.hostUserId) !== String(user._id)) {
+      throw new ConvexError("Only the lobby host can cancel this lobby.");
+    }
+    if (lobby.status !== "waiting") {
+      throw new ConvexError(`Lobby is not cancelable (status: ${lobby.status}).`);
+    }
+
+    await match.cancelMatch(ctx, { matchId: args.matchId });
+    await ctx.db.patch(lobby._id, {
+      status: "canceled",
+      endedAt: Date.now(),
+    });
+
+    return {
+      matchId: args.matchId,
+      canceled: true,
+      status: "canceled" as const,
+    };
+  },
+});
+
 export const agentStartDuel = mutation({
   args: {
     agentUserId: v.id("users"),
@@ -480,5 +522,109 @@ export const agentSelectStarterDeck = mutation({
 
     const totalCards = resolvedCards.reduce((sum, c) => sum + c.quantity, 0);
     return { deckId, cardCount: totalCards };
+  },
+});
+
+function normalizeWalletAddress(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export const agentLinkRetakeAccount = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    agentId: v.string(),
+    userDbId: v.string(),
+    agentName: v.string(),
+    walletAddress: v.string(),
+    tokenAddress: v.union(v.string(), v.null()),
+    tokenTicker: v.string(),
+  },
+  returns: v.object({
+    linked: v.boolean(),
+    pipelineEnabled: v.boolean(),
+    streamUrl: v.string(),
+    tokenAddress: v.union(v.string(), v.null()),
+    tokenTicker: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const userWallet = normalizeWalletAddress(user.walletAddress);
+    const retakeWallet = normalizeWalletAddress(args.walletAddress);
+    if (!retakeWallet) {
+      throw new ConvexError("Retake wallet address is required.");
+    }
+
+    if (userWallet && userWallet.toLowerCase() !== retakeWallet.toLowerCase()) {
+      throw new ConvexError("Retake wallet must match the existing LunchTable wallet.");
+    }
+
+    const agentName = args.agentName.trim();
+    if (!agentName) {
+      throw new ConvexError("Retake agent name is required.");
+    }
+
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      retakeOptInStatus: "accepted",
+      retakeAgentId: args.agentId.trim(),
+      retakeUserDbId: args.userDbId.trim(),
+      retakeAgentName: agentName,
+      retakeWalletAddress: retakeWallet,
+      retakeTokenAddress: args.tokenAddress,
+      retakeTokenTicker: args.tokenTicker.trim() || "LTCG",
+      retakePipelineEnabled: true,
+      retakeLinkedAt: now,
+    };
+
+    // Preserve retake-wallet integrity by setting wallet on first link if absent.
+    if (!userWallet) {
+      patch.walletAddress = retakeWallet;
+    }
+
+    await ctx.db.patch(user._id, patch);
+
+    return {
+      linked: true,
+      pipelineEnabled: true,
+      streamUrl: `https://retake.tv/${encodeURIComponent(agentName)}`,
+      tokenAddress: args.tokenAddress,
+      tokenTicker: args.tokenTicker.trim() || "LTCG",
+    };
+  },
+});
+
+export const agentSetRetakePipelineEnabled = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    enabled: v.boolean(),
+  },
+  returns: v.object({
+    pipelineEnabled: v.boolean(),
+    hasRetakeAccount: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const hasRetakeAccount = Boolean(
+      user.retakeAgentId && user.retakeUserDbId && user.retakeTokenAddress,
+    );
+
+    if (args.enabled && !hasRetakeAccount) {
+      throw new ConvexError("Link a Retake account before enabling the pipeline.");
+    }
+
+    await ctx.db.patch(user._id, {
+      retakePipelineEnabled: args.enabled,
+    });
+
+    return {
+      pipelineEnabled: args.enabled,
+      hasRetakeAccount,
+    };
   },
 });
