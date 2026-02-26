@@ -23,10 +23,12 @@ import { AudioContextGate, AudioControlsDock, AudioProvider, useAudio } from "@/
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { PrivyAuthProvider } from "@/components/auth/PrivyAuthProvider";
 import { AgentSpectatorView } from "@/components/game/AgentSpectatorView";
+import { AgentApiSessionProvider, useAgentApiSession } from "@/hooks/auth/useAgentApiSession";
 import { Breadcrumb, BreadcrumbSpacer } from "@/components/layout/Breadcrumb";
 import { useTelegramAuth } from "@/hooks/auth/useTelegramAuth";
 import { usePrivyAuthForConvex } from "@/hooks/auth/usePrivyAuthForConvex";
 import { useIframeMode } from "@/hooks/useIframeMode";
+import { shouldRedirectToAgentLobby } from "@/lib/agentOnlyRoutes";
 import { getAudioContextFromPath } from "@/lib/audio/routeContext";
 import { enableDiscordUrlMappingsForActivity } from "@/lib/discordUrlMappings";
 import { sendChatToHost } from "@/lib/iframe";
@@ -126,7 +128,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               <PrivyAuthProvider>
                 <ConvexProviderWithAuth client={convexClient} useAuth={usePrivyAuthForConvex}>
                   <AudioProvider>
-                    <AppRuntime>{children}</AppRuntime>
+                    <AgentApiSessionProvider>
+                      <AppRuntime>{children}</AppRuntime>
+                    </AgentApiSessionProvider>
                   </AudioProvider>
                 </ConvexProviderWithAuth>
               </PrivyAuthProvider>
@@ -150,6 +154,8 @@ function AppRuntime({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { setContextKey } = useAudio();
+  const agentSession = useAgentApiSession();
+  const isBlockedRoute = shouldRedirectToAgentLobby(location.pathname);
 
   const {
     isEmbedded,
@@ -170,28 +176,22 @@ function AppRuntime({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (!startMatchCommand) return;
-
-    if (startMatchCommand.matchId) {
-      navigate({ to: "/play/$matchId", params: { matchId: startMatchCommand.matchId } as never });
-      clearStartMatchCommand();
-      return;
-    }
-
-    if (startMatchCommand.mode === "pvp") {
-      navigate({ to: "/pvp" });
-      clearStartMatchCommand();
-      return;
-    }
-
-    if (startMatchCommand.chapterId) {
-      navigate({ to: "/story/$chapterId", params: { chapterId: startMatchCommand.chapterId } as never });
-      clearStartMatchCommand();
-      return;
-    }
-
-    navigate({ to: "/story" });
+    navigate({ to: "/agent-lobby" });
     clearStartMatchCommand();
   }, [clearStartMatchCommand, navigate, startMatchCommand]);
+
+  React.useEffect(() => {
+    if (!isBlockedRoute) return;
+    navigate({ to: "/agent-lobby", replace: true });
+  }, [isBlockedRoute, navigate]);
+
+  if (isBlockedRoute) {
+    return (
+      <>
+        <Toaster richColors position="top-right" />
+      </>
+    );
+  }
 
   if (isApiKey && authToken) {
     return (
@@ -221,15 +221,24 @@ function AppRuntime({ children }: { children: React.ReactNode }) {
       {!isEmbedded && <Breadcrumb />}
       {!isEmbedded && <BreadcrumbSpacer />}
       <React.Suspense fallback={null}>{children}</React.Suspense>
-      <RouteAwareAudioDock pathname={location.pathname} />
+      <RouteAwareAudioDock
+        pathname={location.pathname}
+        hasAgentSession={agentSession.status === "connected"}
+      />
       <Toaster richColors position="top-right" />
     </>
   );
 }
 
-function RouteAwareAudioDock({ pathname }: { pathname: string }) {
-  if (pathname.startsWith("/play/")) return null;
+function RouteAwareAudioDock({
+  pathname,
+  hasAgentSession,
+}: {
+  pathname: string;
+  hasAgentSession: boolean;
+}) {
   if (pathname.startsWith("/stream-overlay")) return null;
+  if (pathname === "/agent-lobby" && !hasAgentSession) return null;
   return <AudioControlsDock />;
 }
 

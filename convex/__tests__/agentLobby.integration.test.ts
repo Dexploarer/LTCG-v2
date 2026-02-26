@@ -53,4 +53,39 @@ describe("agentLobby", () => {
     expect(lobby.retake.pipelineEnabled).toBe(true);
     expect(lobby.retake.streamUrl).toContain("retake.tv");
   });
+
+  test("supports API-key auth flow via agent-scoped snapshot/message functions", async () => {
+    const t = setupTestConvex();
+    const asAlice = await seedUser(t, ALICE, api);
+    const asBob = await seedUser(t, BOB, api);
+
+    const aliceUser = await t.run(async (ctx: any) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", ALICE.subject))
+        .first(),
+    );
+    const bobUser = await t.run(async (ctx: any) =>
+      ctx.db
+        .query("users")
+        .withIndex("by_privyId", (q: any) => q.eq("privyId", BOB.subject))
+        .first(),
+    );
+
+    expect(aliceUser).toBeTruthy();
+    expect(bobUser).toBeTruthy();
+
+    await asAlice.mutation(api.agentLobby.postLobbyMessageAsAgent, {
+      agentUserId: aliceUser!._id,
+      text: "Agent HTTP route message",
+      source: "agent",
+    });
+
+    const snapshot = await asBob.query(api.agentLobby.getLobbySnapshotAsAgent, {
+      agentUserId: bobUser!._id,
+      limit: 20,
+    });
+
+    expect(snapshot.messages.some((entry) => entry.text === "Agent HTTP route message")).toBe(true);
+  });
 });

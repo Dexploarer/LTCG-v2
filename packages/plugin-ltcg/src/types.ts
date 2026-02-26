@@ -157,6 +157,86 @@ export interface AgentInfo {
   createdAt: number;
 }
 
+export type LobbyMessageSource = "agent" | "retake" | "system";
+
+export interface LobbyMessage {
+  _id: string;
+  userId: string;
+  senderName: string;
+  text: string;
+  source: LobbyMessageSource;
+  createdAt: number;
+}
+
+export interface RetakeSummary {
+  hasRetakeAccount: boolean;
+  pipelineEnabled: boolean;
+  agentName: string | null;
+  tokenAddress: string | null;
+  tokenTicker: string | null;
+  streamUrl: string | null;
+}
+
+export interface LobbySummary {
+  matchId: string;
+  hostUserId: string;
+  hostUsername: string;
+  visibility: "public" | "private";
+  joinCode: string | null;
+  status: "waiting" | "active";
+  createdAt: number;
+  activatedAt: number | null;
+  pongEnabled: boolean;
+  redemptionEnabled: boolean;
+  retake: RetakeSummary;
+}
+
+export interface StoryLobbySummary {
+  matchId: string;
+  chapterId: string;
+  stageNumber: number;
+  playerUserId: string;
+  playerUsername: string;
+  status: "waiting" | "active";
+  retake: RetakeSummary;
+}
+
+export interface AgentLobbySnapshot {
+  currentUser: {
+    userId: string;
+    username: string;
+    walletAddress: string | null;
+    hasRetakeAccount: boolean;
+    pipelineEnabled: boolean;
+    agentName: string | null;
+    tokenAddress: string | null;
+    tokenTicker: string | null;
+    streamUrl: string | null;
+  };
+  openLobbies: LobbySummary[];
+  activeStoryMatches: StoryLobbySummary[];
+  messages: LobbyMessage[];
+}
+
+export interface RetakeLinkPayload {
+  agentId: string;
+  userDbId: string;
+  agentName: string;
+  walletAddress: string;
+  tokenAddress: string | null;
+  tokenTicker: string;
+}
+
+export interface StreamAudioControl {
+  agentId: string;
+  playbackIntent: "playing" | "paused" | "stopped";
+  musicVolume: number;
+  sfxVolume: number;
+  musicMuted: boolean;
+  sfxMuted: boolean;
+  updatedAt: number;
+}
+
 /** GET /api/agent/game/chapters (array) */
 export interface Chapter {
   _id: string;

@@ -13,6 +13,7 @@ const EXPECTED_ROUTE_FILES = [
   "index.tsx",
   "about.tsx",
   "agent-dev.tsx",
+  "agent-lobby.tsx",
   "cards.tsx",
   "cards.$cardId.tsx",
   "cliques.tsx",
@@ -40,6 +41,7 @@ const EXPECTED_ROUTE_PATHS = [
   "/",
   "/about",
   "/agent-dev",
+  "/agent-lobby",
   "/cards",
   "/cards/$cardId",
   "/cliques",
@@ -66,7 +68,6 @@ const EXPECTED_ROUTE_PATHS = [
 const PUBLIC_ROUTES: Array<[string, string]> = [
   ["index.tsx", "@/pages/Home"],
   ["about.tsx", "@/pages/About"],
-  ["agent-dev.tsx", "@/pages/AgentDev"],
   ["leaderboard.tsx", "@/pages/Leaderboard"],
   ["watch.tsx", "@/pages/Watch"],
   ["stream-overlay.tsx", "@/pages/StreamOverlay"],
@@ -74,6 +75,14 @@ const PUBLIC_ROUTES: Array<[string, string]> = [
   ["terms.tsx", "@/pages/Terms"],
   ["token.tsx", "@/pages/Token"],
   ["discord-callback.tsx", "@/pages/DiscordCallback"],
+];
+
+const AGENT_CONTROL_ROUTES: Array<[string, string]> = [
+  ["agent-lobby.tsx", "@/pages/AgentLobby"],
+];
+
+const REDIRECT_ROUTES: Array<[string, string]> = [
+  ["agent-dev.tsx", "/agent-lobby"],
 ];
 
 const PROTECTED_ROUTES: Array<[string, string]> = [
@@ -103,6 +112,8 @@ const ROOT_SHELL_SIGNATURES = [
   "useTelegramAuth",
   "sendChatToHost",
   "AgentSpectatorView",
+  "AgentApiSessionProvider",
+  "shouldRedirectToAgentLobby",
   "Breadcrumb",
   "AudioControlsDock",
 ];
@@ -159,6 +170,18 @@ describe("tanstack migration parity", () => {
     for (const [routeFile, pageImport] of PUBLIC_ROUTES) {
       const source = readRoute(routeFile);
       expect(source).toContain(pageImport);
+      expect(source).not.toContain("<Protected>");
+    }
+
+    for (const [routeFile, pageImport] of AGENT_CONTROL_ROUTES) {
+      const source = readRoute(routeFile);
+      expect(source).toContain(pageImport);
+      expect(source).not.toContain("<Protected>");
+    }
+
+    for (const [routeFile, redirectTarget] of REDIRECT_ROUTES) {
+      const source = readRoute(routeFile);
+      expect(source).toContain(redirectTarget);
       expect(source).not.toContain("<Protected>");
     }
 

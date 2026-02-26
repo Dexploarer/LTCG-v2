@@ -15,6 +15,18 @@ vi.mock("@/hooks/useStreamOverlay", () => ({
   useStreamOverlay: (params: StreamOverlayParams) => useStreamOverlayMock(params),
 }));
 
+vi.mock("@/components/audio/AudioProvider", () => ({
+  useAudio: () => ({
+    pauseMusic: vi.fn(),
+    resumeMusic: vi.fn(),
+    setMusicMuted: vi.fn(),
+    setMusicVolume: vi.fn(),
+    setSfxMuted: vi.fn(),
+    setSfxVolume: vi.fn(),
+    stopMusic: vi.fn(),
+  }),
+}));
+
 const baseOverlayData = {
   loading: false,
   error: null,
@@ -24,6 +36,7 @@ const baseOverlayData = {
   timeline: [],
   cardLookup: {},
   chatMessages: [],
+  streamAudioControl: null,
   agentMonsters: [],
   opponentMonsters: [],
   agentSpellTraps: [],

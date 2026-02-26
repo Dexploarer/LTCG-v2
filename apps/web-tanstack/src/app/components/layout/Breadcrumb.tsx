@@ -24,7 +24,6 @@ const ROUTE_LABELS: Record<string, string> = {
   privacy: "Privacy",
   terms: "Terms",
   token: "$LUNCH",
-  "agent-dev": "Agent Dev",
   duel: "Duel",
 };
 

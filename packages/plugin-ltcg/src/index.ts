@@ -28,6 +28,7 @@
  *   CHECK_RETAKE_STATUS  — Check if stream is live + viewer count
  *   GET_RTMP_CREDENTIALS — Get RTMP URL + stream key for OBS/ffmpeg
  *   SEND_RETAKE_CHAT    — Send a chat message to a retake.tv stream
+ *   CONTROL_LTCG_STREAM_AUDIO — Authoritative music/sfx controls for overlays
  *   START_STREAM_PIPELINE — Start full video pipeline (Xvfb + Chromium + FFmpeg → RTMP)
  *   STOP_STREAM_PIPELINE  — Stop video pipeline and end stream
  *
@@ -69,6 +70,7 @@ import { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 import { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 import { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 import { sendChatAction } from "./actions/retake/sendChat.js";
+import { controlStreamAudioAction } from "./actions/retake/controlStreamAudio.js";
 import { startPipelineAction } from "./actions/retake/startPipeline.js";
 import { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 import { checkStreamDependencies } from "./stream-deps.js";
@@ -150,6 +152,14 @@ const plugin: Plugin = {
       const deps = await checkStreamDependencies();
       if (deps.allReady) {
         console.log("[LTCG] Streaming pipeline ready (Xvfb + Chromium + FFmpeg available)");
+        if (deps.audioReady) {
+          console.log("[LTCG] Audio capture ready (Pulse monitor detected)");
+        } else {
+          console.log(
+            `[LTCG] Audio capture unavailable (missing: ${deps.audioMissing.join(", ")}). ` +
+              "Pipeline will run video-only until audio deps are installed.",
+          );
+        }
       } else {
         console.log(
           `[LTCG] Streaming pipeline unavailable (missing: ${deps.missing.join(", ")}). ` +
@@ -185,6 +195,7 @@ const plugin: Plugin = {
     checkRetakeStatusAction,
     getRtmpCredentialsAction,
     sendChatAction,
+    controlStreamAudioAction,
     startPipelineAction,
     stopPipelineAction,
   ],
@@ -241,24 +252,33 @@ export { stopRetakeStreamAction } from "./actions/retake/stopStream.js";
 export { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 export { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 export { sendChatAction } from "./actions/retake/sendChat.js";
+export { controlStreamAudioAction } from "./actions/retake/controlStreamAudio.js";
 export { startPipelineAction } from "./actions/retake/startPipeline.js";
 export { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 export { retakeStatusRoute } from "./routes/retake.js";
 export { StreamPipeline, getStreamPipeline, initStreamPipeline } from "./stream-pipeline.js";
 export { checkStreamDependencies, resolveChromiumBinary } from "./stream-deps.js";
 export type {
+  AgentLobbySnapshot,
   AgentInfo,
   BoardCard,
   CardInHand,
   Chapter,
   GameCommand,
+  LobbyMessage,
+  LobbyMessageSource,
+  LobbySummary,
   MatchStatus,
   PlayerView,
   MatchJoinResult,
+  RetakeLinkPayload,
+  RetakeSummary,
   Route,
   StageCompletionResult,
   StageData,
   StarterDeck,
+  StreamAudioControl,
   StoryNextStageResponse,
+  StoryLobbySummary,
   StoryProgress,
 } from "./types.js";

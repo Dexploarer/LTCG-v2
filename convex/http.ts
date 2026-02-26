@@ -6,6 +6,7 @@ import { isPlainObject, normalizeGameCommand } from "./agentRouteHelpers";
 
 const http = httpRouter();
 const internalApi = internal as any;
+const apiRef = api as any;
 
 // CORS configuration
 const ALLOWED_HEADERS = ["Content-Type", "Authorization"];
@@ -126,6 +127,29 @@ async function parseRequestJson(request: Request): Promise<Record<string, any>> 
 	} catch {
 		return {};
 	}
+}
+
+function parseBooleanInput(value: unknown): boolean | null {
+	if (typeof value === "boolean") return value;
+	if (typeof value === "number") return value !== 0;
+	if (typeof value === "string") {
+		const normalized = value.trim().toLowerCase();
+		if (["true", "1", "yes", "on"].includes(normalized)) return true;
+		if (["false", "0", "no", "off"].includes(normalized)) return false;
+	}
+	return null;
+}
+
+function parseVolumeInput(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value > 1 ? value / 100 : value;
+	}
+	if (typeof value === "string" && value.trim().length > 0) {
+		const parsed = Number(value);
+		if (!Number.isFinite(parsed)) return null;
+		return parsed > 1 ? parsed / 100 : parsed;
+	}
+	return null;
 }
 
 type MatchSeat = "host" | "away";
@@ -835,6 +859,245 @@ corsRoute({
 		});
 
 		return jsonResponse({ messageId, ok: true });
+	},
+});
+
+// ── Agent Lobby + Retake Pipeline ──────────────────────────────
+
+corsRoute({
+	path: "/api/agent/lobby/snapshot",
+	method: "GET",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const url = new URL(request.url);
+		const limitRaw = url.searchParams.get("limit");
+		let limit: number | undefined;
+		if (typeof limitRaw === "string" && limitRaw.trim().length > 0) {
+			const parsed = Number.parseInt(limitRaw, 10);
+			if (!Number.isFinite(parsed) || parsed <= 0) {
+				return errorResponse("limit must be a positive integer.");
+			}
+			limit = parsed;
+		}
+
+		try {
+			const snapshot = await ctx.runQuery(apiRef.agentLobby.getLobbySnapshotAsAgent, {
+				agentUserId: agent.userId,
+				limit,
+			});
+			return jsonResponse(snapshot);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
+	path: "/api/agent/lobby/chat",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = await parseRequestJson(request);
+		const text = typeof body.text === "string" ? body.text : "";
+		const source = body.source;
+		if (!text.trim()) {
+			return errorResponse("text is required.");
+		}
+		if (
+			source !== undefined &&
+			source !== "agent" &&
+			source !== "retake" &&
+			source !== "system"
+		) {
+			return errorResponse("source must be one of: agent, retake, system.");
+		}
+
+		try {
+			const messageId = await ctx.runMutation(apiRef.agentLobby.postLobbyMessageAsAgent, {
+				agentUserId: agent.userId,
+				text,
+				source,
+			});
+			return jsonResponse({ ok: true, messageId });
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
+	path: "/api/agent/retake/link",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = await parseRequestJson(request);
+		const agentId =
+			typeof body.agentId === "string" ? body.agentId.trim() : "";
+		const userDbId =
+			typeof body.userDbId === "string" ? body.userDbId.trim() : "";
+		const agentName =
+			typeof body.agentName === "string" ? body.agentName.trim() : "";
+		const walletAddress =
+			typeof body.walletAddress === "string" ? body.walletAddress.trim() : "";
+		const tokenTickerRaw =
+			typeof body.tokenTicker === "string" ? body.tokenTicker.trim() : "";
+		const tokenTicker = tokenTickerRaw.length > 0 ? tokenTickerRaw : "LTCG";
+		const tokenAddress =
+			typeof body.tokenAddress === "string"
+				? body.tokenAddress.trim()
+				: body.tokenAddress === null
+					? null
+					: null;
+
+		if (!agentId || !userDbId || !agentName || !walletAddress) {
+			return errorResponse(
+				"agentId, userDbId, agentName, and walletAddress are required.",
+			);
+		}
+
+		try {
+			const result = await ctx.runMutation(api.agentAuth.agentLinkRetakeAccount, {
+				agentUserId: agent.userId,
+				agentId,
+				userDbId,
+				agentName,
+				walletAddress,
+				tokenAddress,
+				tokenTicker,
+			});
+			return jsonResponse(result);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
+	path: "/api/agent/retake/pipeline",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = await parseRequestJson(request);
+		if (typeof body.enabled !== "boolean") {
+			return errorResponse("enabled must be a boolean.");
+		}
+
+		try {
+			const result = await ctx.runMutation(
+				api.agentAuth.agentSetRetakePipelineEnabled,
+				{
+					agentUserId: agent.userId,
+					enabled: body.enabled,
+				},
+			);
+			return jsonResponse(result);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+// ── Agent Stream Audio Control ─────────────────────────────────
+
+corsRoute({
+	path: "/api/agent/stream/audio",
+	method: "GET",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const url = new URL(request.url);
+		const matchId = url.searchParams.get("matchId")?.trim();
+
+		try {
+			if (matchId) {
+				const control = await ctx.runQuery(apiRef.streamAudio.getByMatchId, { matchId });
+				if (!control) {
+					return errorResponse("No stream audio controller found for match.", 404);
+				}
+				return jsonResponse(control);
+			}
+
+			const control = await ctx.runQuery(apiRef.streamAudio.getByAgentId, {
+				agentId: agent._id,
+			});
+			return jsonResponse(control);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
+	},
+});
+
+corsRoute({
+	path: "/api/agent/stream/audio",
+	method: "POST",
+	handler: async (ctx, request) => {
+		const agent = await authenticateAgent(ctx, request);
+		if (!agent) return errorResponse("Unauthorized", 401);
+
+		const body = await parseRequestJson(request);
+		const patch: Record<string, unknown> = {
+			agentId: agent._id,
+		};
+
+		if (body.playbackIntent !== undefined) {
+			if (
+				body.playbackIntent !== "playing" &&
+				body.playbackIntent !== "paused" &&
+				body.playbackIntent !== "stopped"
+			) {
+				return errorResponse(
+					"playbackIntent must be one of: playing, paused, stopped.",
+				);
+			}
+			patch.playbackIntent = body.playbackIntent;
+		}
+
+		if (body.musicVolume !== undefined) {
+			const parsed = parseVolumeInput(body.musicVolume);
+			if (parsed === null) return errorResponse("musicVolume must be numeric.");
+			patch.musicVolume = parsed;
+		}
+
+		if (body.sfxVolume !== undefined) {
+			const parsed = parseVolumeInput(body.sfxVolume);
+			if (parsed === null) return errorResponse("sfxVolume must be numeric.");
+			patch.sfxVolume = parsed;
+		}
+
+		if (body.musicMuted !== undefined) {
+			const parsed = parseBooleanInput(body.musicMuted);
+			if (parsed === null) return errorResponse("musicMuted must be boolean.");
+			patch.musicMuted = parsed;
+		}
+
+		if (body.sfxMuted !== undefined) {
+			const parsed = parseBooleanInput(body.sfxMuted);
+			if (parsed === null) return errorResponse("sfxMuted must be boolean.");
+			patch.sfxMuted = parsed;
+		}
+
+		if (Object.keys(patch).length === 1) {
+			return errorResponse("Provide at least one audio control field.");
+		}
+
+		try {
+			const result = await ctx.runMutation(
+				internalApi.streamAudio.upsertForAgent,
+				patch,
+			);
+			return jsonResponse(result);
+		} catch (e: any) {
+			return errorResponse(e.message, 422);
+		}
 	},
 });
 

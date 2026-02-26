@@ -52,4 +52,22 @@ describe("agent HTTP routes", () => {
     );
     expect(httpSource).toContain("latestSnapshotVersion");
   });
+
+  it("exposes agent lobby snapshot/chat endpoints through agent-auth mutations", () => {
+    const httpSource = readSource("convex/http.ts");
+
+    expect(httpSource).toContain('path: "/api/agent/lobby/snapshot"');
+    expect(httpSource).toContain("apiRef.agentLobby.getLobbySnapshotAsAgent");
+    expect(httpSource).toContain('path: "/api/agent/lobby/chat"');
+    expect(httpSource).toContain("apiRef.agentLobby.postLobbyMessageAsAgent");
+  });
+
+  it("exposes authoritative stream audio endpoints", () => {
+    const httpSource = readSource("convex/http.ts");
+
+    expect(httpSource).toContain('path: "/api/agent/stream/audio"');
+    expect(httpSource).toContain("apiRef.streamAudio.getByAgentId");
+    expect(httpSource).toContain("apiRef.streamAudio.getByMatchId");
+    expect(httpSource).toContain("internalApi.streamAudio.upsertForAgent");
+  });
 });

@@ -310,6 +310,24 @@ export default defineSchema(
       .index("by_agent", ["agentId"])
       .index("by_agent_created", ["agentId", "createdAt"]),
 
+    // Authoritative per-agent stream audio state used by spectator overlays
+    // and retake pipeline output controls.
+    streamAudioControls: defineTable({
+      agentId: v.id("agents"),
+      playbackIntent: v.union(
+        v.literal("playing"),
+        v.literal("paused"),
+        v.literal("stopped"),
+      ),
+      musicVolume: v.number(),
+      sfxVolume: v.number(),
+      musicMuted: v.boolean(),
+      sfxMuted: v.boolean(),
+      updatedAt: v.number(),
+    })
+      .index("by_agentId", ["agentId"])
+      .index("by_updatedAt", ["updatedAt"]),
+
     // Global agent lobby chat for coordinating story/pvp sessions and stream links.
     agentLobbyMessages: defineTable({
       userId: v.id("users"),

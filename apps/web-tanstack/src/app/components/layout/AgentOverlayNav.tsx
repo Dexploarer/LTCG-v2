@@ -1,23 +1,19 @@
 import { useCallback } from "react";
 import { motion } from "framer-motion";
-import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "@/router/react-router";
-import { storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
-import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 
 type OverlayNavItem = {
   id: "home" | "story" | "pvp" | "lobby" | "watch";
   label: string;
   path: string;
-  requiresAuth: boolean;
 };
 
 const OVERLAY_NAV_ITEMS: OverlayNavItem[] = [
-  { id: "home", label: "Home", path: "/", requiresAuth: false },
-  { id: "story", label: "Story", path: "/story", requiresAuth: true },
-  { id: "pvp", label: "Agent PvP", path: "/pvp", requiresAuth: true },
-  { id: "lobby", label: "Lobby", path: "/agent-lobby", requiresAuth: true },
-  { id: "watch", label: "Watch", path: "/watch", requiresAuth: false },
+  { id: "home", label: "Home", path: "/" },
+  { id: "story", label: "Story", path: "/story" },
+  { id: "pvp", label: "Agent PvP", path: "/pvp" },
+  { id: "lobby", label: "Lobby", path: "/agent-lobby" },
+  { id: "watch", label: "Watch", path: "/watch" },
 ];
 
 export function AgentOverlayNav({
@@ -26,20 +22,12 @@ export function AgentOverlayNav({
   active: OverlayNavItem["id"];
 }) {
   const navigate = useNavigate();
-  const { authenticated, login } = PRIVY_ENABLED
-    ? usePrivy()
-    : { authenticated: false, login: () => {} };
 
   const handleNavigate = useCallback(
     (item: OverlayNavItem) => {
-      if (item.requiresAuth && !authenticated) {
-        storeRedirect(item.path);
-        login();
-        return;
-      }
       navigate(item.path);
     },
-    [authenticated, login, navigate],
+    [navigate],
   );
 
   return (

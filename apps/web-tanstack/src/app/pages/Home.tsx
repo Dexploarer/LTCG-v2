@@ -1,11 +1,8 @@
 import { useCallback } from "react";
 import { useNavigate } from "@/router/react-router";
-import { usePrivy } from "@privy-io/react-auth";
 import { motion } from "framer-motion";
 import { useIframeMode } from "@/hooks/useIframeMode";
-import { usePostLoginRedirect, storeRedirect } from "@/hooks/auth/usePostLoginRedirect";
 import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
-import { PRIVY_ENABLED } from "@/lib/auth/privyEnv";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
 import { useCardTilt } from "@/hooks/useCardTilt";
 import { SpeechBubble } from "@/components/ui/SpeechBubble";
@@ -129,23 +126,12 @@ function Panel({
 export function Home() {
   const { isEmbedded } = useIframeMode();
   const navigate = useNavigate();
-  const { authenticated, login } = PRIVY_ENABLED
-    ? usePrivy()
-    : { authenticated: false, login: () => { } };
-
-  // After Privy login returns to Home, auto-navigate to the saved destination
-  usePostLoginRedirect();
 
   const goTo = useCallback(
-    (path: string, requiresAuth: boolean) => {
-      if (requiresAuth && !authenticated) {
-        storeRedirect(path);
-        login();
-        return;
-      }
+    (path: string) => {
       navigate(path);
     },
-    [authenticated, login, navigate],
+    [navigate],
   );
 
   return (
@@ -210,7 +196,7 @@ export function Home() {
               className="text-base md:text-lg text-[#121212] drop-shadow-none"
               style={{ fontFamily: "Special Elite, cursive" }}
             >
-              Agent Arena Overlay
+              Agent-Only Runtime Overlay
             </span>
           </SpeechBubble>
         </motion.div>
@@ -225,9 +211,9 @@ export function Home() {
       >
         <Panel
           title="Story Mode"
-          subtitle="Queue chapter battles for autonomous agents"
+          subtitle="Queue chapter battles through the agent control lobby"
           bgImage={STORY_BG}
-          onClick={() => goTo("/story", true)}
+          onClick={() => goTo("/story")}
           impactWord="FIGHT!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9876;</div>
@@ -235,9 +221,9 @@ export function Home() {
 
         <Panel
           title="Agent PvP"
-          subtitle="Create and join agent-vs-agent duels"
+          subtitle="Run agent-vs-agent duels with shared plugin parity"
           bgImage={PVP_BG}
-          onClick={() => goTo("/pvp", true)}
+          onClick={() => goTo("/pvp")}
           impactWord="DUEL!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9878;</div>
@@ -245,9 +231,9 @@ export function Home() {
 
         <Panel
           title="Agent Lobby"
-          subtitle="Chat with agents and discover open arenas"
+          subtitle="Chat, retake pipeline controls, and runtime diagnostics"
           bgContain
-          onClick={() => goTo("/agent-lobby", true)}
+          onClick={() => goTo("/agent-lobby")}
           impactWord="SYNC!"
         >
           <div className="text-4xl mb-3">&#128172;</div>
@@ -257,7 +243,7 @@ export function Home() {
           title="Watch Overlays"
           subtitle="Open animated spectator overlays for live matches"
           bgImage={WATCH_BG}
-          onClick={() => goTo("/watch", false)}
+          onClick={() => goTo("/watch")}
           impactWord="WATCH!"
         >
           <div className="text-4xl mb-3 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">&#9655;</div>
@@ -268,7 +254,7 @@ export function Home() {
         className="relative z-10 text-center text-xs text-white/70 px-4"
         style={{ paddingBottom: "calc(5rem + var(--safe-area-bottom))", fontFamily: "Special Elite, cursive" }}
       >
-        Agents play. Humans spectate. Everything runs in overlay mode.
+        One capability surface for OpenClawd and milady/elizaOS agents. Humans watch via overlays.
       </p>
 
       {!isEmbedded && <AgentOverlayNav active="home" />}

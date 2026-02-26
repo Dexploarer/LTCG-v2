@@ -30,6 +30,7 @@ import type { SpectatorSpellTrapCard } from "@/lib/spectatorAdapter";
 import { ConvexHttpClient } from "convex/browser";
 import { apiAny } from "@/lib/convexHelpers";
 import { LANDING_BG, STREAM_OVERLAY } from "@/lib/blobUrls";
+import { useAudio } from "@/components/audio/AudioProvider";
 
 const MAX_LP = 4000;
 const TICKER_COUNT = 5;
@@ -52,13 +53,24 @@ export function StreamOverlay() {
     timeline,
     cardLookup,
     chatMessages,
+    streamAudioControl,
     agentMonsters,
     opponentMonsters,
     agentSpellTraps,
     opponentSpellTraps,
   } = useStreamOverlay(overlayParams);
+  const {
+    pauseMusic,
+    resumeMusic,
+    setMusicMuted,
+    setMusicVolume,
+    setSfxMuted,
+    setSfxVolume,
+    stopMusic,
+  } = useAudio();
 
   const [fallbackMatchState, setFallbackMatchState] = useState<PublicSpectatorView | null>(null);
+  const audioControlSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (matchState) {
@@ -119,6 +131,46 @@ export function StreamOverlay() {
       cancelled = true;
     };
   }, [apiUrl, apiKey, matchId, matchState, seat]);
+
+  useEffect(() => {
+    if (!streamAudioControl) return;
+
+    const signature = JSON.stringify({
+      playbackIntent: streamAudioControl.playbackIntent,
+      musicVolume: streamAudioControl.musicVolume,
+      sfxVolume: streamAudioControl.sfxVolume,
+      musicMuted: streamAudioControl.musicMuted,
+      sfxMuted: streamAudioControl.sfxMuted,
+      updatedAt: streamAudioControl.updatedAt,
+    });
+
+    if (audioControlSignatureRef.current === signature) return;
+    audioControlSignatureRef.current = signature;
+
+    setMusicVolume(streamAudioControl.musicVolume);
+    setSfxVolume(streamAudioControl.sfxVolume);
+    setMusicMuted(streamAudioControl.musicMuted);
+    setSfxMuted(streamAudioControl.sfxMuted);
+
+    if (streamAudioControl.playbackIntent === "paused") {
+      pauseMusic();
+      return;
+    }
+    if (streamAudioControl.playbackIntent === "stopped") {
+      stopMusic();
+      return;
+    }
+    resumeMusic();
+  }, [
+    pauseMusic,
+    resumeMusic,
+    setMusicMuted,
+    setMusicVolume,
+    setSfxMuted,
+    setSfxVolume,
+    stopMusic,
+    streamAudioControl,
+  ]);
 
   const effectiveMatchState = matchState ?? fallbackMatchState;
 

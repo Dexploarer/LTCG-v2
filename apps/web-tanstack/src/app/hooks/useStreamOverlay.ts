@@ -32,6 +32,16 @@ export type StreamChatMessage = {
   createdAt: number;
 };
 
+export type StreamAudioControl = {
+  agentId: string;
+  playbackIntent: "playing" | "paused" | "stopped";
+  musicVolume: number;
+  sfxVolume: number;
+  musicMuted: boolean;
+  sfxMuted: boolean;
+  updatedAt: number;
+};
+
 export interface StreamOverlayData {
   loading: boolean;
   error: string | null;
@@ -41,6 +51,7 @@ export interface StreamOverlayData {
   timeline: PublicEventLogEntry[];
   cardLookup: Record<string, CardDefinition>;
   chatMessages: StreamChatMessage[];
+  streamAudioControl: StreamAudioControl | null;
   // Pre-adapted board data
   agentMonsters: BoardCard[];
   opponentMonsters: BoardCard[];
@@ -70,14 +81,27 @@ export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData
   const { lookup: cardLookup, isLoaded: cardsLoaded } = useCardLookup();
 
   // Subscribe to stream chat messages (real-time via Convex)
-  // The agent._id from useAgentSpectator is the agent doc _id, but we need the
-  // userId to find the agent record's _id. The agent object has `id` which is the agent doc _id.
+  // Prefer direct agent stream identity, and fall back to match host mapping.
   const agentDocId = agent?.id ?? null;
-  const rawMessages = useQuery(
+  const rawMessagesByAgent = useQuery(
     apiAny.streamChat.getRecentStreamMessages,
     agentDocId ? { agentId: agentDocId, limit: 50 } : "skip",
   ) as StreamChatMessage[] | undefined;
-  const chatMessages = rawMessages ?? [];
+  const rawMessagesByMatch = useQuery(
+    apiAny.streamChat.getRecentStreamMessagesByMatch,
+    !agentDocId && params.matchId ? { matchId: params.matchId, limit: 50 } : "skip",
+  ) as StreamChatMessage[] | undefined;
+  const chatMessages = rawMessagesByAgent ?? rawMessagesByMatch ?? [];
+
+  const streamAudioByAgent = useQuery(
+    apiAny.streamAudio.getByAgentId,
+    agentDocId ? { agentId: agentDocId } : "skip",
+  ) as StreamAudioControl | undefined;
+  const streamAudioByMatch = useQuery(
+    apiAny.streamAudio.getByMatchId,
+    !agentDocId && params.matchId ? { matchId: params.matchId } : "skip",
+  ) as StreamAudioControl | null | undefined;
+  const streamAudioControl = streamAudioByAgent ?? streamAudioByMatch ?? null;
 
   // Adapt spectator slots to rich board component shapes
   const agentMonsters = useMemo(
@@ -108,6 +132,7 @@ export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData
     timeline,
     cardLookup,
     chatMessages,
+    streamAudioControl,
     agentMonsters,
     opponentMonsters,
     agentSpellTraps,

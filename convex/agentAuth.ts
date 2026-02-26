@@ -482,3 +482,107 @@ export const agentSelectStarterDeck = mutation({
     return { deckId, cardCount: totalCards };
   },
 });
+
+function normalizeWalletAddress(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export const agentLinkRetakeAccount = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    agentId: v.string(),
+    userDbId: v.string(),
+    agentName: v.string(),
+    walletAddress: v.string(),
+    tokenAddress: v.union(v.string(), v.null()),
+    tokenTicker: v.string(),
+  },
+  returns: v.object({
+    linked: v.boolean(),
+    pipelineEnabled: v.boolean(),
+    streamUrl: v.string(),
+    tokenAddress: v.union(v.string(), v.null()),
+    tokenTicker: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const userWallet = normalizeWalletAddress(user.walletAddress);
+    const retakeWallet = normalizeWalletAddress(args.walletAddress);
+    if (!retakeWallet) {
+      throw new ConvexError("Retake wallet address is required.");
+    }
+
+    if (userWallet && userWallet.toLowerCase() !== retakeWallet.toLowerCase()) {
+      throw new ConvexError("Retake wallet must match the existing LunchTable wallet.");
+    }
+
+    const agentName = args.agentName.trim();
+    if (!agentName) {
+      throw new ConvexError("Retake agent name is required.");
+    }
+
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      retakeOptInStatus: "accepted",
+      retakeAgentId: args.agentId.trim(),
+      retakeUserDbId: args.userDbId.trim(),
+      retakeAgentName: agentName,
+      retakeWalletAddress: retakeWallet,
+      retakeTokenAddress: args.tokenAddress,
+      retakeTokenTicker: args.tokenTicker.trim() || "LTCG",
+      retakePipelineEnabled: true,
+      retakeLinkedAt: now,
+    };
+
+    // Preserve retake-wallet integrity by setting wallet on first link if absent.
+    if (!userWallet) {
+      patch.walletAddress = retakeWallet;
+    }
+
+    await ctx.db.patch(user._id, patch);
+
+    return {
+      linked: true,
+      pipelineEnabled: true,
+      streamUrl: `https://retake.tv/${encodeURIComponent(agentName)}`,
+      tokenAddress: args.tokenAddress,
+      tokenTicker: args.tokenTicker.trim() || "LTCG",
+    };
+  },
+});
+
+export const agentSetRetakePipelineEnabled = mutation({
+  args: {
+    agentUserId: v.id("users"),
+    enabled: v.boolean(),
+  },
+  returns: v.object({
+    pipelineEnabled: v.boolean(),
+    hasRetakeAccount: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.agentUserId);
+    if (!user) throw new ConvexError("Agent user not found");
+
+    const hasRetakeAccount = Boolean(
+      user.retakeAgentId && user.retakeUserDbId && user.retakeTokenAddress,
+    );
+
+    if (args.enabled && !hasRetakeAccount) {
+      throw new ConvexError("Link a Retake account before enabling the pipeline.");
+    }
+
+    await ctx.db.patch(user._id, {
+      retakePipelineEnabled: args.enabled,
+    });
+
+    return {
+      pipelineEnabled: args.enabled,
+      hasRetakeAccount,
+    };
+  },
+});
