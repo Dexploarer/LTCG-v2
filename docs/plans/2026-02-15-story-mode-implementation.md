@@ -15,7 +15,7 @@
 The foundation. All other components consume this context.
 
 **Files:**
-- Create: `apps/web/src/components/story/StoryProvider.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/StoryProvider.tsx`
 
 **Step 1: Create the provider**
 
@@ -193,7 +193,7 @@ Expected: No TypeScript errors (unused export warnings OK)
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/StoryProvider.tsx
+git add apps/web-tanstack/src/legacy/components/story/StoryProvider.tsx
 git commit -m "feat(story): add StoryProvider context with cutscene queue and progression helpers"
 ```
 
@@ -202,7 +202,7 @@ git commit -m "feat(story): add StoryProvider context with cutscene queue and pr
 ### Task 2: DialogueBox — Typewriter Animated Dialogue
 
 **Files:**
-- Create: `apps/web/src/components/story/DialogueBox.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/DialogueBox.tsx`
 
 **Step 1: Create the component**
 
@@ -395,7 +395,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/DialogueBox.tsx
+git add apps/web-tanstack/src/legacy/components/story/DialogueBox.tsx
 git commit -m "feat(story): add DialogueBox with typewriter animation and milunchlady avatars"
 ```
 
@@ -404,7 +404,7 @@ git commit -m "feat(story): add DialogueBox with typewriter animation and milunc
 ### Task 3: StoryIntro — Video Cutscene Player
 
 **Files:**
-- Create: `apps/web/src/components/story/StoryIntro.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/StoryIntro.tsx`
 
 **Step 1: Create the component**
 
@@ -524,7 +524,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/StoryIntro.tsx
+git add apps/web-tanstack/src/legacy/components/story/StoryIntro.tsx
 git commit -m "feat(story): add StoryIntro video cutscene player with skip and graceful fallback"
 ```
 
@@ -533,8 +533,8 @@ git commit -m "feat(story): add StoryIntro video cutscene player with skip and g
 ### Task 4: ChapterMap — Comic Panel Grid
 
 **Files:**
-- Create: `apps/web/src/components/story/ChapterMap.tsx`
-- Modify: `apps/web/src/globals.css` (add comic panel CSS)
+- Create: `apps/web-tanstack/src/legacy/components/story/ChapterMap.tsx`
+- Modify: `apps/web-tanstack/src/styles/legacy.css` (add comic panel CSS)
 
 **Step 1: Create the component**
 
@@ -710,7 +710,7 @@ export function ChapterMap() {
 
 **Step 2: Add CSS for comic panels to globals.css**
 
-Append to `apps/web/src/globals.css` after the existing `.shadow-zine-lg` block (after line 438):
+Append to `apps/web-tanstack/src/styles/legacy.css` after the existing `.shadow-zine-lg` block (after line 438):
 
 ```css
 /* Comic Panel Grid */
@@ -756,7 +756,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 4: Commit**
 
 ```bash
-git add apps/web/src/components/story/ChapterMap.tsx apps/web/src/globals.css
+git add apps/web-tanstack/src/legacy/components/story/ChapterMap.tsx apps/web-tanstack/src/styles/legacy.css
 git commit -m "feat(story): add ChapterMap comic panel grid with stagger animation"
 ```
 
@@ -765,7 +765,7 @@ git commit -m "feat(story): add ChapterMap comic panel grid with stagger animati
 ### Task 5: StagePanel — Individual Stage Card
 
 **Files:**
-- Create: `apps/web/src/components/story/StagePanel.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/StagePanel.tsx`
 
 **Step 1: Create the component**
 
@@ -901,7 +901,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/StagePanel.tsx
+git add apps/web-tanstack/src/legacy/components/story/StagePanel.tsx
 git commit -m "feat(story): add StagePanel with stars, rewards preview, and difficulty badges"
 ```
 
@@ -910,7 +910,7 @@ git commit -m "feat(story): add StagePanel with stars, rewards preview, and diff
 ### Task 6: BattleTransition — Screen Transition Animations
 
 **Files:**
-- Create: `apps/web/src/components/story/BattleTransition.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/BattleTransition.tsx`
 
 **Step 1: Create the component**
 
@@ -1023,7 +1023,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/BattleTransition.tsx
+git add apps/web-tanstack/src/legacy/components/story/BattleTransition.tsx
 git commit -m "feat(story): add BattleTransition with ink-splash, victory star, and defeat animations"
 ```
 
@@ -1032,7 +1032,7 @@ git commit -m "feat(story): add BattleTransition with ink-splash, victory star, 
 ### Task 7: VictoryScreen — Post-Match Results
 
 **Files:**
-- Create: `apps/web/src/components/story/VictoryScreen.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/story/VictoryScreen.tsx`
 
 **Step 1: Create the component**
 
@@ -1222,7 +1222,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 3: Commit**
 
 ```bash
-git add apps/web/src/components/story/VictoryScreen.tsx
+git add apps/web-tanstack/src/legacy/components/story/VictoryScreen.tsx
 git commit -m "feat(story): add VictoryScreen with animated stars, reward counters, and next-stage flow"
 ```
 
@@ -1231,10 +1231,10 @@ git commit -m "feat(story): add VictoryScreen with animated stars, reward counte
 ### Task 8: Barrel Export + Wire Pages to Components
 
 **Files:**
-- Create: `apps/web/src/components/story/index.ts`
-- Modify: `apps/web/src/pages/Story.tsx` (replace with thin shell)
-- Modify: `apps/web/src/pages/StoryChapter.tsx` (replace with thin shell)
-- Modify: `apps/web/src/pages/Play.tsx` (add story overlay layer)
+- Create: `apps/web-tanstack/src/legacy/components/story/index.ts`
+- Modify: `apps/web-tanstack/src/legacy/pages/Story.tsx` (replace with thin shell)
+- Modify: `apps/web-tanstack/src/legacy/pages/StoryChapter.tsx` (replace with thin shell)
+- Modify: `apps/web-tanstack/src/legacy/pages/Play.tsx` (add story overlay layer)
 
 **Step 1: Create barrel export**
 
@@ -1251,7 +1251,7 @@ export { VictoryScreen } from "./VictoryScreen";
 
 **Step 2: Rewrite Story.tsx as thin shell**
 
-Replace entire file `apps/web/src/pages/Story.tsx`:
+Replace entire file `apps/web-tanstack/src/legacy/pages/Story.tsx`:
 
 ```tsx
 import { StoryProvider, ChapterMap, StoryIntro, DialogueBox } from "@/components/story";
@@ -1271,7 +1271,7 @@ export function Story() {
 
 **Step 3: Rewrite StoryChapter.tsx as thin shell with StagePanel**
 
-Replace entire file `apps/web/src/pages/StoryChapter.tsx`:
+Replace entire file `apps/web-tanstack/src/legacy/pages/StoryChapter.tsx`:
 
 ```tsx
 import { useState } from "react";
@@ -1399,7 +1399,7 @@ function StoryChapterInner() {
 
 **Step 4: Add story overlay layer to Play.tsx**
 
-Add imports at top of `apps/web/src/pages/Play.tsx` (line 1-3), then wrap the game-over section with VictoryScreen. Replace lines 1-96 with:
+Add imports at top of `apps/web-tanstack/src/legacy/pages/Play.tsx` (line 1-3), then wrap the game-over section with VictoryScreen. Replace lines 1-96 with:
 
 ```tsx
 import { useState, useCallback } from "react";
@@ -1524,7 +1524,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 6: Commit**
 
 ```bash
-git add apps/web/src/components/story/index.ts apps/web/src/pages/Story.tsx apps/web/src/pages/StoryChapter.tsx apps/web/src/pages/Play.tsx
+git add apps/web-tanstack/src/legacy/components/story/index.ts apps/web-tanstack/src/legacy/pages/Story.tsx apps/web-tanstack/src/legacy/pages/StoryChapter.tsx apps/web-tanstack/src/legacy/pages/Play.tsx
 git commit -m "feat(story): wire components into pages — Story, StoryChapter, and Play now use story components"
 ```
 
@@ -1535,7 +1535,7 @@ git commit -m "feat(story): wire components into pages — Story, StoryChapter, 
 **Files:**
 - Modify: `convex/game.ts` (add `getStageWithNarrative` query)
 - Modify: `convex/http.ts` (add story progress + narrative endpoints)
-- Modify: `apps/web/src/lib/iframe.ts` (add story postMessage types)
+- Modify: `apps/web-tanstack/src/legacy/lib/iframe.ts` (add story postMessage types)
 
 **Step 1: Add narrative query to game.ts**
 
@@ -1629,7 +1629,7 @@ cors.route({
 
 **Step 3: Add story postMessage types to iframe.ts**
 
-Add to the `GameToHost` type union in `apps/web/src/lib/iframe.ts` (after line 13):
+Add to the `GameToHost` type union in `apps/web-tanstack/src/legacy/lib/iframe.ts` (after line 13):
 
 ```typescript
   | { type: "STORY_CUTSCENE"; cutsceneId: string; src: string }
@@ -1650,7 +1650,7 @@ Run: `cd /Users/home/Desktop/LTCG-v2 && bun run --filter web build 2>&1 | head -
 **Step 5: Commit**
 
 ```bash
-git add convex/game.ts convex/http.ts apps/web/src/lib/iframe.ts
+git add convex/game.ts convex/http.ts apps/web-tanstack/src/legacy/lib/iframe.ts
 git commit -m "feat(story): add agent story API endpoints with JSON narrative payloads and iframe story messages"
 ```
 
@@ -1689,23 +1689,23 @@ git commit -m "fix(story): address smoke test issues"
 
 ### New files (8)
 ```
-apps/web/src/components/story/StoryProvider.tsx
-apps/web/src/components/story/DialogueBox.tsx
-apps/web/src/components/story/StoryIntro.tsx
-apps/web/src/components/story/ChapterMap.tsx
-apps/web/src/components/story/StagePanel.tsx
-apps/web/src/components/story/BattleTransition.tsx
-apps/web/src/components/story/VictoryScreen.tsx
-apps/web/src/components/story/index.ts
+apps/web-tanstack/src/legacy/components/story/StoryProvider.tsx
+apps/web-tanstack/src/legacy/components/story/DialogueBox.tsx
+apps/web-tanstack/src/legacy/components/story/StoryIntro.tsx
+apps/web-tanstack/src/legacy/components/story/ChapterMap.tsx
+apps/web-tanstack/src/legacy/components/story/StagePanel.tsx
+apps/web-tanstack/src/legacy/components/story/BattleTransition.tsx
+apps/web-tanstack/src/legacy/components/story/VictoryScreen.tsx
+apps/web-tanstack/src/legacy/components/story/index.ts
 ```
 
 ### Modified files (5)
 ```
-apps/web/src/pages/Story.tsx          → thin shell
-apps/web/src/pages/StoryChapter.tsx   → thin shell + StagePanel
-apps/web/src/pages/Play.tsx           → VictoryScreen integration
-apps/web/src/globals.css              → comic panel + stamp CSS
+apps/web-tanstack/src/legacy/pages/Story.tsx          → thin shell
+apps/web-tanstack/src/legacy/pages/StoryChapter.tsx   → thin shell + StagePanel
+apps/web-tanstack/src/legacy/pages/Play.tsx           → VictoryScreen integration
+apps/web-tanstack/src/styles/legacy.css              → comic panel + stamp CSS
 convex/game.ts                        → narrative queries
 convex/http.ts                        → agent story endpoints
-apps/web/src/lib/iframe.ts            → story postMessage types
+apps/web-tanstack/src/legacy/lib/iframe.ts            → story postMessage types
 ```

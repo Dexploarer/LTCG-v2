@@ -1,6 +1,9 @@
 # Roll20-Inspired LunchTable TTG Research
 Date: February 18, 2026
 
+> Status (February 23, 2026): The in-repo studio runtime described here was removed from active product flows.
+> This document is retained as product research history; code path references in section 4 are archival.
+
 ## 1) What Roll20 still does well
 - Roll20 keeps onboarding simple with a fast game-lobby creation flow and campaign setup defaults.
 - Roll20's `Pro` tier supports Mod Scripts (API), which validates demand for creator-side automation and extensibility.
@@ -22,15 +25,15 @@ Date: February 18, 2026
 - Event loop: weekly world mutations and limited-time district/season states drive urgency.
 
 ## 4) Product architecture for this repo
-- `apps/web/src/lib/ttrpgStudio/types.ts` defines the full creator data model:
+- `apps/web-tanstack/src/legacy/lib/ttrpgStudio/types.ts` defines the full creator data model:
   rulesets, dice moves, archetypes, agent profiles, maps, dungeons, campaign arcs, and creation kits.
-- `apps/web/src/lib/ttrpgStudio/generatorAssets.ts` defines reusable AI prompt recipes and export contracts.
-- `apps/web/src/lib/ttrpgStudio/worlds.ts` ships three complete worlds with playable campaign scaffolds and asset manifests.
-- `apps/web/src/pages/Studio.tsx` is the user-facing world library + creator panel.
+- `apps/web-tanstack/src/legacy/lib/ttrpgStudio/generatorAssets.ts` defines reusable AI prompt recipes and export contracts.
+- `apps/web-tanstack/src/legacy/lib/ttrpgStudio/worlds.ts` ships three complete worlds with playable campaign scaffolds and asset manifests.
+- `apps/web-tanstack/src/legacy/pages/Studio.tsx` is the user-facing world library + creator panel.
 - Routing/nav integration:
-  - `apps/web/src/App.tsx`
-  - `apps/web/src/pages/Home.tsx`
-  - `apps/web/src/components/layout/TrayNav.tsx`
+  - `apps/web-tanstack/src/legacy/App.tsx`
+  - `apps/web-tanstack/src/legacy/pages/Home.tsx`
+  - `apps/web-tanstack/src/legacy/components/layout/TrayNav.tsx`
 
 ## 5) Three completed worlds included
 - `Neon Borough: Vice Circuit` (cyberpunk urban fantasy)

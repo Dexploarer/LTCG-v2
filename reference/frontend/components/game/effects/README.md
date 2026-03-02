@@ -16,7 +16,7 @@ This system provides clear visual indicators when effects trigger and resolve, h
 
 ### 1. EffectFeedback Component
 
-Location: `apps/web/src/components/game/effects/EffectFeedback.tsx`
+Location: `apps/web-tanstack/src/legacy/components/game/effects/EffectFeedback.tsx`
 
 Main component providing floating numbers and card animations.
 
@@ -84,7 +84,7 @@ function GameBoard() {
 
 ### 2. EffectQueueWidget Component
 
-Location: `apps/web/src/components/game/effects/EffectQueueWidget.tsx`
+Location: `apps/web-tanstack/src/legacy/components/game/effects/EffectQueueWidget.tsx`
 
 Displays pending effects waiting to resolve in order.
 
@@ -117,7 +117,7 @@ function GameBoard() {
 
 ### 3. Enhanced Toast Notifications
 
-Location: `apps/web/src/lib/effectToasts.ts`
+Location: `apps/web-tanstack/src/legacy/lib/effectToasts.ts`
 
 Categorized toast system with icons and colors for different effect types.
 
@@ -168,7 +168,7 @@ showStatBoost("Dark Magician", "ATK", 500);
 
 ### 4. BoardCard Enhancements
 
-Location: `apps/web/src/components/game/board/cards/BoardCard.tsx`
+Location: `apps/web-tanstack/src/legacy/components/game/board/cards/BoardCard.tsx`
 
 Added indicators for card states:
 
@@ -253,7 +253,7 @@ return (
 
 ### CSS Animations
 
-Location: `apps/web/app/globals.css`
+Location: `apps/web-tanstack/src/styles/legacy.css`
 
 New animations added:
 

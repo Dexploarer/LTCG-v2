@@ -49,7 +49,7 @@ This Vercel Function handles image uploads:
 
 ## Upload Component
 
-**File:** `apps/web/src/components/ImageUpload.tsx` (legacy client)
+**File:** `apps/web-tanstack/src/legacy/components/ImageUpload.tsx` (legacy compatibility client)
 
 Usage:
 
@@ -121,9 +121,9 @@ Or use the component with automatic URL handling.
 api/
 └── blob-upload.ts              # Vercel Function for uploads
 
-apps/web/                       # Legacy React Router client (optional uploader UI)
+apps/web-tanstack/
 ├── src/
-│   ├── components/
+│   ├── legacy/components/
 │   │   └── ImageUpload.tsx     # React upload component
 │   └── ...
 └── public/

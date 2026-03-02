@@ -697,7 +697,7 @@ git commit -m "feat(engine): wire card effects into spell/trap activation + new 
 ### Task 4: Create useGameState hook
 
 **Files:**
-- Create: `apps/web/src/components/game/hooks/useGameState.ts`
+- Create: `apps/web-tanstack/src/legacy/components/game/hooks/useGameState.ts`
 
 ```typescript
 import { useMemo } from "react";
@@ -853,7 +853,7 @@ export function useGameState(matchId: string | undefined) {
 **Step 2: Commit**
 
 ```bash
-git add apps/web/src/components/game/hooks/useGameState.ts
+git add apps/web-tanstack/src/legacy/components/game/hooks/useGameState.ts
 git commit -m "feat(ui): add useGameState hook with valid action derivation"
 ```
 
@@ -862,7 +862,7 @@ git commit -m "feat(ui): add useGameState hook with valid action derivation"
 ### Task 5: Create useGameActions hook
 
 **Files:**
-- Create: `apps/web/src/components/game/hooks/useGameActions.ts`
+- Create: `apps/web-tanstack/src/legacy/components/game/hooks/useGameActions.ts`
 
 ```typescript
 import { useState, useCallback } from "react";
@@ -923,7 +923,7 @@ export function useGameActions(matchId: string | undefined) {
 **Commit:**
 
 ```bash
-git add apps/web/src/components/game/hooks/useGameActions.ts
+git add apps/web-tanstack/src/legacy/components/game/hooks/useGameActions.ts
 git commit -m "feat(ui): add useGameActions hook wrapping all command types"
 ```
 
@@ -932,12 +932,12 @@ git commit -m "feat(ui): add useGameActions hook wrapping all command types"
 ### Task 6: Build core game board components
 
 **Files:**
-- Create: `apps/web/src/components/game/LPBar.tsx`
-- Create: `apps/web/src/components/game/PhaseBar.tsx`
-- Create: `apps/web/src/components/game/BoardSlot.tsx`
-- Create: `apps/web/src/components/game/FieldRow.tsx`
-- Create: `apps/web/src/components/game/HandCard.tsx`
-- Create: `apps/web/src/components/game/PlayerHand.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/LPBar.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/PhaseBar.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/BoardSlot.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/FieldRow.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/HandCard.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/PlayerHand.tsx`
 
 Each component should use the zine aesthetic (paper-panel, ink borders, Special Elite font, #121212 ink, #ffcc00 accent). Use Framer Motion for hover/tap animations. Use `cardLookup` to resolve card names and stats from IDs.
 
@@ -960,7 +960,7 @@ These are UI-only components — no game logic, just rendering + click callbacks
 **Commit after creating all 6:**
 
 ```bash
-git add apps/web/src/components/game/
+git add apps/web-tanstack/src/legacy/components/game/
 git commit -m "feat(ui): add core board components — LPBar, PhaseBar, BoardSlot, FieldRow, HandCard, PlayerHand"
 ```
 
@@ -969,10 +969,10 @@ git commit -m "feat(ui): add core board components — LPBar, PhaseBar, BoardSlo
 ### Task 7: Build action sheets and selectors
 
 **Files:**
-- Create: `apps/web/src/components/game/ActionSheet.tsx`
-- Create: `apps/web/src/components/game/TributeSelector.tsx`
-- Create: `apps/web/src/components/game/AttackTargetSelector.tsx`
-- Create: `apps/web/src/components/game/GraveyardBrowser.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/ActionSheet.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/TributeSelector.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/AttackTargetSelector.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/GraveyardBrowser.tsx`
 
 **ActionSheet**: Bottom sheet modal (Framer Motion slide-up). Shows card name + options based on card type:
 - Monster in hand: "Summon ATK" / "Summon DEF" / "Set Face-Down" / Cancel
@@ -990,10 +990,10 @@ git commit -m "feat(ui): add core board components — LPBar, PhaseBar, BoardSlo
 **Commit:**
 
 ```bash
-git add apps/web/src/components/game/ActionSheet.tsx
-git add apps/web/src/components/game/TributeSelector.tsx
-git add apps/web/src/components/game/AttackTargetSelector.tsx
-git add apps/web/src/components/game/GraveyardBrowser.tsx
+git add apps/web-tanstack/src/legacy/components/game/ActionSheet.tsx
+git add apps/web-tanstack/src/legacy/components/game/TributeSelector.tsx
+git add apps/web-tanstack/src/legacy/components/game/AttackTargetSelector.tsx
+git add apps/web-tanstack/src/legacy/components/game/GraveyardBrowser.tsx
 git commit -m "feat(ui): add ActionSheet, TributeSelector, AttackTargetSelector, GraveyardBrowser"
 ```
 
@@ -1002,8 +1002,8 @@ git commit -m "feat(ui): add ActionSheet, TributeSelector, AttackTargetSelector,
 ### Task 8: Build GameBoard root component and wire into Play page
 
 **Files:**
-- Create: `apps/web/src/components/game/GameBoard.tsx`
-- Modify: `apps/web/src/pages/Play.tsx` — replace skeleton with GameBoard
+- Create: `apps/web-tanstack/src/legacy/components/game/GameBoard.tsx`
+- Modify: `apps/web-tanstack/src/legacy/pages/Play.tsx` — replace skeleton with GameBoard
 
 **GameBoard.tsx**: The root layout component. Manages selection state:
 - `selectedHandCard: string | null`
@@ -1030,7 +1030,7 @@ ActionSheet callbacks route to appropriate `useGameActions` methods.
 **Commit:**
 
 ```bash
-git add apps/web/src/components/game/GameBoard.tsx apps/web/src/pages/Play.tsx
+git add apps/web-tanstack/src/legacy/components/game/GameBoard.tsx apps/web-tanstack/src/legacy/pages/Play.tsx
 git commit -m "feat(ui): build GameBoard root component and wire into Play page"
 ```
 
@@ -1310,14 +1310,14 @@ git commit -m "feat(engine): add chain/priority system with LIFO resolution"
 ### Task 11: Build ChainPrompt frontend component
 
 **Files:**
-- Create: `apps/web/src/components/game/ChainPrompt.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/ChainPrompt.tsx`
 
 Bottom-overlay prompt shown when opponent activates something and player has activatable traps. Shows: "Opponent activated [card]! Respond?" with list of activatable traps and a "Pass" button. 5-second auto-pass timer (countdown shown). Calls `chainResponse()` from useGameActions.
 
 **Commit:**
 
 ```bash
-git add apps/web/src/components/game/ChainPrompt.tsx
+git add apps/web-tanstack/src/legacy/components/game/ChainPrompt.tsx
 git commit -m "feat(ui): add ChainPrompt component for trap response window"
 ```
 
@@ -1326,14 +1326,14 @@ git commit -m "feat(ui): add ChainPrompt component for trap response window"
 ### Task 12: Build GameOverOverlay
 
 **Files:**
-- Create: `apps/web/src/components/game/GameOverOverlay.tsx`
+- Create: `apps/web-tanstack/src/legacy/components/game/GameOverOverlay.tsx`
 
 Full-screen overlay with victory/defeat result. Shows stars, rewards (for story mode), and navigation buttons. Reuses existing VictoryScreen for story mode, adds a simpler overlay for non-story matches.
 
 **Commit:**
 
 ```bash
-git add apps/web/src/components/game/GameOverOverlay.tsx
+git add apps/web-tanstack/src/legacy/components/game/GameOverOverlay.tsx
 git commit -m "feat(ui): add GameOverOverlay component"
 ```
 
@@ -1385,21 +1385,21 @@ packages/engine/src/effects/interpreter.ts
 packages/engine/src/effects/operations.ts
 packages/engine/src/rules/chain.ts
 packages/engine/src/__tests__/effects.test.ts
-apps/web/src/components/game/hooks/useGameState.ts
-apps/web/src/components/game/hooks/useGameActions.ts
-apps/web/src/components/game/GameBoard.tsx
-apps/web/src/components/game/PlayerHand.tsx
-apps/web/src/components/game/HandCard.tsx
-apps/web/src/components/game/FieldRow.tsx
-apps/web/src/components/game/BoardSlot.tsx
-apps/web/src/components/game/PhaseBar.tsx
-apps/web/src/components/game/LPBar.tsx
-apps/web/src/components/game/ActionSheet.tsx
-apps/web/src/components/game/TributeSelector.tsx
-apps/web/src/components/game/AttackTargetSelector.tsx
-apps/web/src/components/game/GraveyardBrowser.tsx
-apps/web/src/components/game/ChainPrompt.tsx
-apps/web/src/components/game/GameOverOverlay.tsx
+apps/web-tanstack/src/legacy/components/game/hooks/useGameState.ts
+apps/web-tanstack/src/legacy/components/game/hooks/useGameActions.ts
+apps/web-tanstack/src/legacy/components/game/GameBoard.tsx
+apps/web-tanstack/src/legacy/components/game/PlayerHand.tsx
+apps/web-tanstack/src/legacy/components/game/HandCard.tsx
+apps/web-tanstack/src/legacy/components/game/FieldRow.tsx
+apps/web-tanstack/src/legacy/components/game/BoardSlot.tsx
+apps/web-tanstack/src/legacy/components/game/PhaseBar.tsx
+apps/web-tanstack/src/legacy/components/game/LPBar.tsx
+apps/web-tanstack/src/legacy/components/game/ActionSheet.tsx
+apps/web-tanstack/src/legacy/components/game/TributeSelector.tsx
+apps/web-tanstack/src/legacy/components/game/AttackTargetSelector.tsx
+apps/web-tanstack/src/legacy/components/game/GraveyardBrowser.tsx
+apps/web-tanstack/src/legacy/components/game/ChainPrompt.tsx
+apps/web-tanstack/src/legacy/components/game/GameOverOverlay.tsx
 ```
 
 ### Modified Files (4)
@@ -1409,5 +1409,5 @@ packages/engine/src/engine.ts          — legalMoves() + new evolve handlers
 packages/engine/src/rules/spellsTraps.ts — wire effects into activation
 packages/engine/src/__tests__/engine.test.ts — legalMoves tests
 convex/game.ts                         — AI heuristic logic
-apps/web/src/pages/Play.tsx            — wire in GameBoard
+apps/web-tanstack/src/legacy/pages/Play.tsx            — wire in GameBoard
 ```

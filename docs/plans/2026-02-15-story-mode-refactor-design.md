@@ -368,23 +368,23 @@ useEffect(() => {
 
 ### New files
 ```
-apps/web/src/components/story/StoryProvider.tsx
-apps/web/src/components/story/StoryIntro.tsx
-apps/web/src/components/story/DialogueBox.tsx
-apps/web/src/components/story/ChapterMap.tsx
-apps/web/src/components/story/StagePanel.tsx
-apps/web/src/components/story/BattleTransition.tsx
-apps/web/src/components/story/VictoryScreen.tsx
-apps/web/src/components/story/index.ts           # barrel export
+apps/web-tanstack/src/legacy/components/story/StoryProvider.tsx
+apps/web-tanstack/src/legacy/components/story/StoryIntro.tsx
+apps/web-tanstack/src/legacy/components/story/DialogueBox.tsx
+apps/web-tanstack/src/legacy/components/story/ChapterMap.tsx
+apps/web-tanstack/src/legacy/components/story/StagePanel.tsx
+apps/web-tanstack/src/legacy/components/story/BattleTransition.tsx
+apps/web-tanstack/src/legacy/components/story/VictoryScreen.tsx
+apps/web-tanstack/src/legacy/components/story/index.ts           # barrel export
 ```
 
 ### Modified files
 ```
-apps/web/src/pages/Story.tsx          # Thin shell using ChapterMap
-apps/web/src/pages/StoryChapter.tsx   # Thin shell using StagePanel list
-apps/web/src/pages/Play.tsx           # Add story overlay layer
-apps/web/src/globals.css              # Cutscene + dialogue CSS
-apps/web/src/lib/iframe.ts            # New postMessage types
+apps/web-tanstack/src/legacy/pages/Story.tsx          # Thin shell using ChapterMap
+apps/web-tanstack/src/legacy/pages/StoryChapter.tsx   # Thin shell using StagePanel list
+apps/web-tanstack/src/legacy/pages/Play.tsx           # Add story overlay layer
+apps/web-tanstack/src/styles/legacy.css              # Cutscene + dialogue CSS
+apps/web-tanstack/src/legacy/lib/iframe.ts            # New postMessage types
 convex/http.ts                        # New agent story endpoints
 convex/game.ts                        # Enhanced queries with narrative data
 ```
