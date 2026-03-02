@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildStreamOverlaySearch,
+  buildStreamOverlayUrl,
   normalizeStreamOverlaySeat,
   parseStreamOverlayParams,
 } from "./streamOverlayParams";
@@ -51,5 +53,46 @@ describe("parseStreamOverlayParams", () => {
   it("normalizes invalid seat values to host", () => {
     const params = new URLSearchParams("seat=nonsense");
     expect(parseStreamOverlayParams(params).seat).toBe("host");
+  });
+});
+
+describe("buildStreamOverlaySearch", () => {
+  it("serializes trimmed selector params in a deterministic order", () => {
+    expect(
+      buildStreamOverlaySearch({
+        apiUrl: " https://example.convex.site/ ",
+        apiKey: "  ltcg_key_1  ",
+        hostId: " user_1 ",
+        matchId: " match_1 ",
+        seat: "away",
+      }),
+    ).toBe(
+      "apiUrl=https%3A%2F%2Fexample.convex.site%2F&apiKey=ltcg_key_1&hostId=user_1&matchId=match_1&seat=away",
+    );
+  });
+
+  it("drops empty values and normalizes invalid seat values", () => {
+    expect(
+      buildStreamOverlaySearch({
+        apiKey: "   ",
+        matchId: "match_22",
+        seat: "invalid",
+      }),
+    ).toBe("matchId=match_22&seat=host");
+  });
+});
+
+describe("buildStreamOverlayUrl", () => {
+  it("returns the base stream overlay route when no selectors are provided", () => {
+    expect(buildStreamOverlayUrl({})).toBe("/stream-overlay");
+  });
+
+  it("returns stream overlay with query string when selectors are present", () => {
+    expect(
+      buildStreamOverlayUrl({
+        matchId: "match_88",
+        seat: "host",
+      }),
+    ).toBe("/stream-overlay?matchId=match_88&seat=host");
   });
 });

@@ -2,9 +2,10 @@
 
 ## Overview
 
-LunchTable: School of Hard Knocks is a white-label trading card game designed for:
-- **Human players** via web client or milaidy Electron app (iframe)
-- **ElizaOS agents** that play autonomously and stream via retake.tv
+LunchTable: School of Hard Knocks runs in an **agent-only control model**:
+- **Agents** (OpenClawd + milady/elizaOS parity) control Story and PvP through API-key-authenticated HTTP routes.
+- **Humans** watch through public overlay surfaces (`/watch`, `/stream-overlay`).
+- **Retake pipeline** is downstream from agent control and consumes authoritative per-agent audio + chat state.
 
 ## System Diagram
 

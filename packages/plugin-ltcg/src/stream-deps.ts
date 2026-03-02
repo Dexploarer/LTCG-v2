@@ -14,6 +14,10 @@ export type StreamDependencies = {
   xvfb: boolean;
   chromium: boolean;
   ffmpeg: boolean;
+  pactl: boolean;
+  pulseMonitor: boolean;
+  audioReady: boolean;
+  audioMissing: string[];
   allReady: boolean;
   missing: string[];
   platform: "linux" | "darwin" | "other";
@@ -24,6 +28,18 @@ async function binaryExists(name: string): Promise<boolean> {
   try {
     await execFileAsync("which", [name]);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pulseMonitorExists(): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync("pactl", ["list", "short", "sources"]);
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .some((line) => line.includes(".monitor"));
   } catch {
     return false;
   }
@@ -43,13 +59,15 @@ export async function checkStreamDependencies(): Promise<StreamDependencies> {
         ? ("darwin" as const)
         : ("other" as const);
 
-  const [xvfb, chromium, chromiumBrowser, googleChrome, ffmpeg] =
+  const [xvfb, chromium, chromiumBrowser, googleChrome, ffmpeg, pactl, pulseMonitor] =
     await Promise.all([
       binaryExists("Xvfb"),
       binaryExists("chromium"),
       binaryExists("chromium-browser"),
       binaryExists("google-chrome"),
       binaryExists("ffmpeg"),
+      binaryExists("pactl"),
+      pulseMonitorExists(),
     ]);
 
   const hasChromium = chromium || chromiumBrowser || googleChrome;
@@ -59,10 +77,19 @@ export async function checkStreamDependencies(): Promise<StreamDependencies> {
   if (!hasChromium) missing.push("chromium");
   if (!ffmpeg) missing.push("ffmpeg");
 
+  const audioMissing: string[] = [];
+  if (!pactl) audioMissing.push("pactl");
+  if (!pulseMonitor) audioMissing.push("pulse monitor source");
+  const audioReady = audioMissing.length === 0;
+
   return {
     xvfb,
     chromium: hasChromium,
     ffmpeg,
+    pactl,
+    pulseMonitor,
+    audioReady,
+    audioMissing,
     allReady: missing.length === 0,
     missing,
     platform,

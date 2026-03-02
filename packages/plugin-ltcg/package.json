@@ -71,12 +71,40 @@
         "type": "string",
         "description": "Game frontend URL for video pipeline (e.g. http://localhost:3334)",
         "required": false
+      },
+      "LTCG_X402_ENABLED": {
+        "type": "string",
+        "description": "Enable x402 paid endpoint support (true/false)",
+        "required": false
+      },
+      "LTCG_X402_SOLANA_NETWORK": {
+        "type": "string",
+        "description": "Solana network for x402 requests: mainnet, devnet, or testnet",
+        "required": false
+      },
+      "LTCG_X402_SOLANA_RPC_URL": {
+        "type": "string",
+        "description": "Optional custom Solana RPC URL for x402 signing",
+        "required": false
+      },
+      "LTCG_X402_SOLANA_PRIVATE_KEY_B58": {
+        "type": "string",
+        "description": "Base58-encoded Solana private key (32 or 64 bytes) for x402 payments",
+        "required": false,
+        "sensitive": true
       }
     }
   },
   "elizaos": {
     "kind": "plugin",
     "displayName": "LunchTable TCG Plugin",
-    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL"]
+    "configKeys": ["LTCG_API_URL", "LTCG_API_KEY", "LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL", "LTCG_X402_ENABLED", "LTCG_X402_SOLANA_NETWORK", "LTCG_X402_SOLANA_RPC_URL", "LTCG_X402_SOLANA_PRIVATE_KEY_B58"]
+  },
+  "dependencies": {
+    "@scure/base": "^2.0.0",
+    "@solana/kit": "^6.1.0",
+    "@x402/core": "^2.5.0",
+    "@x402/fetch": "^2.5.0",
+    "@x402/svm": "^2.5.0"
   }
 }

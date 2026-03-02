@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/react";
 import { useEffect, useRef, useState } from "react";
 import { apiAny, useConvexMutation, useConvexQuery } from "@/lib/convexHelpers";
 import { shouldWaitForConvexAuth } from "./userSyncFlags";
+import { extractPrimaryWallet } from "./extractPrimaryWallet";
 
 /**
  * Post-login user sync hook.
@@ -36,7 +37,12 @@ export function useUserSync() {
 
     // Create user record
     setSyncInFlight(true);
-    syncUser({ email: privyUser?.email?.address })
+    const primaryWallet = extractPrimaryWallet(privyUser);
+    syncUser({
+      email: privyUser?.email?.address,
+      walletAddress: primaryWallet?.walletAddress,
+      walletType: primaryWallet?.walletType,
+    })
       .then(() => {
         synced.current = true;
       })
@@ -63,11 +69,18 @@ export function useUserSync() {
 
   const needsOnboarding =
     onboardingStatus?.exists === true &&
-    (!onboardingStatus.hasUsername || !onboardingStatus.hasStarterDeck);
+    (!onboardingStatus.hasUsername ||
+      !onboardingStatus.hasRetakeChoice ||
+      (onboardingStatus.wantsRetake && !onboardingStatus.hasRetakeAccount) ||
+      !onboardingStatus.hasAvatar ||
+      !onboardingStatus.hasStarterDeck);
 
   const isReady =
     onboardingStatus?.exists &&
     onboardingStatus.hasUsername &&
+    onboardingStatus.hasRetakeChoice &&
+    (!onboardingStatus.wantsRetake || onboardingStatus.hasRetakeAccount) &&
+    onboardingStatus.hasAvatar &&
     onboardingStatus.hasStarterDeck;
 
   return {

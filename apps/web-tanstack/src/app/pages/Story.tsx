@@ -1,5 +1,5 @@
 import { StoryProvider, ChapterMap, StoryIntro, DialogueBox } from "@/components/story";
-import { TrayNav } from "@/components/layout/TrayNav";
+import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
 
 export function Story() {
   return (
@@ -7,7 +7,7 @@ export function Story() {
       <ChapterMap />
       <StoryIntro />
       <DialogueBox />
-      <TrayNav />
+      <AgentOverlayNav active="lobby" />
     </StoryProvider>
   );
 }

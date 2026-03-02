@@ -15,9 +15,12 @@
  * On macOS, start() will throw with a clear error message.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
+import { promisify } from "node:util";
 import { checkStreamDependencies, resolveChromiumBinary } from "./stream-deps.js";
+
+const execFileAsync = promisify(execFile);
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -78,6 +81,11 @@ export class StreamPipeline {
   private browser: ChildProcess | null = null;
   private ffmpeg: ChildProcess | null = null;
   private display = "";
+  private pulseSinkName: string | null = null;
+  private pulseMonitorSource: string | null = null;
+  private pulseModuleId: string | null = null;
+  private audioEnabled = false;
+  private audioWarning: string | null = null;
   private _running = false;
   private startedAt: number | null = null;
 
@@ -102,7 +110,7 @@ export class StreamPipeline {
     return this.display;
   }
 
-  async start(config: PipelineConfig): Promise<void> {
+  async start(config: PipelineConfig): Promise<{ audioEnabled: boolean; warning: string | null }> {
     if (this._running) {
       throw new Error(`${TAG} Pipeline is already running`);
     }
@@ -138,7 +146,28 @@ export class StreamPipeline {
       }
       console.log(`${TAG} Xvfb started on display ${this.display}`);
 
-      // 2. Launch Chromium
+      // 2. Optional PulseAudio sink routing (best effort, video-only fallback)
+      this.audioEnabled = false;
+      this.audioWarning = null;
+      if (deps.audioReady) {
+        try {
+          const audio = await this.setupPulseSink();
+          this.pulseSinkName = audio.sinkName;
+          this.pulseMonitorSource = audio.monitorSource;
+          this.pulseModuleId = audio.moduleId;
+          this.audioEnabled = true;
+        } catch (error) {
+          this.audioWarning = `Audio capture unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }. Falling back to video-only mode.`;
+        }
+      } else {
+        this.audioWarning =
+          `Audio capture dependencies missing: ${deps.audioMissing.join(", ")}. ` +
+          "Falling back to video-only mode.";
+      }
+
+      // 3. Launch Chromium
       const chromiumBin = await resolveChromiumBinary();
       if (!chromiumBin) {
         throw new Error("No Chromium binary found after dependency check passed");
@@ -148,17 +177,19 @@ export class StreamPipeline {
         this.display,
         config.gameUrl,
         resolution,
+        this.pulseSinkName,
       );
       await this.waitForBrowserReady(BROWSER_LOAD_TIMEOUT_MS);
       console.log(`${TAG} Chromium loaded: ${config.gameUrl}`);
 
-      // 3. Start FFmpeg
+      // 4. Start FFmpeg
       this.ffmpeg = this.startFfmpeg(
         this.display,
         resolution,
         framerate,
         bitrate,
         rtmpTarget,
+        this.pulseMonitorSource,
       );
       await this.waitMs(1000);
 
@@ -174,6 +205,8 @@ export class StreamPipeline {
       this.monitorProcess({ process: this.xvfb, name: "Xvfb" });
       this.monitorProcess({ process: this.browser, name: "Chromium" });
       this.monitorProcess({ process: this.ffmpeg, name: "FFmpeg" });
+
+      return { audioEnabled: this.audioEnabled, warning: this.audioWarning };
     } catch (err) {
       // Cleanup on failure
       await this.killAll();
@@ -207,6 +240,7 @@ export class StreamPipeline {
     display: string,
     url: string,
     resolution: string,
+    pulseSinkName: string | null,
   ): ChildProcess {
     const proc = spawn(
       binary,
@@ -222,7 +256,11 @@ export class StreamPipeline {
       ],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, DISPLAY: display },
+        env: {
+          ...process.env,
+          DISPLAY: display,
+          ...(pulseSinkName ? { PULSE_SINK: pulseSinkName } : {}),
+        },
       },
     );
     this.logStderr(proc, "Chromium");
@@ -235,19 +273,31 @@ export class StreamPipeline {
     framerate: number,
     bitrate: string,
     rtmpTarget: string,
+    pulseMonitorSource: string | null,
   ): ChildProcess {
     const bufsize = `${parseInt(bitrate) * 2}k`;
+    const inputArgs = [
+      "-f",
+      "x11grab",
+      "-video_size",
+      resolution,
+      "-framerate",
+      String(framerate),
+      "-i",
+      display,
+    ];
+    const audioInputArgs = pulseMonitorSource
+      ? ["-f", "pulse", "-i", pulseMonitorSource]
+      : [];
+    const audioCodecArgs = pulseMonitorSource
+      ? ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
+      : ["-an"];
+
     const proc = spawn(
       "ffmpeg",
       [
-        "-f",
-        "x11grab",
-        "-video_size",
-        resolution,
-        "-framerate",
-        String(framerate),
-        "-i",
-        display,
+        ...inputArgs,
+        ...audioInputArgs,
         "-c:v",
         "libx264",
         "-preset",
@@ -264,13 +314,18 @@ export class StreamPipeline {
         "yuv420p",
         "-g",
         String(framerate * 2),
+        ...audioCodecArgs,
         "-f",
         "flv",
         rtmpTarget,
       ],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, DISPLAY: display },
+        env: {
+          ...process.env,
+          DISPLAY: display,
+          ...(this.pulseSinkName ? { PULSE_SINK: this.pulseSinkName } : {}),
+        },
       },
     );
     this.logStderr(proc, "FFmpeg");
@@ -339,6 +394,49 @@ export class StreamPipeline {
     this.ffmpeg = null;
     this.browser = null;
     this.xvfb = null;
+    await this.teardownPulseSink();
+    this.audioEnabled = false;
+    this.audioWarning = null;
+  }
+
+  private async setupPulseSink(): Promise<{
+    sinkName: string;
+    monitorSource: string;
+    moduleId: string;
+  }> {
+    const sinkName = `ltcg_stream_${process.pid}_${Date.now()}`;
+    const { stdout } = await execFileAsync("pactl", [
+      "load-module",
+      "module-null-sink",
+      `sink_name=${sinkName}`,
+      "sink_properties=device.description=LTCGStreamSink",
+    ]);
+    const moduleId = stdout.trim();
+    if (!moduleId) {
+      throw new Error("Unable to load PulseAudio null sink.");
+    }
+    return {
+      sinkName,
+      monitorSource: `${sinkName}.monitor`,
+      moduleId,
+    };
+  }
+
+  private async teardownPulseSink(): Promise<void> {
+    if (!this.pulseModuleId) {
+      this.pulseSinkName = null;
+      this.pulseMonitorSource = null;
+      return;
+    }
+    try {
+      await execFileAsync("pactl", ["unload-module", this.pulseModuleId]);
+    } catch {
+      // Ignore teardown errors, sink modules are best-effort cleanup.
+    } finally {
+      this.pulseModuleId = null;
+      this.pulseSinkName = null;
+      this.pulseMonitorSource = null;
+    }
   }
 
   private waitMs(ms: number): Promise<void> {

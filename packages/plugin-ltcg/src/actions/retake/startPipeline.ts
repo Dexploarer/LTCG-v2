@@ -107,7 +107,7 @@ export const startPipelineAction: Action = {
       // 6. Start local pipeline — target the stream overlay page (no recursive iframe)
       const overlayUrl = `${gameUrl.replace(/\/$/, "")}/stream-overlay?apiKey=${encodeURIComponent(authToken)}&embedded=true`;
       const pipeline = initStreamPipeline();
-      await pipeline.start({
+      const startResult = await pipeline.start({
         gameUrl: overlayUrl,
         authToken,
         rtmpUrl: creds.url,
@@ -117,9 +117,20 @@ export const startPipelineAction: Action = {
       const tokenInfo = streamResult.token?.tokenAddress
         ? ` Token: ${streamResult.token.ticker} (${streamResult.token.tokenAddress})`
         : "";
-      const text = `Stream pipeline running. Video capture → RTMP → retake.tv.${tokenInfo}`;
+      const warningInfo = startResult.warning ? ` Warning: ${startResult.warning}` : "";
+      const text =
+        `Stream pipeline running. Video capture${startResult.audioEnabled ? " + audio" : ""} ` +
+        `→ RTMP → retake.tv.${tokenInfo}${warningInfo}`;
       if (callback) await callback({ text, action: "START_STREAM_PIPELINE" });
-      return { success: true, data: { stream: streamResult, rtmp: creds } };
+      return {
+        success: true,
+        data: {
+          stream: streamResult,
+          rtmp: creds,
+          audioEnabled: startResult.audioEnabled,
+          warning: startResult.warning,
+        },
+      };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
 

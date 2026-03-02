@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "kind": "plugin",
   "requiredSecrets": ["LTCG_API_URL", "LTCG_API_KEY"],
-  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL"],
+  "optionalSecrets": ["LTCG_SOUNDTRACK_API_URL", "RETAKE_API_URL", "RETAKE_AGENT_TOKEN", "RETAKE_GAME_URL", "LTCG_X402_ENABLED", "LTCG_X402_SOLANA_NETWORK", "LTCG_X402_SOLANA_RPC_URL", "LTCG_X402_SOLANA_PRIVATE_KEY_B58"],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -32,6 +32,22 @@
       "RETAKE_GAME_URL": {
         "type": "string",
         "description": "Game frontend URL for video pipeline (e.g. http://localhost:3334)"
+      },
+      "LTCG_X402_ENABLED": {
+        "type": "string",
+        "description": "Enable x402 paid endpoint support (true/false)"
+      },
+      "LTCG_X402_SOLANA_NETWORK": {
+        "type": "string",
+        "description": "Solana network for x402 requests (mainnet/devnet/testnet)"
+      },
+      "LTCG_X402_SOLANA_RPC_URL": {
+        "type": "string",
+        "description": "Optional custom Solana RPC URL for x402 signing"
+      },
+      "LTCG_X402_SOLANA_PRIVATE_KEY_B58": {
+        "type": "string",
+        "description": "Base58-encoded Solana private key for x402 payments"
       }
     },
     "required": ["LTCG_API_URL", "LTCG_API_KEY"]

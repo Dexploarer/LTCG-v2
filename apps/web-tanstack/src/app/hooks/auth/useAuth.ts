@@ -8,4 +8,5 @@ export { usePrivyAuthForConvex } from "./usePrivyAuthForConvex";
 export { useTelegramAuth, isTelegramMiniApp } from "./useTelegramAuth";
 export { useUserSync } from "./useUserSync";
 export { usePostLoginRedirect, storeRedirect, consumeRedirect } from "./usePostLoginRedirect";
+export { useAgentApiSession, AgentApiSessionProvider } from "./useAgentApiSession";
 export { useIframeMode } from "@/hooks/useIframeMode";

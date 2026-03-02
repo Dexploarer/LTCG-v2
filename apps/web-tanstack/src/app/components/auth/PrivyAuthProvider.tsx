@@ -11,25 +11,28 @@ export function PrivyAuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Discord Activities run inside a restrictive CSP sandbox (discordsays.com proxy).
-  // Privy's embedded wallet flow uses hidden iframes + external RPC hosts; disable it
-  // for Activities so auth/gameplay can proceed without being blocked by frame-src/CSP.
+  // Keep embedded wallets disabled there; use external wallets only.
   const disableEmbeddedWallets = typeof window !== "undefined" && isDiscordActivityFrame();
 
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["email", "telegram", "discord"],
+        // Mirror Retake's wallet-first auth flow.
+        loginMethods: ["wallet"],
         ...(disableEmbeddedWallets
           ? {}
           : {
               embeddedWallets: {
-                solana: { createOnLogin: "users-without-wallets" },
+                solana: { createOnLogin: "off" },
               },
             }),
         appearance: {
           theme: "dark",
           accentColor: "#ffcc00",
+          showWalletLoginFirst: true,
+          walletChainType: "solana-only",
+          walletList: ["phantom", "solflare", "backpack", "detected_solana_wallets"],
         },
       }}
     >
@@ -37,4 +40,3 @@ export function PrivyAuthProvider({ children }: { children: ReactNode }) {
     </PrivyProvider>
   );
 }
-
