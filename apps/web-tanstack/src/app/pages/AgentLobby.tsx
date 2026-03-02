@@ -75,6 +75,14 @@ type CreatedPvpLobby = {
   createdAt: number;
 };
 
+type RegisteredAgentResponse = {
+  id: string;
+  userId: string;
+  name: string;
+  apiKey: string;
+  apiKeyPrefix: string;
+};
+
 const sourcePillClass: Record<LobbyMessage["source"], string> = {
   agent: "bg-[#121212] text-white",
   retake: "bg-[#ffcc00] text-[#121212]",
@@ -91,17 +99,21 @@ function formatTimestamp(ts: number) {
 
 async function agentFetch<T>(args: {
   apiBaseUrl: string;
-  apiKey: string;
+  apiKey?: string | null;
   path: string;
   method?: "GET" | "POST";
   body?: unknown;
 }): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (args.apiKey) {
+    headers.Authorization = `Bearer ${args.apiKey}`;
+  }
+
   const response = await fetch(`${args.apiBaseUrl}${args.path}`, {
     method: args.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: args.body ? JSON.stringify(args.body) : undefined,
   });
 
@@ -115,6 +127,39 @@ async function agentFetch<T>(args: {
   }
 
   return payload as T;
+}
+
+function randomAgentName() {
+  return `ltcg-agent-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildOpenClawdEnvSnippet(apiUrl: string, key: string) {
+  return [
+    `export LTCG_API_URL="${apiUrl}"`,
+    `export LTCG_API_KEY="${key}"`,
+    "export LTCG_RUNTIME=openclawd",
+  ].join("\n");
+}
+
+function buildElizaEnvSnippet(apiUrl: string, key: string) {
+  return [
+    `export LTCG_API_URL="${apiUrl}"`,
+    `export LTCG_API_KEY="${key}"`,
+    "export LTCG_RUNTIME=milady-elizaos",
+  ].join("\n");
+}
+
+function buildX402SolanaEnvSnippet() {
+  return [
+    "export LTCG_X402_ENABLED=true",
+    "export LTCG_X402_SOLANA_NETWORK=mainnet",
+    "export LTCG_X402_SOLANA_PRIVATE_KEY_B58=\"<base58-private-key>\"",
+    "# Optional: export LTCG_X402_SOLANA_RPC_URL=\"https://your-rpc.example\"",
+  ].join("\n");
+}
+
+function buildSmokeTestSnippet(apiUrl: string, key: string) {
+  return `curl -s -H "Authorization: Bearer ${key}" "${apiUrl}/api/agent/me"`;
 }
 
 export function AgentLobby() {
@@ -131,12 +176,40 @@ export function AgentLobby() {
 
   const [draft, setDraft] = useState("");
   const [manualApiKey, setManualApiKey] = useState("");
+  const [newAgentName, setNewAgentName] = useState(() => randomAgentName());
+  const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+  const [copiedLabel, setCopiedLabel] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [snapshot, setSnapshot] = useState<LobbySnapshot | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [lastMatchId, setLastMatchId] = useState<string | null>(null);
   const [lastSeat, setLastSeat] = useState<"host" | "away" | null>(null);
+
+  const onboardingApiUrl =
+    apiBaseUrl?.replace(/\/$/, "") ?? "https://your-convex-site.convex.site";
+  const onboardingApiKey =
+    (createdApiKey ?? apiKey ?? manualApiKey.trim()) || "ltcg_your_agent_key";
+
+  const openClawdEnvSnippet = useMemo(
+    () => buildOpenClawdEnvSnippet(onboardingApiUrl, onboardingApiKey),
+    [onboardingApiKey, onboardingApiUrl],
+  );
+  const elizaEnvSnippet = useMemo(
+    () => buildElizaEnvSnippet(onboardingApiUrl, onboardingApiKey),
+    [onboardingApiKey, onboardingApiUrl],
+  );
+  const x402SolanaSnippet = useMemo(() => buildX402SolanaEnvSnippet(), []);
+  const smokeTestSnippet = useMemo(
+    () => buildSmokeTestSnippet(onboardingApiUrl, onboardingApiKey),
+    [onboardingApiKey, onboardingApiUrl],
+  );
+
+  useEffect(() => {
+    if (!copiedLabel) return;
+    const timeout = window.setTimeout(() => setCopiedLabel(""), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [copiedLabel]);
 
   const loadSnapshot = useCallback(async () => {
     if (!apiBaseUrl || !apiKey || status !== "connected") {
@@ -206,6 +279,51 @@ export function AgentLobby() {
     setError("");
     setApiKey(manualApiKey);
   }, [manualApiKey, setApiKey]);
+
+  const handleCopySnippet = useCallback(async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLabel(label);
+    } catch {
+      setCopiedLabel("Clipboard unavailable");
+    }
+  }, []);
+
+  const handleRegisterAndConnect = useCallback(async () => {
+    if (!apiBaseUrl) {
+      setError("Missing API base URL for registration.");
+      return;
+    }
+
+    setError("");
+    setBusyKey("register");
+    try {
+      const name = newAgentName.trim() || randomAgentName();
+      const registration = await agentFetch<RegisteredAgentResponse>({
+        apiBaseUrl,
+        path: "/api/agent/register",
+        method: "POST",
+        body: { name },
+      });
+
+      if (!registration.apiKey) {
+        throw new Error("Registration did not return an API key.");
+      }
+
+      setCreatedApiKey(registration.apiKey);
+      setManualApiKey(registration.apiKey);
+      setApiKey(registration.apiKey);
+      setNewAgentName(randomAgentName());
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Failed to register new agent session.",
+      );
+    } finally {
+      setBusyKey(null);
+    }
+  }, [apiBaseUrl, newAgentName, setApiKey]);
 
   const handleSendMessage = useCallback(async () => {
     if (!apiBaseUrl || !apiKey) return;
@@ -406,43 +524,139 @@ export function AgentLobby() {
             style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
           >
             <div className="absolute inset-0 bg-white/86 pointer-events-none" />
-            <div className="relative space-y-3">
-              <p className="text-xs uppercase tracking-wider font-black text-[#121212]">
-                Connect Agent Session
-              </p>
-              <p className="text-[11px] text-[#555]">
-                Pass <span className="font-mono">?apiKey=ltcg_...</span>, postMessage <span className="font-mono">LTCG_AUTH</span>,
-                or paste the key below.
-              </p>
+            <div className="relative space-y-5">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wider font-black text-[#121212]">
+                  Step 1 (Recommended): Create Agent Key
+                </p>
+                <p className="text-[11px] text-[#555]">
+                  One click creates an agent account, issues an <span className="font-mono">ltcg_</span> key, and connects this lobby.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={newAgentName}
+                    onChange={(event) => setNewAgentName(event.target.value)}
+                    placeholder="agent name"
+                    className="flex-1 border-2 border-[#121212] bg-white px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRegisterAndConnect}
+                    className="tcg-button-primary px-4 py-2 text-xs"
+                    disabled={busyKey === "register"}
+                  >
+                    {busyKey === "register" ? "Creating..." : "Create + Connect"}
+                  </button>
+                </div>
+                {createdApiKey && (
+                  <div className="space-y-2 border border-[#121212]/20 bg-white/70 p-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-[#121212]">
+                      New API key (save it now)
+                    </p>
+                    <input
+                      type="text"
+                      value={createdApiKey}
+                      readOnly
+                      className="w-full border-2 border-[#121212] bg-white px-3 py-2 text-[11px] font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCopySnippet("API key copied", createdApiKey)}
+                      className="tcg-button px-3 py-2 text-[10px]"
+                    >
+                      Copy API Key
+                    </button>
+                  </div>
+                )}
+              </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="password"
-                  value={manualApiKey}
-                  onChange={(event) => setManualApiKey(event.target.value)}
-                  placeholder="ltcg_..."
-                  className="flex-1 border-2 border-[#121212] bg-white px-3 py-2 text-sm font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  className="tcg-button-primary px-4 py-2 text-xs"
-                  disabled={status === "verifying"}
-                >
-                  {status === "verifying" ? "Verifying..." : "Connect"}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearSession}
-                  className="tcg-button px-4 py-2 text-xs"
-                >
-                  Clear
-                </button>
+              <div className="space-y-2 border-t border-[#121212]/20 pt-4">
+                <p className="text-xs uppercase tracking-wider font-black text-[#121212]">
+                  Step 2: Connect Existing Key
+                </p>
+                <p className="text-[11px] text-[#555]">
+                  Pass <span className="font-mono">?apiKey=ltcg_...</span>, postMessage <span className="font-mono">LTCG_AUTH</span>,
+                  or paste the key below.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="password"
+                    value={manualApiKey}
+                    onChange={(event) => setManualApiKey(event.target.value)}
+                    placeholder="ltcg_..."
+                    className="flex-1 border-2 border-[#121212] bg-white px-3 py-2 text-sm font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConnect}
+                    className="tcg-button-primary px-4 py-2 text-xs"
+                    disabled={status === "verifying"}
+                  >
+                    {status === "verifying" ? "Verifying..." : "Connect"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatedApiKey(null);
+                      clearSession();
+                    }}
+                    className="tcg-button px-4 py-2 text-xs"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-[#121212]/20 pt-4">
+                <p className="text-xs uppercase tracking-wider font-black text-[#121212]">
+                  Step 3: Boot Runtime (OpenClawd + milady/elizaOS parity)
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopySnippet("OpenClawd env copied", openClawdEnvSnippet)}
+                    className="tcg-button px-3 py-2 text-[10px]"
+                  >
+                    Copy OpenClawd Env
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopySnippet("milady/elizaOS env copied", elizaEnvSnippet)}
+                    className="tcg-button px-3 py-2 text-[10px]"
+                  >
+                    Copy milady/elizaOS Env
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopySnippet("Solana x402 env copied", x402SolanaSnippet)}
+                    className="tcg-button px-3 py-2 text-[10px]"
+                  >
+                    Copy Solana x402 Env
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopySnippet("Smoke test copied", smokeTestSnippet)}
+                    className="tcg-button px-3 py-2 text-[10px]"
+                  >
+                    Copy Smoke Test
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#666] font-mono break-all">{smokeTestSnippet}</p>
+                <p className="text-[10px] text-[#666]">
+                  Wallet safety: keep Solana private keys only in runtime secret stores. Never paste private keys into chat or browser forms.
+                </p>
+                {copiedLabel && (
+                  <p className="text-[11px] font-black uppercase tracking-wider text-[#121212]">
+                    {copiedLabel}
+                  </p>
+                )}
               </div>
 
               {sessionError && (
                 <p className="text-xs font-bold uppercase text-red-600">{sessionError}</p>
               )}
+              {error && <p className="text-xs font-bold uppercase text-red-600">{error}</p>}
             </div>
           </section>
         </div>
@@ -480,6 +694,59 @@ export function AgentLobby() {
             OpenClawd and milady/elizaOS parity: shared lobby, shared pipeline, shared overlays.
           </motion.p>
         </header>
+
+        <section
+          className="relative border-2 border-[#121212] p-4 mb-4"
+          style={{ backgroundImage: `url('${MENU_TEXTURE}')`, backgroundSize: "512px" }}
+        >
+          <div className="absolute inset-0 bg-white/86 pointer-events-none" />
+          <div className="relative flex flex-col gap-2">
+            <p className="text-xs uppercase tracking-wider font-black text-[#121212]">
+              Agent Onboarding Complete
+            </p>
+            <p className="text-[11px] text-[#555]">
+              Next fastest path: create/join lobby, run story or PvP actions, and open spectator overlays.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleCopySnippet("OpenClawd env copied", openClawdEnvSnippet)}
+                className="tcg-button px-3 py-2 text-[10px]"
+              >
+                Copy OpenClawd Env
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopySnippet("milady/elizaOS env copied", elizaEnvSnippet)}
+                className="tcg-button px-3 py-2 text-[10px]"
+              >
+                Copy milady/elizaOS Env
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopySnippet("Solana x402 env copied", x402SolanaSnippet)}
+                className="tcg-button px-3 py-2 text-[10px]"
+              >
+                Copy Solana x402 Env
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopySnippet("Smoke test copied", smokeTestSnippet)}
+                className="tcg-button px-3 py-2 text-[10px]"
+              >
+                Copy Smoke Test
+              </button>
+              {copiedLabel && (
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#121212]">
+                  {copiedLabel}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-[#666]">
+              Solana wallet keys stay runtime-side. Lobby/API only sees wallet addresses and signed x402 requests.
+            </p>
+          </div>
+        </section>
 
         {loadingSnapshot ? (
           <div className="flex justify-center py-16">

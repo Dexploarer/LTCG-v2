@@ -58,7 +58,6 @@ export const DECO_PILLS = blob("deco-pills.png");
 export const DECO_SHIELD = blob("deco-shield.png");
 export const RETRO_TV = blob("retro-tv.png");
 export const MUSIC_BUTTON = blob("music-button.png");
-export const STREAM_OVERLAY = blob("stream-overlay.png");
 export const CIGGARETTE_TRAY = blob("ciggarette-tray.png");
 
 // ── Characters ────────────────────────────────────────────

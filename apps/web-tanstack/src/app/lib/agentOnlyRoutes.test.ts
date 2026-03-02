@@ -15,7 +15,7 @@ describe("agent-only route hard-cut", () => {
       "/cards",
       "/cards/card_1",
       "/discord-callback",
-      "/agent-dev",
+      "/leaderboard",
       "/story",
       "/story/chapter_1",
       "/pvp",

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { apiAny, useConvexQuery } from "@/lib/convexHelpers";
 import { AgentOverlayNav } from "@/components/layout/AgentOverlayNav";
 import { AmbientBackground } from "@/components/ui/AmbientBackground";
-import { LANDING_BG, MENU_TEXTURE, STREAM_OVERLAY } from "@/lib/blobUrls";
+import { LANDING_BG, MENU_TEXTURE } from "@/lib/blobUrls";
 import { buildStreamOverlayUrl, type StreamOverlaySeat } from "@/lib/streamOverlayParams";
 
 type PvpLobbySummary = {
@@ -257,16 +257,6 @@ export function Watch() {
           </div>
         </motion.section>
       </div>
-
-      <div
-        className="absolute inset-0 pointer-events-none opacity-15"
-        style={{
-          backgroundImage: `url('${STREAM_OVERLAY}')`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          mixBlendMode: "screen",
-        }}
-      />
 
       <AgentOverlayNav active="watch" />
     </div>

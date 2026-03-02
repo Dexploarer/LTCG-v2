@@ -5,7 +5,7 @@
  * and stream chat messages into a single hook.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { apiAny } from "@/lib/convexHelpers";
 import {
@@ -68,6 +68,49 @@ function normalizeApiUrl(value: string | null) {
   return trimmed.length > 0 ? trimmed.replace(".convex.cloud", ".convex.site") : null;
 }
 
+async function fetchStreamAudioControl(args: {
+  apiUrl: string;
+  matchId: string;
+  apiKey?: string | null;
+}): Promise<StreamAudioControl | null> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (args.apiKey) {
+    headers.Authorization = `Bearer ${args.apiKey}`;
+  }
+
+  const response = await fetch(
+    `${args.apiUrl}/api/agent/stream/audio?matchId=${encodeURIComponent(args.matchId)}`,
+    {
+      method: "GET",
+      headers,
+    },
+  );
+
+  if (response.status === 404 || response.status === 401) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to load stream audio control (${response.status})`);
+  }
+
+  const payload = await response.json();
+  if (!payload || typeof payload !== "object") return null;
+
+  return {
+    agentId: String((payload as Record<string, unknown>).agentId ?? ""),
+    playbackIntent:
+      (payload as Record<string, unknown>).playbackIntent === "paused" ||
+      (payload as Record<string, unknown>).playbackIntent === "stopped"
+        ? ((payload as Record<string, unknown>).playbackIntent as "paused" | "stopped")
+        : "playing",
+    musicVolume: Number((payload as Record<string, unknown>).musicVolume ?? 0.65),
+    sfxVolume: Number((payload as Record<string, unknown>).sfxVolume ?? 0.8),
+    musicMuted: Boolean((payload as Record<string, unknown>).musicMuted ?? false),
+    sfxMuted: Boolean((payload as Record<string, unknown>).sfxMuted ?? false),
+    updatedAt: Number((payload as Record<string, unknown>).updatedAt ?? 0),
+  };
+}
+
 export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData {
   const apiUrl = normalizeApiUrl(params.apiUrl) ?? normalizeApiUrl(CONVEX_SITE_URL) ?? null;
   const { agent, matchState, timeline, error, loading } = useAgentSpectator({
@@ -93,15 +136,44 @@ export function useStreamOverlay(params: StreamOverlayParams): StreamOverlayData
   ) as StreamChatMessage[] | undefined;
   const chatMessages = rawMessagesByAgent ?? rawMessagesByMatch ?? [];
 
-  const streamAudioByAgent = useQuery(
-    apiAny.streamAudio.getByAgentId,
-    agentDocId ? { agentId: agentDocId } : "skip",
-  ) as StreamAudioControl | undefined;
-  const streamAudioByMatch = useQuery(
-    apiAny.streamAudio.getByMatchId,
-    !agentDocId && params.matchId ? { matchId: params.matchId } : "skip",
-  ) as StreamAudioControl | null | undefined;
-  const streamAudioControl = streamAudioByAgent ?? streamAudioByMatch ?? null;
+  const [streamAudioControl, setStreamAudioControl] = useState<StreamAudioControl | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const matchId = params.matchId?.trim();
+    if (!apiUrl || !matchId) {
+      setStreamAudioControl(null);
+      return;
+    }
+
+    const load = async () => {
+      try {
+        const next = await fetchStreamAudioControl({
+          apiUrl,
+          matchId,
+          apiKey: params.apiKey ?? null,
+        });
+        if (!cancelled) {
+          setStreamAudioControl(next);
+        }
+      } catch {
+        if (!cancelled) {
+          // Never crash overlays for audio-control fetch failures.
+          setStreamAudioControl(null);
+        }
+      }
+    };
+
+    void load();
+    const interval = window.setInterval(() => {
+      void load();
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [apiUrl, params.apiKey, params.matchId]);
 
   // Adapt spectator slots to rich board component shapes
   const agentMonsters = useMemo(

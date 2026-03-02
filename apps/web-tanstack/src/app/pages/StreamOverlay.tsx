@@ -29,7 +29,7 @@ import type { CardDefinition } from "@/lib/convexTypes";
 import type { SpectatorSpellTrapCard } from "@/lib/spectatorAdapter";
 import { ConvexHttpClient } from "convex/browser";
 import { apiAny } from "@/lib/convexHelpers";
-import { LANDING_BG, STREAM_OVERLAY } from "@/lib/blobUrls";
+import { LANDING_BG } from "@/lib/blobUrls";
 import { useAudio } from "@/components/audio/AudioProvider";
 
 const MAX_LP = 4000;
@@ -291,15 +291,6 @@ function OverlayShell({ children }: { children: React.ReactNode }) {
             "conic-gradient(from 90deg, rgba(255,204,0,0.15), rgba(51,204,255,0.12), rgba(255,204,0,0.15))",
           mixBlendMode: "screen",
           opacity: 0.22,
-        }}
-      />
-      <div
-        className="absolute inset-0 pointer-events-none opacity-20"
-        style={{
-          backgroundImage: `url('${STREAM_OVERLAY}')`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          mixBlendMode: "screen",
         }}
       />
       <div

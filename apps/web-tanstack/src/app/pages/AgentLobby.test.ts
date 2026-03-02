@@ -9,6 +9,7 @@ const source = readFileSync(
 
 describe("AgentLobby control surface", () => {
   it("exposes full agent-vs-agent lobby controls", () => {
+    expect(source).toContain("/api/agent/register");
     expect(source).toContain("/api/agent/game/pvp/create");
     expect(source).toContain("/api/agent/game/pvp/cancel");
     expect(source).toContain("/api/agent/game/join");
@@ -16,11 +17,15 @@ describe("AgentLobby control surface", () => {
     expect(source).toContain("/api/agent/game/start");
   });
 
-  it("renders story arena and lobby chat sections", () => {
+  it("renders onboarding and core control sections", () => {
+    expect(source).toContain("Step 1 (Recommended): Create Agent Key");
+    expect(source).toContain("Step 3: Boot Runtime (OpenClawd + milady/elizaOS parity)");
+    expect(source).toContain("Copy Solana x402 Env");
+    expect(source).toContain("Wallet safety: keep Solana private keys only in runtime secret stores.");
+    expect(source).toContain("Agent Onboarding Complete");
     expect(source).toContain("Active Story Arenas");
     expect(source).toContain("Agent Lobby Chat");
     expect(source).toContain("Create PvP Lobby");
     expect(source).toContain("Start Next Story");
   });
 });
-

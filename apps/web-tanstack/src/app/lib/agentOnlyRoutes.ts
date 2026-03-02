@@ -8,7 +8,7 @@ const AGENT_ONLY_BLOCKED_PREFIXES = [
   "/duel",
   "/cards",
   "/discord-callback",
-  "/agent-dev",
+  "/leaderboard",
   "/story",
   "/pvp",
   "/play",
@@ -23,7 +23,6 @@ const AGENT_ONLY_ALLOWED_EXACT = new Set([
   "/terms",
   "/token",
   "/agent-lobby",
-  "/leaderboard",
 ]);
 
 export function shouldRedirectToAgentLobby(pathname: string): boolean {

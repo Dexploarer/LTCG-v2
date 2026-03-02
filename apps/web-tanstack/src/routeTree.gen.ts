@@ -27,7 +27,6 @@ import { Route as CollectionRouteImport } from './routes/collection'
 import { Route as CliquesRouteImport } from './routes/cliques'
 import { Route as CardsRouteImport } from './routes/cards'
 import { Route as AgentLobbyRouteImport } from './routes/agent-lobby'
-import { Route as AgentDevRouteImport } from './routes/agent-dev'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StoryChapterIdRouteImport } from './routes/story.$chapterId'
@@ -125,11 +124,6 @@ const AgentLobbyRoute = AgentLobbyRouteImport.update({
   path: '/agent-lobby',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgentDevRoute = AgentDevRouteImport.update({
-  id: '/agent-dev',
-  path: '/agent-dev',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -164,7 +158,6 @@ const CardsCardIdRoute = CardsCardIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/agent-dev': typeof AgentDevRoute
   '/agent-lobby': typeof AgentLobbyRoute
   '/cards': typeof CardsRouteWithChildren
   '/cliques': typeof CliquesRoute
@@ -191,7 +184,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/agent-dev': typeof AgentDevRoute
   '/agent-lobby': typeof AgentLobbyRoute
   '/cards': typeof CardsRouteWithChildren
   '/cliques': typeof CliquesRoute
@@ -219,7 +211,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/agent-dev': typeof AgentDevRoute
   '/agent-lobby': typeof AgentLobbyRoute
   '/cards': typeof CardsRouteWithChildren
   '/cliques': typeof CliquesRoute
@@ -248,7 +239,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
-    | '/agent-dev'
     | '/agent-lobby'
     | '/cards'
     | '/cliques'
@@ -275,7 +265,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
-    | '/agent-dev'
     | '/agent-lobby'
     | '/cards'
     | '/cliques'
@@ -302,7 +291,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
-    | '/agent-dev'
     | '/agent-lobby'
     | '/cards'
     | '/cliques'
@@ -330,7 +318,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
-  AgentDevRoute: typeof AgentDevRoute
   AgentLobbyRoute: typeof AgentLobbyRoute
   CardsRoute: typeof CardsRouteWithChildren
   CliquesRoute: typeof CliquesRoute
@@ -480,13 +467,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentLobbyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agent-dev': {
-      id: '/agent-dev'
-      path: '/agent-dev'
-      fullPath: '/agent-dev'
-      preLoaderRoute: typeof AgentDevRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -565,7 +545,6 @@ const StoryRouteWithChildren = StoryRoute._addFileChildren(StoryRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
-  AgentDevRoute: AgentDevRoute,
   AgentLobbyRoute: AgentLobbyRoute,
   CardsRoute: CardsRouteWithChildren,
   CliquesRoute: CliquesRoute,

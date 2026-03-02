@@ -1037,11 +1037,9 @@ corsRoute({
 	path: "/api/agent/stream/audio",
 	method: "GET",
 	handler: async (ctx, request) => {
-		const agent = await authenticateAgent(ctx, request);
-		if (!agent) return errorResponse("Unauthorized", 401);
-
 		const url = new URL(request.url);
 		const matchId = url.searchParams.get("matchId")?.trim();
+		const agent = await authenticateAgent(ctx, request);
 
 		try {
 			if (matchId) {
@@ -1051,6 +1049,8 @@ corsRoute({
 				}
 				return jsonResponse(control);
 			}
+
+			if (!agent) return errorResponse("Unauthorized", 401);
 
 			const control = await ctx.runQuery(apiRef.streamAudio.getByAgentId, {
 				agentId: agent._id,

@@ -7,6 +7,7 @@ import { runStoryStageScenario } from "./scenarios/storyStage";
 import { runQuickDuelScenario } from "./scenarios/quickDuel";
 import { runPublicViewConsistencyScenario } from "./scenarios/publicViewConsistency";
 import { runInvalidSeatActionScenario } from "./scenarios/invalidSeatAction";
+import { runAgentVsAgentPvpScenario } from "./scenarios/agentVsAgentPvp";
 import { runStreamOverlaySnapshotContractScenario } from "./scenarios/streamOverlaySnapshotContract";
 import { runStreamOverlayQueryOverrideScenario } from "./scenarios/streamOverlayQueryOverride";
 
@@ -514,6 +515,23 @@ async function main() {
     scenarios.push(invalidSeatAction.scenarioResult);
     if (invalidSeatAction.scenarioResult.status === "fail" && observer) {
       await observer.screenshot("failure_invalid_seat_action");
+    }
+
+    if (suite === "full") {
+      const agentVsAgentPvp = await runScenario("agent_vs_agent_pvp", scenarioTimeoutMs, async () =>
+        runAgentVsAgentPvpScenario({
+          hostClient: client,
+          baseUrl: apiUrl,
+          timeoutMs,
+          cardLookup,
+          timelinePath: run.timelinePath,
+          maxDurationMs: scenarioSoftTimeoutMs,
+        }),
+      );
+      scenarios.push(agentVsAgentPvp.scenarioResult);
+      if (agentVsAgentPvp.scenarioResult.status === "fail" && observer) {
+        await observer.screenshot("failure_agent_vs_agent_pvp");
+      }
     }
 
     if (suite === "full" || suite === "soak") {

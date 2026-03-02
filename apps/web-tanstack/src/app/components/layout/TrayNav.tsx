@@ -6,7 +6,6 @@ import { LOGO, DECO_PILLS, DECO_SHIELD, MENU_TEXTURE } from "@/lib/blobUrls";
 const textLinks: Array<{ label: string; path: string } | { label: string; href: string }> = [
   { label: "Agent Lobby", path: "/agent-lobby" },
   { label: "Watch", path: "/watch" },
-  { label: "Leaderboard", path: "/leaderboard" },
   { label: "$LUNCH", path: "/token" },
   { label: "X / Twitter", href: "https://x.com/LunchTableTCG" },
   { label: "Discord", href: import.meta.env.VITE_DISCORD_URL || "#" },
@@ -115,7 +114,7 @@ export function TrayNav({ invert = true }: { invert?: boolean }) {
                 {/* Image nav row */}
                 <div className="relative flex items-end justify-center gap-4 md:gap-6 mb-4 px-2">
                   {[
-                    { src: LOGO, alt: "Home", label: "Home", path: "/", delay: 0 },
+                    { src: LOGO, alt: "Agent Lobby", label: "Agent Lobby", path: "/agent-lobby", delay: 0 },
                     { src: DECO_PILLS, alt: "$LUNCH", label: "$LUNCH", path: "/token", delay: 0.05 },
                     { src: DECO_SHIELD, alt: "Privacy & Legal", label: "Legal", path: "/privacy", delay: 0.1 },
                   ].map((item) => (

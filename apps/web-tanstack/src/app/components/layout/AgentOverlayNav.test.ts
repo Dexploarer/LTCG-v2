@@ -23,8 +23,7 @@ describe("AgentOverlayNav", () => {
   });
 
   it("renders agent-focused navigation labels", () => {
-    const html = renderToStaticMarkup(createElement(AgentOverlayNav, { active: "home" }));
-    expect(html).toContain("Home");
+    const html = renderToStaticMarkup(createElement(AgentOverlayNav, { active: "lobby" }));
     expect(html).toContain("Lobby");
     expect(html).toContain("Watch");
   });

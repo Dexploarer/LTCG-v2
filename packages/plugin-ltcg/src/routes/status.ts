@@ -15,6 +15,7 @@
 import { getClient } from "../client.js";
 import { getEnvValue } from "../env.js";
 import { resolveLifePoints } from "../utils.js";
+import { getX402Status } from "../x402.js";
 import type { Route, RouteRequest, RouteResponse, IAgentRuntime } from "../types.js";
 import type { MatchActive } from "../types.js";
 
@@ -44,6 +45,7 @@ const buildStatusHandler = async (
         configured: Boolean(soundtrackEndpoint),
         endpoint: soundtrackEndpoint,
       },
+      x402: await getX402Status(runtime),
     };
 
     // If there's an active match, include its state

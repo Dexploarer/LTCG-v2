@@ -32,6 +32,7 @@
  *   GET_RTMP_CREDENTIALS — Get RTMP URL + stream key for OBS/ffmpeg
  *   SEND_RETAKE_CHAT    — Send a chat message to a retake.tv stream
  *   CONTROL_LTCG_STREAM_AUDIO — Authoritative music/sfx controls for overlays
+ *   CALL_X402_PAID_ENDPOINT — Call paid x402 APIs using Solana signer wallet
  *   START_STREAM_PIPELINE — Start full video pipeline (Xvfb + Chromium + FFmpeg → RTMP)
  *   STOP_STREAM_PIPELINE  — Stop video pipeline and end stream
  *
@@ -78,6 +79,7 @@ import { checkRetakeStatusAction } from "./actions/retake/checkRetakeStatus.js";
 import { getRtmpCredentialsAction } from "./actions/retake/getRtmpCredentials.js";
 import { sendChatAction } from "./actions/retake/sendChat.js";
 import { controlStreamAudioAction } from "./actions/retake/controlStreamAudio.js";
+import { callX402PaidEndpointAction } from "./actions/callX402PaidEndpoint.js";
 import { startPipelineAction } from "./actions/retake/startPipeline.js";
 import { stopPipelineAction } from "./actions/retake/stopPipeline.js";
 import { checkStreamDependencies } from "./stream-deps.js";
@@ -106,6 +108,10 @@ const plugin: Plugin = {
     RETAKE_API_URL: getEnvValue("RETAKE_API_URL"),
     RETAKE_AGENT_TOKEN: getEnvValue("RETAKE_AGENT_TOKEN"),
     RETAKE_GAME_URL: getEnvValue("RETAKE_GAME_URL"),
+    LTCG_X402_ENABLED: getEnvValue("LTCG_X402_ENABLED"),
+    LTCG_X402_SOLANA_NETWORK: getEnvValue("LTCG_X402_SOLANA_NETWORK"),
+    LTCG_X402_SOLANA_RPC_URL: getEnvValue("LTCG_X402_SOLANA_RPC_URL"),
+    LTCG_X402_SOLANA_PRIVATE_KEY_B58: getEnvValue("LTCG_X402_SOLANA_PRIVATE_KEY_B58"),
   },
 
   async init(config: Record<string, string>, _runtime: IAgentRuntime) {
@@ -207,6 +213,7 @@ const plugin: Plugin = {
     getRtmpCredentialsAction,
     sendChatAction,
     controlStreamAudioAction,
+    callX402PaidEndpointAction,
     startPipelineAction,
     stopPipelineAction,
   ],
@@ -243,6 +250,7 @@ export { getStatusAction } from "./actions/getStatus.js";
 export { surrenderAction } from "./actions/surrender.js";
 export { playStoryAction } from "./actions/playStory.js";
 export { getSoundtrackAction } from "./actions/getSoundtrack.js";
+export { callX402PaidEndpointAction } from "./actions/callX402PaidEndpoint.js";
 export {
   runAutonomyAction,
   pauseAutonomyAction,

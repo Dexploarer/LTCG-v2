@@ -12,7 +12,6 @@ const EXPECTED_ROUTE_FILES = [
   "__root.tsx",
   "index.tsx",
   "about.tsx",
-  "agent-dev.tsx",
   "agent-lobby.tsx",
   "cards.tsx",
   "cards.$cardId.tsx",
@@ -40,7 +39,6 @@ const EXPECTED_ROUTE_FILES = [
 const EXPECTED_ROUTE_PATHS = [
   "/",
   "/about",
-  "/agent-dev",
   "/agent-lobby",
   "/cards",
   "/cards/$cardId",
@@ -66,7 +64,6 @@ const EXPECTED_ROUTE_PATHS = [
 ];
 
 const PUBLIC_ROUTES: Array<[string, string]> = [
-  ["index.tsx", "@/pages/Home"],
   ["about.tsx", "@/pages/About"],
   ["leaderboard.tsx", "@/pages/Leaderboard"],
   ["watch.tsx", "@/pages/Watch"],
@@ -82,7 +79,7 @@ const AGENT_CONTROL_ROUTES: Array<[string, string]> = [
 ];
 
 const REDIRECT_ROUTES: Array<[string, string]> = [
-  ["agent-dev.tsx", "/agent-lobby"],
+  ["index.tsx", "/agent-lobby"],
 ];
 
 const PROTECTED_ROUTES: Array<[string, string]> = [
@@ -121,7 +118,6 @@ const ROOT_SHELL_SIGNATURES = [
 const ROUTE_FILES_NO_DIAGNOSTIC = [
   "index.tsx",
   "about.tsx",
-  "agent-dev.tsx",
   "cliques.tsx",
   "collection.tsx",
   "decks.tsx",
