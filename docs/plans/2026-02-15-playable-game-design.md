@@ -313,7 +313,7 @@ Implement `legalMoves(state, seat)` in engine to return all valid commands:
 ### New Files
 
 ```
-apps/web/src/components/game/
+apps/web-tanstack/src/legacy/components/game/
   GameBoard.tsx           # Root board layout
   PlayerHand.tsx          # Fan hand container
   HandCard.tsx            # Individual hand card
@@ -352,7 +352,7 @@ packages/engine/src/
 convex/
   game.ts                 # Replace AI stub with heuristic logic
 
-apps/web/src/
+apps/web-tanstack/src/legacy/
   pages/Play.tsx          # Replace skeleton with GameBoard
 ```
 

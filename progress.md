@@ -1,7 +1,7 @@
 Original prompt: research roll20.net and then research what a truly viral modern rpg with elizaOS/milaidyAI agents playing along as narrator/dungeon master, and players. with awesome 3d graphics and game designing, build a roll20 game creation platform as well with ai, and the character generation, the story mode generation, the dice, rules, maps, dungeons, everything imaginable to be a full featured table top game creator, and game library where users can play already completley crafted worlds with their agents, or the hosted agents we have as well. it needs 3 completed worlds and games, along with everything used to create them
 
 ## Progress Log
-- Added a new Lunchtable TTG TTG studio domain model and three complete world definitions under `apps/web/src/lib/ttrpgStudio/`.
+- Added a new Lunchtable TTG TTG studio domain model and three complete world definitions under `apps/web-tanstack/src/legacy/lib/ttrpgStudio/`.
 - Added a new `Studio` page and route (`/studio`) to browse worlds and inspect all creation artifacts, prompt packs, maps, dungeons, and campaign arcs.
 - Wired navigation entries from home and tray menu to the studio.
 - Updated branding label from "RPG Studio"/"Agent RPG Studio" to "Lunchtable TTG TTG" in core UI and research doc headings.

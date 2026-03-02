@@ -580,9 +580,9 @@ git commit -m "feat: seed module — card definitions, starter decks, story chap
 ### Task 5: Update frontend to point at new API
 
 **Files:**
-- Modify: `apps/web/src/lib/convexHelpers.ts`
-- Modify: `apps/web/src/hooks/story/useStoryMode.ts`
-- Modify: `apps/web/src/hooks/story/useStoryChapter.ts`
+- Modify: `apps/web-tanstack/src/legacy/lib/convexHelpers.ts`
+- Modify: `apps/web-tanstack/src/legacy/hooks/story/useStoryMode.ts`
+- Modify: `apps/web-tanstack/src/legacy/hooks/story/useStoryChapter.ts`
 - Modify: frontend game board hooks to use new match-based API
 
 The frontend hooks currently reference `typedApi.progression.story.*` and `typedApi.progression.storyBattle.*`. The new API is flat: `api.game.getChapters`, `api.game.startStoryBattle`, etc.
@@ -609,7 +609,7 @@ The PlayerView type from the engine defines the shape of the response.
 **Step 4: Commit**
 
 ```bash
-git add apps/web/src/
+git add apps/web-tanstack/src/legacy/
 git commit -m "feat: update frontend hooks to use new flat game API"
 ```
 
@@ -621,7 +621,7 @@ git commit -m "feat: update frontend hooks to use new flat game API"
 
 ```bash
 bunx convex dev &
-cd apps/web && bun dev
+cd apps/web-tanstack && bun dev
 ```
 
 **Step 2: Test flow**

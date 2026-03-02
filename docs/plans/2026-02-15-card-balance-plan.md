@@ -967,7 +967,7 @@ git commit -m "feat(backend): update match creation and AI for new resource syst
 ## Task 12: Update Frontend PlayerView Usage
 
 **Files:**
-- Modify: `apps/web/src/pages/Play.tsx`
+- Modify: `apps/web-tanstack/src/legacy/pages/Play.tsx`
 
 **Step 1: Replace LP display with Reputation/Stability/Clout**
 
@@ -981,7 +981,7 @@ Replace all `lifePoints` / `opponentLifePoints` references.
 **Step 2: Commit**
 
 ```bash
-git add apps/web/src/pages/Play.tsx
+git add apps/web-tanstack/src/legacy/pages/Play.tsx
 git commit -m "feat(frontend): display reputation/stability/clout on game board"
 ```
 
