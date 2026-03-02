@@ -5,14 +5,17 @@
   "type": "module",
   "exports": {
     ".": {
+      "@convex-dev/component-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./types": {
+      "@convex-dev/component-source": "./src/types/index.ts",
       "types": "./dist/types/index.d.ts",
       "import": "./dist/types/index.js"
     },
     "./rules": {
+      "@convex-dev/component-source": "./src/rules/index.ts",
       "types": "./dist/rules/index.d.ts",
       "import": "./dist/rules/index.js"
     }
